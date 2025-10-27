@@ -1,7 +1,6 @@
 {
   "snowflake": {
     "user": "CONFLICTREPORT_USER",
-    "private_key_file": "C:/Users/ArunGupta/.snowflake/cmsfkey.pem",
     "account": "IKB38126.us-east-1",
     "warehouse": "CONFLICTREPORT_APP_WH",
     "database": "CONFLICTREPORT_SANDBOX",
@@ -42,7 +41,7 @@
       "target_table": "conflictvisitmaps",
       "filter_condition": "\"VisitDate\" >= DATEADD(month, -4, CURRENT_DATE)",
       "disable_indexes_constraints": true,
-      "chunk_size": 50000,
+      "chunk_size": 100000,
       "order_by_column": "ID"
     }
   ]
