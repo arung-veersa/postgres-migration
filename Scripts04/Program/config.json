@@ -19,12 +19,15 @@
     "password": "uGStSD2hgf&l16$1Bh",
     "schema": "conflict_dev"
   },
+  "max_parallel_jobs": 4,
   "tables": [
     {
       "source_table": "MPH",
       "target_table": "mph",
-      "filter_condition": "1=1"
+      "filter_condition": "\"TYPE\" LIKE '%Bus%'",
+      "disable_indexes_constraints": true,
+      "chunk_size": 1,
+      "order_by_column": "ID"
     }
   ]
 }
-
