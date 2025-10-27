@@ -1,0 +1,1361 @@
+-- CONFLICTREPORT.PUBLIC.CONFLICT_COMMU_INTERS definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.CONFLICT_COMMU_INTERS (
+	"id" NUMBER(38,0) NOT NULL autoincrement start 1 increment 1 noorder,
+	CONFLICTID NUMBER(38,0) COMMENT 'For provider internal notes',
+	"GroupID" NUMBER(38,0) COMMENT 'for payer login internalnotes',
+	"ReverseUUID" VARCHAR(100) COMMENT 'For communication',
+	"Description" VARCHAR(1000),
+	"CommentType" NUMBER(3,0) COMMENT '1 = Communications 2 = Internal Notes',
+	"Attachmenturl" VARCHAR(500),
+	"communications_type" NUMBER(3,0) COMMENT '1 = Provider 2 = Payer',
+	"created_at" TIMESTAMP_NTZ(9),
+	"updated_at" TIMESTAMP_NTZ(9),
+	"created_by" NUMBER(38,0),
+	"updated_by" NUMBER(38,0),
+	"created_by_name" VARCHAR(200),
+	"updated_by_name" VARCHAR(200),
+	"OriginalFileName" VARCHAR(200),
+	"FileSize" NUMBER(38,0),
+	primary key ("id")
+);
+
+
+-- CONFLICTREPORT.PUBLIC.CONFLICTS definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.CONFLICTS (
+	CONFLICTID NUMBER(38,0) NOT NULL autoincrement start 1 increment 1 noorder,
+	RECORDEDDATETIME TIMESTAMP_NTZ(9) DEFAULT CURRENT_TIMESTAMP(),
+	"StatusFlag" VARCHAR(5) DEFAULT 'U',
+	"NoResponseFlag" VARCHAR(10),
+	"NoResponseReasonID" NUMBER(38,0),
+	"NoResponseTitle" VARCHAR(500),
+	"NoResponseNotes" VARCHAR(500),
+	"ResolveDate" TIMESTAMP_NTZ(9),
+	"CreatedDate" TIMESTAMP_NTZ(9),
+	"ResolvedBy" VARCHAR(200),
+	"NoResponseDate" TIMESTAMP_NTZ(9),
+	"FlagForReview" VARCHAR(5),
+	"FlagForReviewDate" TIMESTAMP_NTZ(9),
+	"UpdatedRFlag" VARCHAR(5),
+	primary key (CONFLICTID)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.CONFLICTS_TEMPRAKESH definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.CONFLICTS_TEMPRAKESH (
+	CONFLICTID NUMBER(38,0),
+	RECORDEDDATETIME TIMESTAMP_NTZ(9),
+	"StatusFlag" VARCHAR(5),
+	"NoResponseFlag" VARCHAR(10),
+	"NoResponseReasonID" NUMBER(38,0),
+	"NoResponseTitle" VARCHAR(500),
+	"NoResponseNotes" VARCHAR(500),
+	"ResolveDate" TIMESTAMP_NTZ(9),
+	"CreatedDate" TIMESTAMP_NTZ(9),
+	"ResolvedBy" VARCHAR(200),
+	"NoResponseDate" TIMESTAMP_NTZ(9),
+	"FlagForReview" VARCHAR(5),
+	"FlagForReviewDate" TIMESTAMP_NTZ(9)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.CONFLICTVISITMAPS definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.CONFLICTVISITMAPS (
+	ID NUMBER(38,0) NOT NULL autoincrement start 1 increment 1 noorder,
+	CONFLICTID NUMBER(38,0),
+	"GroupID" NUMBER(38,0),
+	SSN VARCHAR(50),
+	"ProviderID" VARCHAR(50),
+	"AppProviderID" VARCHAR(50),
+	"ProviderName" VARCHAR(100),
+	"ConProviderID" VARCHAR(50),
+	"ConAppProviderID" VARCHAR(50),
+	"ConProviderName" VARCHAR(100),
+	"VisitID" VARCHAR(50),
+	"AppVisitID" VARCHAR(50),
+	"ConVisitID" VARCHAR(50),
+	"ConAppVisitID" VARCHAR(50),
+	"VisitDate" DATE,
+	"SchStartTime" TIMESTAMP_NTZ(9),
+	"SchEndTime" TIMESTAMP_NTZ(9),
+	"ConSchStartTime" TIMESTAMP_NTZ(9),
+	"ConSchEndTime" TIMESTAMP_NTZ(9),
+	"VisitStartTime" TIMESTAMP_NTZ(9),
+	"VisitEndTime" TIMESTAMP_NTZ(9),
+	"ConVisitStartTime" TIMESTAMP_NTZ(9),
+	"ConVisitEndTime" TIMESTAMP_NTZ(9),
+	"EVVStartTime" TIMESTAMP_NTZ(9),
+	"EVVEndTime" TIMESTAMP_NTZ(9),
+	"ConEVVStartTime" TIMESTAMP_NTZ(9),
+	"ConEVVEndTime" TIMESTAMP_NTZ(9),
+	"ShVTSTTime" TIMESTAMP_NTZ(9),
+	"ShVTENTime" TIMESTAMP_NTZ(9),
+	"CShVTSTTime" TIMESTAMP_NTZ(9),
+	"CShVTENTime" TIMESTAMP_NTZ(9),
+	"CaregiverID" VARCHAR(50),
+	"AppCaregiverID" NUMBER(38,0),
+	"AideCode" VARCHAR(50),
+	"AideName" VARCHAR(101),
+	"AideFName" VARCHAR(50),
+	"AideLName" VARCHAR(50),
+	"AideSSN" VARCHAR(50),
+	"AideStatus" VARCHAR(50),
+	"ConCaregiverID" VARCHAR(50),
+	"ConAppCaregiverID" NUMBER(38,0),
+	"ConAideCode" VARCHAR(50),
+	"ConAideName" VARCHAR(101),
+	"ConAideFName" VARCHAR(50),
+	"ConAideLName" VARCHAR(50),
+	"ConAideSSN" VARCHAR(50),
+	"ConAideStatus" VARCHAR(20),
+	"OfficeID" VARCHAR(50),
+	"AppOfficeID" VARCHAR(50),
+	"Office" VARCHAR(100),
+	"ConOfficeID" VARCHAR(50),
+	"ConAppOfficeID" VARCHAR(50),
+	"ConOffice" VARCHAR(100),
+	"PatientID" VARCHAR(50),
+	"AppPatientID" NUMBER(38,5),
+	"PAdmissionID" VARCHAR(500),
+	"PName" VARCHAR(201),
+	"PFName" VARCHAR(100),
+	"PLName" VARCHAR(100),
+	"PMedicaidNumber" VARCHAR(100),
+	"PStatus" VARCHAR(50),
+	"PAddressID" VARCHAR(50),
+	"PAppAddressID" NUMBER(38,5),
+	"PAddressL1" VARCHAR(500),
+	"PAddressL2" VARCHAR(100),
+	"PCity" VARCHAR(255),
+	"PAddressState" VARCHAR(100),
+	"PZipCode" VARCHAR(100),
+	"PCounty" VARCHAR(100),
+	"PLongitude" VARCHAR(50),
+	"PLatitude" VARCHAR(50),
+	"ConPatientID" VARCHAR(50),
+	"ConAppPatientID" NUMBER(38,5),
+	"ConPAdmissionID" VARCHAR(500),
+	"ConPName" VARCHAR(201),
+	"ConPFName" VARCHAR(100),
+	"ConPLName" VARCHAR(100),
+	"ConPMedicaidNumber" VARCHAR(100),
+	"ConPStatus" VARCHAR(20),
+	"ConPAddressID" VARCHAR(50),
+	"ConPAppAddressID" NUMBER(38,5),
+	"ConPAddressL1" VARCHAR(500),
+	"ConPAddressL2" VARCHAR(100),
+	"ConPCity" VARCHAR(255),
+	"ConPAddressState" VARCHAR(100),
+	"ConPZipCode" VARCHAR(100),
+	"ConPCounty" VARCHAR(100),
+	"ConPLongitude" VARCHAR(50),
+	"ConPLatitude" VARCHAR(50),
+	"PayerID" VARCHAR(50),
+	"AppPayerID" VARCHAR(50),
+	"Contract" VARCHAR(50),
+	"PayerState" VARCHAR(100),
+	"ConPayerID" VARCHAR(50),
+	"ConAppPayerID" VARCHAR(50),
+	"ConContract" VARCHAR(50),
+	"ConPayerState" VARCHAR(100),
+	"Billed" VARCHAR(3),
+	"BilledDate" TIMESTAMP_NTZ(9),
+	"BilledHours" NUMBER(38,3),
+	"BilledRate" NUMBER(19,3),
+	"TotalBilledAmount" NUMBER(19,3),
+	"BillRateNonBilled" NUMBER(22,6),
+	"BillRateBoth" NUMBER(22,6),
+	"BilledRateMinute" NUMBER(38,15),
+	"RateType" VARCHAR(50),
+	"ConBilled" VARCHAR(3),
+	"ConBilledDate" TIMESTAMP_NTZ(9),
+	"ConBilledHours" NUMBER(38,3),
+	"ConBilledRate" NUMBER(19,3),
+	"ConTotalBilledAmount" NUMBER(19,3),
+	"ConBillRateNonBilled" NUMBER(22,6),
+	"ConBillRateBoth" NUMBER(22,6),
+	"ConBilledRateMinute" NUMBER(38,15),
+	"ConRateType" VARCHAR(50),
+	"MinuteDiffBetweenSch" NUMBER(38,0),
+	"DistanceMilesFromLatLng" NUMBER(38,2),
+	"AverageMilesPerHour" NUMBER(38,2),
+	"ETATravleMinutes" NUMBER(38,0),
+	"InserviceStartDate" TIMESTAMP_NTZ(9),
+	"InserviceEndDate" TIMESTAMP_NTZ(9),
+	"PTOStartDate" TIMESTAMP_NTZ(9),
+	"PTOEndDate" TIMESTAMP_NTZ(9),
+	"ServiceCodeID" VARCHAR(50),
+	"AppServiceCodeID" NUMBER(38,0),
+	"ServiceCode" VARCHAR(50),
+	"ConServiceCodeID" VARCHAR(50),
+	"ConAppServiceCodeID" NUMBER(38,0),
+	"ConServiceCode" VARCHAR(50),
+	"SameSchTimeFlag" VARCHAR(5),
+	"SameVisitTimeFlag" VARCHAR(5),
+	"SchAndVisitTimeSameFlag" VARCHAR(5),
+	"SchOverAnotherSchTimeFlag" VARCHAR(5),
+	"VisitTimeOverAnotherVisitTimeFlag" VARCHAR(5),
+	"SchTimeOverVisitTimeFlag" VARCHAR(5),
+	"DistanceFlag" VARCHAR(5),
+	"InServiceFlag" VARCHAR(5),
+	"PTOFlag" VARCHAR(5),
+	"AgencyContact" VARCHAR(100),
+	"AgencyPhone" VARCHAR(30),
+	"ConAgencyContact" VARCHAR(100),
+	"ConAgencyPhone" VARCHAR(30),
+	"IsMissed" BOOLEAN,
+	"MissedVisitReason" VARCHAR(500),
+	"EVVType" VARCHAR(20),
+	"ConIsMissed" BOOLEAN,
+	"ConMissedVisitReason" VARCHAR(500),
+	"ConEVVType" VARCHAR(20),
+	"ConNoResponseFlag" VARCHAR(10),
+	"ConNoResponseReasonID" NUMBER(38,0),
+	"ConNoResponseTitle" VARCHAR(500),
+	"ConNoResponseNotes" VARCHAR(500),
+	"P_PatientID" VARCHAR(50),
+	"P_AppPatientID" NUMBER(38,5),
+	"P_PAdmissionID" VARCHAR(500),
+	"P_PName" VARCHAR(201),
+	"P_PAddressID" VARCHAR(50),
+	"P_PAppAddressID" NUMBER(38,5),
+	"P_PAddressL1" VARCHAR(500),
+	"P_PAddressL2" VARCHAR(100),
+	"P_PCity" VARCHAR(255),
+	"P_PAddressState" VARCHAR(100),
+	"P_PZipCode" VARCHAR(100),
+	"P_PCounty" VARCHAR(100),
+	"P_PFName" VARCHAR(100),
+	"P_PLName" VARCHAR(100),
+	"P_PMedicaidNumber" VARCHAR(100),
+	"P_PStatus" VARCHAR(50),
+	"ConP_PatientID" VARCHAR(50),
+	"ConP_AppPatientID" NUMBER(38,5),
+	"ConP_PAdmissionID" VARCHAR(500),
+	"ConP_PName" VARCHAR(201),
+	"ConP_PAddressID" VARCHAR(50),
+	"ConP_PAppAddressID" NUMBER(38,5),
+	"ConP_PAddressL1" VARCHAR(500),
+	"ConP_PAddressL2" VARCHAR(100),
+	"ConP_PCity" VARCHAR(255),
+	"ConP_PAddressState" VARCHAR(100),
+	"ConP_PZipCode" VARCHAR(100),
+	"ConP_PCounty" VARCHAR(100),
+	"ConP_PFName" VARCHAR(100),
+	"ConP_PLName" VARCHAR(100),
+	"ConP_PMedicaidNumber" VARCHAR(100),
+	"ConP_PStatus" VARCHAR(50),
+	"PA_PatientID" VARCHAR(50),
+	"PA_AppPatientID" NUMBER(38,5),
+	"PA_PAdmissionID" VARCHAR(500),
+	"PA_PName" VARCHAR(201),
+	"PA_PAddressID" VARCHAR(50),
+	"PA_PAppAddressID" NUMBER(38,5),
+	"PA_PAddressL1" VARCHAR(500),
+	"PA_PAddressL2" VARCHAR(100),
+	"PA_PCity" VARCHAR(255),
+	"PA_PAddressState" VARCHAR(100),
+	"PA_PZipCode" VARCHAR(100),
+	"PA_PCounty" VARCHAR(100),
+	"PA_PFName" VARCHAR(100),
+	"PA_PLName" VARCHAR(100),
+	"PA_PMedicaidNumber" VARCHAR(100),
+	"PA_PStatus" VARCHAR(20),
+	"ConPA_PatientID" VARCHAR(50),
+	"ConPA_AppPatientID" NUMBER(38,5),
+	"ConPA_PAdmissionID" VARCHAR(500),
+	"ConPA_PName" VARCHAR(201),
+	"ConPA_PAddressID" VARCHAR(50),
+	"ConPA_PAppAddressID" NUMBER(38,5),
+	"ConPA_PAddressL1" VARCHAR(500),
+	"ConPA_PAddressL2" VARCHAR(100),
+	"ConPA_PCity" VARCHAR(255),
+	"ConPA_PAddressState" VARCHAR(100),
+	"ConPA_PZipCode" VARCHAR(100),
+	"ConPA_PCounty" VARCHAR(100),
+	"ConPA_PFName" VARCHAR(100),
+	"ConPA_PLName" VARCHAR(100),
+	"ConPA_PMedicaidNumber" VARCHAR(100),
+	"ConPA_PStatus" VARCHAR(20),
+	"ContractType" VARCHAR(30),
+	"ConContractType" VARCHAR(30),
+	"LastUpdatedBy" VARCHAR(100),
+	"LastUpdatedDate" TIMESTAMP_NTZ(9),
+	"ConLastUpdatedBy" VARCHAR(100),
+	"ConLastUpdatedDate" TIMESTAMP_NTZ(9),
+	"CreatedDate" TIMESTAMP_NTZ(9) DEFAULT CURRENT_TIMESTAMP(),
+	"ResolveDate" TIMESTAMP_NTZ(9),
+	CRDATEUNIQUE TIMESTAMP_NTZ(9),
+	G_CRDATEUNIQUE TIMESTAMP_NTZ(9),
+	"UpdateFlag" NUMBER(38,0),
+	"UpdatedDate" TIMESTAMP_NTZ(9),
+	"StatusFlag" VARCHAR(5) DEFAULT 'U',
+	"ResolvedBy" VARCHAR(200),
+	"TempGroupID" NUMBER(38,0),
+	"ReverseUUID" VARCHAR(100),
+	"ConNoResponseDate" TIMESTAMP_NTZ(9),
+	"FederalTaxNumber" VARCHAR(100),
+	"ConFederalTaxNumber" VARCHAR(100),
+	"ConInserviceStartDate" TIMESTAMP_NTZ(9),
+	"ConInserviceEndDate" TIMESTAMP_NTZ(9),
+	"ConPTOStartDate" TIMESTAMP_NTZ(9),
+	"ConPTOEndDate" TIMESTAMP_NTZ(9),
+	"FlagForReview" VARCHAR(5),
+	"FlagForReviewDate" TIMESTAMP_NTZ(9),
+	BILLABLEMINUTESFULLSHIFT NUMBER(8,4),
+	BILLABLEUNITSFULLSHIFT NUMBER(8,4),
+	BILLABLEMINUTESOVERLAP NUMBER(8,4),
+	BILLABLEUNITSOVERLAP NUMBER(8,4),
+	FAILEDON TIMESTAMP_NTZ(9),
+	primary key (ID)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.CONFLICTVISITMAPS_TEMP definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.CONFLICTVISITMAPS_TEMP (
+	ID NUMBER(38,0),
+	CONFLICTID NUMBER(38,0),
+	SSN VARCHAR(50),
+	"ProviderID" VARCHAR(50),
+	"AppProviderID" VARCHAR(50),
+	"ProviderName" VARCHAR(100),
+	"FederalTaxNumber" VARCHAR(100),
+	"VisitID" VARCHAR(50),
+	"AppVisitID" VARCHAR(50),
+	"ConProviderID" VARCHAR(50),
+	"ConAppProviderID" VARCHAR(50),
+	"ConProviderName" VARCHAR(100),
+	"ConFederalTaxNumber" VARCHAR(100),
+	"ConVisitID" VARCHAR(50),
+	"ConAppVisitID" VARCHAR(50),
+	"VisitDate" DATE,
+	"SchStartTime" TIMESTAMP_NTZ(9),
+	"SchEndTime" TIMESTAMP_NTZ(9),
+	"ConSchStartTime" TIMESTAMP_NTZ(9),
+	"ConSchEndTime" TIMESTAMP_NTZ(9),
+	"VisitStartTime" TIMESTAMP_NTZ(9),
+	"VisitEndTime" TIMESTAMP_NTZ(9),
+	"ConVisitStartTime" TIMESTAMP_NTZ(9),
+	"ConVisitEndTime" TIMESTAMP_NTZ(9),
+	"EVVStartTime" TIMESTAMP_NTZ(9),
+	"EVVEndTime" TIMESTAMP_NTZ(9),
+	"ConEVVStartTime" TIMESTAMP_NTZ(9),
+	"ConEVVEndTime" TIMESTAMP_NTZ(9),
+	"CaregiverID" VARCHAR(50),
+	"AppCaregiverID" NUMBER(38,0),
+	"AideCode" VARCHAR(50),
+	"AideName" VARCHAR(101),
+	"AideSSN" VARCHAR(50),
+	"ConCaregiverID" VARCHAR(50),
+	"ConAppCaregiverID" NUMBER(38,0),
+	"ConAideCode" VARCHAR(50),
+	"ConAideName" VARCHAR(101),
+	"ConAideSSN" VARCHAR(50),
+	"OfficeID" VARCHAR(50),
+	"AppOfficeID" VARCHAR(50),
+	"Office" VARCHAR(100),
+	"ConOfficeID" VARCHAR(50),
+	"ConAppOfficeID" VARCHAR(50),
+	"ConOffice" VARCHAR(100),
+	"PatientID" VARCHAR(50),
+	"AppPatientID" NUMBER(38,5),
+	"PAdmissionID" VARCHAR(500),
+	"PName" VARCHAR(201),
+	"PAddressID" VARCHAR(50),
+	"PAppAddressID" NUMBER(38,5),
+	"PAddressL1" VARCHAR(500),
+	"PAddressL2" VARCHAR(100),
+	"PCity" VARCHAR(255),
+	"PAddressState" VARCHAR(100),
+	"PZipCode" VARCHAR(100),
+	"PCounty" VARCHAR(100),
+	"PLongitude" VARCHAR(50),
+	"PLatitude" VARCHAR(50),
+	"ConPatientID" VARCHAR(50),
+	"ConAppPatientID" NUMBER(38,5),
+	"ConPAdmissionID" VARCHAR(500),
+	"ConPName" VARCHAR(201),
+	"ConPAddressID" VARCHAR(50),
+	"ConPAppAddressID" NUMBER(38,5),
+	"ConPAddressL1" VARCHAR(500),
+	"ConPAddressL2" VARCHAR(100),
+	"ConPCity" VARCHAR(255),
+	"ConPAddressState" VARCHAR(100),
+	"ConPZipCode" VARCHAR(100),
+	"ConPCounty" VARCHAR(100),
+	"ConPLongitude" VARCHAR(50),
+	"ConPLatitude" VARCHAR(50),
+	"PayerID" VARCHAR(50),
+	"AppPayerID" VARCHAR(50),
+	"Contract" VARCHAR(50),
+	"ConPayerID" VARCHAR(50),
+	"ConAppPayerID" VARCHAR(50),
+	"ConContract" VARCHAR(50),
+	"BilledDate" TIMESTAMP_NTZ(9),
+	"ConBilledDate" TIMESTAMP_NTZ(9),
+	"BilledHours" NUMBER(38,3),
+	"ConBilledHours" NUMBER(38,3),
+	"Billed" VARCHAR(3),
+	"ConBilled" VARCHAR(3),
+	"MinuteDiffBetweenSch" NUMBER(38,0),
+	"DistanceMilesFromLatLng" NUMBER(38,2),
+	"AverageMilesPerHour" NUMBER(38,2),
+	"ETATravleMinutes" NUMBER(38,0),
+	"InserviceStartDate" TIMESTAMP_NTZ(9),
+	"InserviceEndDate" TIMESTAMP_NTZ(9),
+	"PTOStartDate" TIMESTAMP_NTZ(9),
+	"PTOEndDate" TIMESTAMP_NTZ(9),
+	"ConInserviceStartDate" TIMESTAMP_NTZ(9),
+	"ConInserviceEndDate" TIMESTAMP_NTZ(9),
+	"ConPTOStartDate" TIMESTAMP_NTZ(9),
+	"ConPTOEndDate" TIMESTAMP_NTZ(9),
+	"ServiceCodeID" VARCHAR(50),
+	"AppServiceCodeID" NUMBER(38,0),
+	"RateType" VARCHAR(50),
+	"ServiceCode" VARCHAR(50),
+	"ConServiceCodeID" VARCHAR(50),
+	"ConAppServiceCodeID" NUMBER(38,0),
+	"ConRateType" VARCHAR(50),
+	"ConServiceCode" VARCHAR(50),
+	"SameSchTimeFlag" VARCHAR(5),
+	"SameVisitTimeFlag" VARCHAR(5),
+	"SchAndVisitTimeSameFlag" VARCHAR(5),
+	"SchOverAnotherSchTimeFlag" VARCHAR(5),
+	"VisitTimeOverAnotherVisitTimeFlag" VARCHAR(5),
+	"SchTimeOverVisitTimeFlag" VARCHAR(5),
+	"DistanceFlag" VARCHAR(5),
+	"InServiceFlag" VARCHAR(5),
+	"PTOFlag" VARCHAR(5),
+	"StatusFlag" VARCHAR(5) DEFAULT 'U',
+	"ConStatusFlag" VARCHAR(5) DEFAULT 'U',
+	"AideFName" VARCHAR(50),
+	"AideLName" VARCHAR(50),
+	"ConAideFName" VARCHAR(50),
+	"ConAideLName" VARCHAR(50),
+	"PFName" VARCHAR(100),
+	"PLName" VARCHAR(100),
+	"ConPFName" VARCHAR(100),
+	"ConPLName" VARCHAR(100),
+	"PMedicaidNumber" VARCHAR(100),
+	"ConPMedicaidNumber" VARCHAR(100),
+	"PayerState" VARCHAR(100),
+	"ConPayerState" VARCHAR(100),
+	"AgencyContact" VARCHAR(100),
+	"ConAgencyContact" VARCHAR(100),
+	"AgencyPhone" VARCHAR(30),
+	"ConAgencyPhone" VARCHAR(30),
+	"LastUpdatedBy" VARCHAR(100),
+	"ConLastUpdatedBy" VARCHAR(100),
+	"LastUpdatedDate" TIMESTAMP_NTZ(9),
+	"ConLastUpdatedDate" TIMESTAMP_NTZ(9),
+	"BilledRate" NUMBER(19,3),
+	"TotalBilledAmount" NUMBER(19,3),
+	"ConBilledRate" NUMBER(19,3),
+	"ConTotalBilledAmount" NUMBER(19,3),
+	"IsMissed" BOOLEAN,
+	"MissedVisitReason" VARCHAR(500),
+	"EVVType" VARCHAR(20),
+	"ConIsMissed" BOOLEAN,
+	"ConMissedVisitReason" VARCHAR(500),
+	"ConEVVType" VARCHAR(20),
+	"PStatus" VARCHAR(50),
+	"ConPStatus" VARCHAR(20),
+	"AideStatus" VARCHAR(50),
+	"ConAideStatus" VARCHAR(20),
+	"ConNoResponseFlag" VARCHAR(10),
+	"ConNoResponseReasonID" NUMBER(38,0),
+	"ConNoResponseTitle" VARCHAR(500),
+	"ConNoResponseNotes" VARCHAR(500),
+	"LogVisitFlag" NUMBER(2,0),
+	"LogConflictFlag" NUMBER(2,0),
+	"P_PatientID" VARCHAR(50),
+	"P_AppPatientID" NUMBER(38,5),
+	"ConP_PatientID" VARCHAR(50),
+	"ConP_AppPatientID" NUMBER(38,5),
+	"PA_PatientID" VARCHAR(50),
+	"PA_AppPatientID" NUMBER(38,5),
+	"ConPA_PatientID" VARCHAR(50),
+	"ConPA_AppPatientID" NUMBER(38,5),
+	"CreatedDate" TIMESTAMP_NTZ(9) DEFAULT CURRENT_TIMESTAMP(),
+	"P_PAdmissionID" VARCHAR(500),
+	"P_PName" VARCHAR(201),
+	"P_PAddressID" VARCHAR(50),
+	"P_PAppAddressID" NUMBER(38,5),
+	"P_PAddressL1" VARCHAR(500),
+	"P_PAddressL2" VARCHAR(100),
+	"P_PCity" VARCHAR(255),
+	"P_PAddressState" VARCHAR(100),
+	"P_PZipCode" VARCHAR(100),
+	"P_PCounty" VARCHAR(100),
+	"P_PFName" VARCHAR(100),
+	"P_PLName" VARCHAR(100),
+	"P_PMedicaidNumber" VARCHAR(100),
+	"P_PStatus" VARCHAR(50),
+	"ConP_PAdmissionID" VARCHAR(500),
+	"ConP_PName" VARCHAR(201),
+	"ConP_PAddressID" VARCHAR(50),
+	"ConP_PAppAddressID" NUMBER(38,5),
+	"ConP_PAddressL1" VARCHAR(500),
+	"ConP_PAddressL2" VARCHAR(100),
+	"ConP_PCity" VARCHAR(255),
+	"ConP_PAddressState" VARCHAR(100),
+	"ConP_PZipCode" VARCHAR(100),
+	"ConP_PCounty" VARCHAR(100),
+	"ConP_PFName" VARCHAR(100),
+	"ConP_PLName" VARCHAR(100),
+	"ConP_PMedicaidNumber" VARCHAR(100),
+	"ConP_PStatus" VARCHAR(20),
+	"PA_PAdmissionID" VARCHAR(500),
+	"PA_PName" VARCHAR(201),
+	"PA_PAddressID" VARCHAR(50),
+	"PA_PAppAddressID" NUMBER(38,5),
+	"PA_PAddressL1" VARCHAR(500),
+	"PA_PAddressL2" VARCHAR(100),
+	"PA_PCity" VARCHAR(255),
+	"PA_PAddressState" VARCHAR(100),
+	"PA_PZipCode" VARCHAR(100),
+	"PA_PCounty" VARCHAR(100),
+	"PA_PFName" VARCHAR(100),
+	"PA_PLName" VARCHAR(100),
+	"PA_PMedicaidNumber" VARCHAR(100),
+	"PA_PStatus" VARCHAR(50),
+	"ConPA_PAdmissionID" VARCHAR(500),
+	"ConPA_PName" VARCHAR(201),
+	"ConPA_PAddressID" VARCHAR(50),
+	"ConPA_PAppAddressID" NUMBER(38,5),
+	"ConPA_PAddressL1" VARCHAR(500),
+	"ConPA_PAddressL2" VARCHAR(100),
+	"ConPA_PCity" VARCHAR(255),
+	"ConPA_PAddressState" VARCHAR(100),
+	"ConPA_PZipCode" VARCHAR(100),
+	"ConPA_PCounty" VARCHAR(100),
+	"ConPA_PFName" VARCHAR(100),
+	"ConPA_PLName" VARCHAR(100),
+	"ConPA_PMedicaidNumber" VARCHAR(100),
+	"ConPA_PStatus" VARCHAR(20),
+	"ContractType" VARCHAR(30),
+	"ConContractType" VARCHAR(30),
+	"BillRateNonBilled" NUMBER(22,6),
+	"ConBillRateNonBilled" NUMBER(22,6),
+	"BillRateBoth" NUMBER(22,6),
+	"ConBillRateBoth" NUMBER(22,6),
+	"FlagForReview" VARCHAR(5),
+	"FlagForReviewDate" TIMESTAMP_NTZ(9),
+	"ConFlagForReview" VARCHAR(5),
+	"ConFlagForReviewDate" TIMESTAMP_NTZ(9)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.CONFLICTVISITMAPS_TEMPRAKESH definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.CONFLICTVISITMAPS_TEMPRAKESH (
+	ID NUMBER(38,0),
+	CONFLICTID NUMBER(38,0),
+	"GroupID" NUMBER(38,0),
+	SSN VARCHAR(50),
+	"ProviderID" VARCHAR(50),
+	"AppProviderID" VARCHAR(50),
+	"ProviderName" VARCHAR(100),
+	"ConProviderID" VARCHAR(50),
+	"ConAppProviderID" VARCHAR(50),
+	"ConProviderName" VARCHAR(100),
+	"VisitID" VARCHAR(50),
+	"AppVisitID" VARCHAR(50),
+	"ConVisitID" VARCHAR(50),
+	"ConAppVisitID" VARCHAR(50),
+	"VisitDate" DATE,
+	"SchStartTime" TIMESTAMP_NTZ(9),
+	"SchEndTime" TIMESTAMP_NTZ(9),
+	"ConSchStartTime" TIMESTAMP_NTZ(9),
+	"ConSchEndTime" TIMESTAMP_NTZ(9),
+	"VisitStartTime" TIMESTAMP_NTZ(9),
+	"VisitEndTime" TIMESTAMP_NTZ(9),
+	"ConVisitStartTime" TIMESTAMP_NTZ(9),
+	"ConVisitEndTime" TIMESTAMP_NTZ(9),
+	"EVVStartTime" TIMESTAMP_NTZ(9),
+	"EVVEndTime" TIMESTAMP_NTZ(9),
+	"ConEVVStartTime" TIMESTAMP_NTZ(9),
+	"ConEVVEndTime" TIMESTAMP_NTZ(9),
+	"ShVTSTTime" TIMESTAMP_NTZ(9),
+	"ShVTENTime" TIMESTAMP_NTZ(9),
+	"CShVTSTTime" TIMESTAMP_NTZ(9),
+	"CShVTENTime" TIMESTAMP_NTZ(9),
+	"CaregiverID" VARCHAR(50),
+	"AppCaregiverID" NUMBER(38,0),
+	"AideCode" VARCHAR(50),
+	"AideName" VARCHAR(101),
+	"AideFName" VARCHAR(50),
+	"AideLName" VARCHAR(50),
+	"AideSSN" VARCHAR(50),
+	"AideStatus" VARCHAR(50),
+	"ConCaregiverID" VARCHAR(50),
+	"ConAppCaregiverID" NUMBER(38,0),
+	"ConAideCode" VARCHAR(50),
+	"ConAideName" VARCHAR(101),
+	"ConAideFName" VARCHAR(50),
+	"ConAideLName" VARCHAR(50),
+	"ConAideSSN" VARCHAR(50),
+	"ConAideStatus" VARCHAR(20),
+	"OfficeID" VARCHAR(50),
+	"AppOfficeID" VARCHAR(50),
+	"Office" VARCHAR(100),
+	"ConOfficeID" VARCHAR(50),
+	"ConAppOfficeID" VARCHAR(50),
+	"ConOffice" VARCHAR(100),
+	"PatientID" VARCHAR(50),
+	"AppPatientID" NUMBER(38,5),
+	"PAdmissionID" VARCHAR(500),
+	"PName" VARCHAR(201),
+	"PFName" VARCHAR(100),
+	"PLName" VARCHAR(100),
+	"PMedicaidNumber" VARCHAR(100),
+	"PStatus" VARCHAR(50),
+	"PAddressID" VARCHAR(50),
+	"PAppAddressID" NUMBER(38,5),
+	"PAddressL1" VARCHAR(500),
+	"PAddressL2" VARCHAR(100),
+	"PCity" VARCHAR(255),
+	"PAddressState" VARCHAR(100),
+	"PZipCode" VARCHAR(100),
+	"PCounty" VARCHAR(100),
+	"PLongitude" VARCHAR(50),
+	"PLatitude" VARCHAR(50),
+	"ConPatientID" VARCHAR(50),
+	"ConAppPatientID" NUMBER(38,5),
+	"ConPAdmissionID" VARCHAR(500),
+	"ConPName" VARCHAR(201),
+	"ConPFName" VARCHAR(100),
+	"ConPLName" VARCHAR(100),
+	"ConPMedicaidNumber" VARCHAR(100),
+	"ConPStatus" VARCHAR(20),
+	"ConPAddressID" VARCHAR(50),
+	"ConPAppAddressID" NUMBER(38,5),
+	"ConPAddressL1" VARCHAR(500),
+	"ConPAddressL2" VARCHAR(100),
+	"ConPCity" VARCHAR(255),
+	"ConPAddressState" VARCHAR(100),
+	"ConPZipCode" VARCHAR(100),
+	"ConPCounty" VARCHAR(100),
+	"ConPLongitude" VARCHAR(50),
+	"ConPLatitude" VARCHAR(50),
+	"PayerID" VARCHAR(50),
+	"AppPayerID" VARCHAR(50),
+	"Contract" VARCHAR(50),
+	"PayerState" VARCHAR(100),
+	"ConPayerID" VARCHAR(50),
+	"ConAppPayerID" VARCHAR(50),
+	"ConContract" VARCHAR(50),
+	"ConPayerState" VARCHAR(100),
+	"Billed" VARCHAR(3),
+	"BilledDate" TIMESTAMP_NTZ(9),
+	"BilledHours" NUMBER(38,3),
+	"BilledRate" NUMBER(19,3),
+	"TotalBilledAmount" NUMBER(19,3),
+	"BillRateNonBilled" NUMBER(22,6),
+	"BillRateBoth" NUMBER(22,6),
+	"BilledRateMinute" NUMBER(38,15),
+	"RateType" VARCHAR(50),
+	"ConBilled" VARCHAR(3),
+	"ConBilledDate" TIMESTAMP_NTZ(9),
+	"ConBilledHours" NUMBER(38,3),
+	"ConBilledRate" NUMBER(19,3),
+	"ConTotalBilledAmount" NUMBER(19,3),
+	"ConBillRateNonBilled" NUMBER(22,6),
+	"ConBillRateBoth" NUMBER(22,6),
+	"ConBilledRateMinute" NUMBER(38,15),
+	"ConRateType" VARCHAR(50),
+	"MinuteDiffBetweenSch" NUMBER(38,0),
+	"DistanceMilesFromLatLng" NUMBER(38,2),
+	"AverageMilesPerHour" NUMBER(38,2),
+	"ETATravleMinutes" NUMBER(38,0),
+	"InserviceStartDate" TIMESTAMP_NTZ(9),
+	"InserviceEndDate" TIMESTAMP_NTZ(9),
+	"PTOStartDate" TIMESTAMP_NTZ(9),
+	"PTOEndDate" TIMESTAMP_NTZ(9),
+	"ServiceCodeID" VARCHAR(50),
+	"AppServiceCodeID" NUMBER(38,0),
+	"ServiceCode" VARCHAR(50),
+	"ConServiceCodeID" VARCHAR(50),
+	"ConAppServiceCodeID" NUMBER(38,0),
+	"ConServiceCode" VARCHAR(50),
+	"SameSchTimeFlag" VARCHAR(5),
+	"SameVisitTimeFlag" VARCHAR(5),
+	"SchAndVisitTimeSameFlag" VARCHAR(5),
+	"SchOverAnotherSchTimeFlag" VARCHAR(5),
+	"VisitTimeOverAnotherVisitTimeFlag" VARCHAR(5),
+	"SchTimeOverVisitTimeFlag" VARCHAR(5),
+	"DistanceFlag" VARCHAR(5),
+	"InServiceFlag" VARCHAR(5),
+	"PTOFlag" VARCHAR(5),
+	"AgencyContact" VARCHAR(100),
+	"AgencyPhone" VARCHAR(30),
+	"ConAgencyContact" VARCHAR(100),
+	"ConAgencyPhone" VARCHAR(30),
+	"IsMissed" BOOLEAN,
+	"MissedVisitReason" VARCHAR(500),
+	"EVVType" VARCHAR(20),
+	"ConIsMissed" BOOLEAN,
+	"ConMissedVisitReason" VARCHAR(500),
+	"ConEVVType" VARCHAR(20),
+	"ConNoResponseFlag" VARCHAR(10),
+	"ConNoResponseReasonID" NUMBER(38,0),
+	"ConNoResponseTitle" VARCHAR(500),
+	"ConNoResponseNotes" VARCHAR(500),
+	"P_PatientID" VARCHAR(50),
+	"P_AppPatientID" NUMBER(38,5),
+	"P_PAdmissionID" VARCHAR(500),
+	"P_PName" VARCHAR(201),
+	"P_PAddressID" VARCHAR(50),
+	"P_PAppAddressID" NUMBER(38,5),
+	"P_PAddressL1" VARCHAR(500),
+	"P_PAddressL2" VARCHAR(100),
+	"P_PCity" VARCHAR(255),
+	"P_PAddressState" VARCHAR(100),
+	"P_PZipCode" VARCHAR(100),
+	"P_PCounty" VARCHAR(100),
+	"P_PFName" VARCHAR(100),
+	"P_PLName" VARCHAR(100),
+	"P_PMedicaidNumber" VARCHAR(100),
+	"P_PStatus" VARCHAR(50),
+	"ConP_PatientID" VARCHAR(50),
+	"ConP_AppPatientID" NUMBER(38,5),
+	"ConP_PAdmissionID" VARCHAR(500),
+	"ConP_PName" VARCHAR(201),
+	"ConP_PAddressID" VARCHAR(50),
+	"ConP_PAppAddressID" NUMBER(38,5),
+	"ConP_PAddressL1" VARCHAR(500),
+	"ConP_PAddressL2" VARCHAR(100),
+	"ConP_PCity" VARCHAR(255),
+	"ConP_PAddressState" VARCHAR(100),
+	"ConP_PZipCode" VARCHAR(100),
+	"ConP_PCounty" VARCHAR(100),
+	"ConP_PFName" VARCHAR(100),
+	"ConP_PLName" VARCHAR(100),
+	"ConP_PMedicaidNumber" VARCHAR(100),
+	"ConP_PStatus" VARCHAR(50),
+	"PA_PatientID" VARCHAR(50),
+	"PA_AppPatientID" NUMBER(38,5),
+	"PA_PAdmissionID" VARCHAR(500),
+	"PA_PName" VARCHAR(201),
+	"PA_PAddressID" VARCHAR(50),
+	"PA_PAppAddressID" NUMBER(38,5),
+	"PA_PAddressL1" VARCHAR(500),
+	"PA_PAddressL2" VARCHAR(100),
+	"PA_PCity" VARCHAR(255),
+	"PA_PAddressState" VARCHAR(100),
+	"PA_PZipCode" VARCHAR(100),
+	"PA_PCounty" VARCHAR(100),
+	"PA_PFName" VARCHAR(100),
+	"PA_PLName" VARCHAR(100),
+	"PA_PMedicaidNumber" VARCHAR(100),
+	"PA_PStatus" VARCHAR(20),
+	"ConPA_PatientID" VARCHAR(50),
+	"ConPA_AppPatientID" NUMBER(38,5),
+	"ConPA_PAdmissionID" VARCHAR(500),
+	"ConPA_PName" VARCHAR(201),
+	"ConPA_PAddressID" VARCHAR(50),
+	"ConPA_PAppAddressID" NUMBER(38,5),
+	"ConPA_PAddressL1" VARCHAR(500),
+	"ConPA_PAddressL2" VARCHAR(100),
+	"ConPA_PCity" VARCHAR(255),
+	"ConPA_PAddressState" VARCHAR(100),
+	"ConPA_PZipCode" VARCHAR(100),
+	"ConPA_PCounty" VARCHAR(100),
+	"ConPA_PFName" VARCHAR(100),
+	"ConPA_PLName" VARCHAR(100),
+	"ConPA_PMedicaidNumber" VARCHAR(100),
+	"ConPA_PStatus" VARCHAR(20),
+	"ContractType" VARCHAR(30),
+	"ConContractType" VARCHAR(30),
+	"LastUpdatedBy" VARCHAR(100),
+	"LastUpdatedDate" TIMESTAMP_NTZ(9),
+	"ConLastUpdatedBy" VARCHAR(100),
+	"ConLastUpdatedDate" TIMESTAMP_NTZ(9),
+	"CreatedDate" TIMESTAMP_NTZ(9),
+	"ResolveDate" TIMESTAMP_NTZ(9),
+	CRDATEUNIQUE TIMESTAMP_NTZ(9),
+	G_CRDATEUNIQUE TIMESTAMP_NTZ(9),
+	"UpdateFlag" NUMBER(38,0),
+	"UpdatedDate" TIMESTAMP_NTZ(9),
+	"StatusFlag" VARCHAR(5),
+	"ResolvedBy" VARCHAR(200),
+	"TempGroupID" NUMBER(38,0),
+	"ReverseUUID" VARCHAR(100),
+	"ConNoResponseDate" TIMESTAMP_NTZ(9),
+	"FederalTaxNumber" VARCHAR(100),
+	"ConFederalTaxNumber" VARCHAR(100),
+	"ConInserviceStartDate" TIMESTAMP_NTZ(9),
+	"ConInserviceEndDate" TIMESTAMP_NTZ(9),
+	"ConPTOStartDate" TIMESTAMP_NTZ(9),
+	"ConPTOEndDate" TIMESTAMP_NTZ(9),
+	"FlagForReview" VARCHAR(5),
+	"FlagForReviewDate" TIMESTAMP_NTZ(9)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.CONTACT_MAINTENANCE definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.CONTACT_MAINTENANCE (
+	ID NUMBER(38,0) NOT NULL autoincrement start 1 increment 1 noorder,
+	RECORDEDDATETIME TIMESTAMP_NTZ(9) DEFAULT CURRENT_TIMESTAMP(),
+	CONTACT_NAME VARCHAR(255) DEFAULT 'U',
+	PHONE VARCHAR(20),
+	"ProviderID" VARCHAR(50),
+	"AppProviderID" VARCHAR(50),
+	UPDATED_BY NUMBER(38,0),
+	UPDATED_AT TIMESTAMP_NTZ(9) DEFAULT CURRENT_TIMESTAMP(),
+	PID VARCHAR(50),
+	APPLICATIONPID VARCHAR(50),
+	primary key (ID)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.EXCLUDED_AGENCY definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.EXCLUDED_AGENCY (
+	ID NUMBER(38,0) NOT NULL autoincrement start 1 increment 1 noorder,
+	"AgencyName" VARCHAR(100),
+	"ProviderID" VARCHAR(50),
+	"AppProviderID" VARCHAR(50),
+	primary key (ID)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.EXCLUDED_SSN definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.EXCLUDED_SSN (
+	ID NUMBER(38,0) NOT NULL autoincrement start 1 increment 1 noorder,
+	SSN VARCHAR(50),
+	primary key (ID)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.FAILED_API_LOGS definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.FAILED_API_LOGS (
+	APPVISITID NUMBER(38,0),
+	APPPAYERID NUMBER(38,0),
+	CONTRACT_ID_INTERNAL NUMBER(38,0),
+	PAYLOAD VARCHAR(16777216),
+	RESPONSE VARCHAR(16777216),
+	FAILURE_TYPE VARCHAR(16777216),
+	ERROR_MESSAGE VARCHAR(16777216),
+	CONFLICTID NUMBER(38,0) NOT NULL,
+	primary key (CONFLICTID)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.GOVBODIESPAYERS definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.GOVBODIESPAYERS (
+	ID NUMBER(38,0) NOT NULL autoincrement start 1 increment 1 noorder,
+	"PayerID" VARCHAR(50),
+	"AppPayerID" VARCHAR(50),
+	"UserID" NUMBER(38,0),
+	PAYER_NAME VARCHAR(100),
+	STATUS_NAME VARCHAR(50),
+	CREATED_AT TIMESTAMP_NTZ(9) DEFAULT CURRENT_TIMESTAMP(),
+	UPDATED_AT TIMESTAMP_NTZ(9) DEFAULT CURRENT_TIMESTAMP(),
+	primary key (ID)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.LOG_FIELDS definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.LOG_FIELDS (
+	ID NUMBER(38,0) NOT NULL autoincrement start 1 increment 1 noorder,
+	"FieldName" VARCHAR(50),
+	"FieldDisplayValue" VARCHAR(50),
+	"FieldFor" VARCHAR(10),
+	"FieldType" VARCHAR(10),
+	"RestrictedFlag" NUMBER(2,0),
+	"NotShowInDropDown" NUMBER(2,0),
+	"HideColumnFlag" NUMBER(2,0),
+	"HideHidePayerFlag" NUMBER(2,0),
+	"HideForProviderFlag" NUMBER(2,0),
+	primary key (ID)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.LOG_HISTORY definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.LOG_HISTORY (
+	ID NUMBER(38,0) NOT NULL autoincrement start 1 increment 1 noorder,
+	CONID NUMBER(38,0),
+	"CreatedDateTime" TIMESTAMP_NTZ(9) DEFAULT CURRENT_TIMESTAMP(),
+	"LogTypeFlag" VARCHAR(10),
+	primary key (ID)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.LOG_HISTORY_VALUES definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.LOG_HISTORY_VALUES (
+	ID NUMBER(38,0) NOT NULL autoincrement start 1 increment 1 noorder,
+	LHID NUMBER(38,0),
+	"LogID" NUMBER(38,0),
+	"OldValue" VARCHAR(16777216),
+	"NewValue" VARCHAR(16777216),
+	"VisitID" VARCHAR(50),
+	"AppVisitID" VARCHAR(50),
+	primary key (ID)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.LOG_HISTORY_VALUES_TEMP definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.LOG_HISTORY_VALUES_TEMP (
+	CONID NUMBER(38,0) NOT NULL,
+	"LogID" NUMBER(38,0),
+	"OldValue" VARCHAR(16777216),
+	"NewValue" VARCHAR(16777216),
+	"VisitID" VARCHAR(50),
+	"AppVisitID" VARCHAR(50)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.MPH definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.MPH (
+	ID NUMBER(38,0) NOT NULL autoincrement start 1 increment 1 noorder,
+	RECORDEDDATETIME TIMESTAMP_NTZ(9) DEFAULT CURRENT_TIMESTAMP(),
+	TYPE VARCHAR(50),
+	"From" NUMBER(38,0),
+	"To" NUMBER(38,0),
+	"AverageMilesPerHour" NUMBER(38,0),
+	primary key (ID)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.NORESPONSEREASONS definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.NORESPONSEREASONS (
+	ID NUMBER(38,0) NOT NULL autoincrement start 1 increment 1 noorder,
+	"Title" VARCHAR(500),
+	"Description" VARCHAR(500),
+	primary key (ID)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.NOTIFICATIONS definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.NOTIFICATIONS (
+	ID NUMBER(38,0) NOT NULL autoincrement start 1 increment 1 noorder,
+	CONFLICTID NUMBER(38,0),
+	"ProviderID" VARCHAR(50),
+	"AppProviderID" VARCHAR(50),
+	"NotificationType" VARCHAR(50),
+	"CreatedDate" DATE,
+	"CreatedDateTime" TIMESTAMP_NTZ(9),
+	"ReadUnreadFlag" NUMBER(3,0),
+	"Contract" VARCHAR(100),
+	primary key (ID)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_AGENCY definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_AGENCY cluster by (
+    PAYERID, CRDATEUNIQUE, PROVIDERID, P_NAME, TIN
+)(
+	PAYERID VARCHAR(50),
+	CRDATEUNIQUE DATE,
+	PROVIDERID VARCHAR(50),
+	P_NAME VARCHAR(100),
+	TIN VARCHAR(100),
+	CON_TO NUMBER(38,0),
+	CON_SP NUMBER(38,2),
+	CON_OP NUMBER(38,2),
+	CON_FP NUMBER(38,2)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_AGENCY_NEW definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_AGENCY_NEW cluster by (
+    PAYERID, CRDATEUNIQUE, PROVIDERID, P_NAME, TIN, STATUSFLAG, COSTTYPE, VISITTYPE
+)(
+	PAYERID VARCHAR(50),
+	CRDATEUNIQUE DATE,
+	PROVIDERID VARCHAR(50),
+	P_NAME VARCHAR(100),
+	TIN VARCHAR(100),
+	STATUSFLAG VARCHAR(5),
+	COSTTYPE VARCHAR(20),
+	VISITTYPE VARCHAR(20),
+	CON_TO NUMBER(38,0),
+	CON_SP NUMBER(38,2),
+	CON_OP NUMBER(38,2),
+	CON_FP NUMBER(38,2)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_CAREGIVER definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_CAREGIVER cluster by (
+    PAYERID, CRDATEUNIQUE, CAREGIVERID, C_NAME, C_LNAME, C_FNAME
+)(
+	PAYERID VARCHAR(50),
+	CRDATEUNIQUE DATE,
+	CAREGIVERID VARCHAR(50),
+	C_NAME VARCHAR(100),
+	C_LNAME VARCHAR(100),
+	C_FNAME VARCHAR(100),
+	CON_TO NUMBER(38,0),
+	CON_SP NUMBER(38,2),
+	CON_OP NUMBER(38,2),
+	CON_FP NUMBER(38,2)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_CAREGIVER_NEW definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_CAREGIVER_NEW cluster by (PAYERID,CRDATEUNIQUE,SSN,C_NAME,STATUSFLAG,COSTTYPE,VISITTYPE)(
+	PAYERID VARCHAR(50),
+	CRDATEUNIQUE DATE,
+	SSN VARCHAR(50),
+	CAREGIVERID VARCHAR(50),
+	C_NAME VARCHAR(100),
+	C_LNAME VARCHAR(100),
+	C_FNAME VARCHAR(100),
+	STATUSFLAG VARCHAR(5),
+	COSTTYPE VARCHAR(20),
+	VISITTYPE VARCHAR(20),
+	CON_TO NUMBER(38,0),
+	CON_SP NUMBER(38,2),
+	CON_OP NUMBER(38,2),
+	CON_FP NUMBER(38,2)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_CON_TYP definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_CON_TYP cluster by (
+    PAYERID, CRDATEUNIQUE, CONTYPE, CONTYPES
+)(
+	PAYERID VARCHAR(50),
+	CRDATEUNIQUE DATE,
+	CONTYPE VARCHAR(50),
+	CONTYPES VARCHAR(50),
+	CO_TO NUMBER(38,0),
+	CO_SP NUMBER(38,2),
+	CO_OP NUMBER(38,2),
+	CO_FP NUMBER(38,2)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_CON_TYP_NEW definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_CON_TYP_NEW cluster by (
+    PAYERID, CRDATEUNIQUE, CONTYPES, STATUSFLAG, COSTTYPE, VISITTYPE
+)(
+	PAYERID VARCHAR(50),
+	CRDATEUNIQUE DATE,
+	CONTYPE VARCHAR(50),
+	CONTYPES VARCHAR(50),
+	STATUSFLAG VARCHAR(5),
+	COSTTYPE VARCHAR(20),
+	VISITTYPE VARCHAR(20),
+	CO_TO NUMBER(38,0),
+	CO_SP NUMBER(38,2),
+	CO_OP NUMBER(38,2),
+	CO_FP NUMBER(38,2)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_PATIENT definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_PATIENT cluster by (
+    PAYERID, CRDATEUNIQUE, PATIENTID, PFNAME, PLNAME, PNAME, ADMISSIONID
+)(
+	PAYERID VARCHAR(50),
+	CRDATEUNIQUE DATE,
+	PATIENTID VARCHAR(50),
+	PFNAME VARCHAR(100),
+	PLNAME VARCHAR(100),
+	PNAME VARCHAR(100),
+	ADMISSIONID VARCHAR(100),
+	CON_TO NUMBER(38,0),
+	CON_SP NUMBER(38,2),
+	CON_OP NUMBER(38,2),
+	CON_FP NUMBER(38,2)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_PATIENT_NEW definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_PATIENT_NEW cluster by (PAYERID, CRDATEUNIQUE, PATIENTID, PFNAME, PLNAME, PNAME, ADMISSIONID)(
+	PAYERID VARCHAR(50),
+	CRDATEUNIQUE DATE,
+	PATIENTID VARCHAR(50),
+	PFNAME VARCHAR(100),
+	PLNAME VARCHAR(100),
+	PNAME VARCHAR(100),
+	ADMISSIONID VARCHAR(100),
+	CON_TO NUMBER(38,0),
+	CON_SP NUMBER(38,2),
+	CON_OP NUMBER(38,2),
+	CON_FP NUMBER(38,2),
+	STATUSFLAG VARCHAR(5),
+	COSTTYPE VARCHAR(20),
+	VISITTYPE VARCHAR(20)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_PAYER definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_PAYER cluster by (
+    PAYERID, CRDATEUNIQUE, CONPAYERID, PNAME
+)(
+	PAYERID VARCHAR(50),
+	CRDATEUNIQUE DATE,
+	CONPAYERID VARCHAR(50),
+	PNAME VARCHAR(100),
+	CON_TO NUMBER(38,0),
+	CON_SP NUMBER(38,2),
+	CON_OP NUMBER(38,2),
+	CON_FP NUMBER(38,2)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_PAYER_NEW definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_PAYER_NEW cluster by (
+PAYERID, CRDATEUNIQUE, CONPAYERID, PNAME, STATUSFLAG, COSTTYPE, VISITTYPE
+)(
+	PAYERID VARCHAR(50),
+	CRDATEUNIQUE DATE,
+	CONPAYERID VARCHAR(50),
+	PNAME VARCHAR(100),
+	STATUSFLAG VARCHAR(5),
+	COSTTYPE VARCHAR(20),
+	VISITTYPE VARCHAR(20),
+	CON_TO NUMBER(38,0),
+	CON_SP NUMBER(38,2),
+	CON_OP NUMBER(38,2),
+	CON_FP NUMBER(38,2)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_TOP definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_TOP cluster by (
+    PAYERID, STATUS, STATUS_VALUE
+)(
+	PAYERID VARCHAR(50),
+	STATUS VARCHAR(20),
+	STATUS_VALUE VARCHAR(50),
+	SEVEN_TO NUMBER(38,0),
+	SEVEN_SP NUMBER(38,2),
+	SEVEN_OP NUMBER(38,2),
+	SEVEN_FP NUMBER(38,2),
+	THIRTY_TO NUMBER(38,0),
+	THIRTY_SP NUMBER(38,2),
+	THIRTY_OP NUMBER(38,2),
+	THIRTY_FP NUMBER(38,2),
+	SIXTY_TO NUMBER(38,0),
+	SIXTY_SP NUMBER(38,2),
+	SIXTY_OP NUMBER(38,2),
+	SIXTY_FP NUMBER(38,2),
+	NINETY_TO NUMBER(38,0),
+	NINETY_SP NUMBER(38,2),
+	NINETY_OP NUMBER(38,2),
+	NINETY_FP NUMBER(38,2)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.PAYER_PROVIDER_REMINDERS definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.PAYER_PROVIDER_REMINDERS (
+	ID NUMBER(38,0) NOT NULL autoincrement start 1 increment 1 noorder,
+	"PayerID" VARCHAR(50),
+	"AppPayerID" VARCHAR(50),
+	"Contract" VARCHAR(100),
+	"ProviderID" VARCHAR(50),
+	"AppProviderID" VARCHAR(50),
+	"ProviderName" VARCHAR(100),
+	"CreatedDateTime" TIMESTAMP_NTZ(9) DEFAULT CURRENT_TIMESTAMP(),
+	"NumberOfDays" NUMBER(38,0),
+	primary key (ID)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.PROVIDER_DASHBOARD_AGENCY definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.PROVIDER_DASHBOARD_AGENCY cluster by (
+    PROVIDERID, OFFICEID, CRDATEUNIQUE, CONPROVIDERID, CON_P_NAME, CON_TIN
+)(
+	PROVIDERID VARCHAR(50),
+	OFFICEID VARCHAR(50),
+	CRDATEUNIQUE DATE,
+	CONPROVIDERID VARCHAR(50),
+	CON_P_NAME VARCHAR(100),
+	CON_TIN VARCHAR(100),
+	CON_TO NUMBER(38,0),
+	CON_SP NUMBER(38,2),
+	CON_OP NUMBER(38,2),
+	CON_FP NUMBER(38,2)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.PROVIDER_DASHBOARD_CAREGIVER definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.PROVIDER_DASHBOARD_CAREGIVER cluster by (
+    PROVIDERID, OFFICEID, CRDATEUNIQUE, CAREGIVERID, C_CODE, C_NAME
+)(
+	PROVIDERID VARCHAR(50),
+	OFFICEID VARCHAR(50),
+	CRDATEUNIQUE DATE,
+	CAREGIVERID VARCHAR(50),
+	C_CODE VARCHAR(100),
+	C_NAME VARCHAR(100),
+	CON_TO NUMBER(38,0),
+	CON_SP NUMBER(38,2),
+	CON_OP NUMBER(38,2),
+	CON_FP NUMBER(38,2)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.PROVIDER_DASHBOARD_CON_TYP definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.PROVIDER_DASHBOARD_CON_TYP cluster by (
+    PROVIDERID, OFFICEID, CRDATEUNIQUE
+)(
+	PROVIDERID VARCHAR(50),
+	OFFICEID VARCHAR(50),
+	CRDATEUNIQUE DATE,
+	EX_ST_MATCH_TO NUMBER(38,0),
+	EX_ST_MATCH_SP NUMBER(38,2),
+	EX_ST_MATCH_OP NUMBER(38,2),
+	EX_ST_MATCH_FP NUMBER(38,2),
+	EX_VT_MATCH_TO NUMBER(38,0),
+	EX_VT_MATCH_SP NUMBER(38,2),
+	EX_VT_MATCH_OP NUMBER(38,2),
+	EX_VT_MATCH_FP NUMBER(38,2),
+	EX_ST_VT_MATCH_TO NUMBER(38,0),
+	EX_ST_VT_MATCH_SP NUMBER(38,2),
+	EX_ST_VT_MATCH_OP NUMBER(38,2),
+	EX_ST_VT_MATCH_FP NUMBER(38,2),
+	ST_OVR_TO NUMBER(38,0),
+	ST_OVR_SP NUMBER(38,2),
+	ST_OVR_OP NUMBER(38,2),
+	ST_OVR_FP NUMBER(38,2),
+	VT_OVR_TO NUMBER(38,0),
+	VT_OVR_SP NUMBER(38,2),
+	VT_OVR_OP NUMBER(38,2),
+	VT_OVR_FP NUMBER(38,2),
+	ST_VT_OVR_TO NUMBER(38,0),
+	ST_VT_OVR_SP NUMBER(38,2),
+	ST_VT_OVR_OP NUMBER(38,2),
+	ST_VT_OVR_FP NUMBER(38,2),
+	TD_TO NUMBER(38,0),
+	TD_SP NUMBER(38,2),
+	TD_OP NUMBER(38,2),
+	TD_FP NUMBER(38,2),
+	IN_TO NUMBER(38,0),
+	IN_SP NUMBER(38,2),
+	IN_OP NUMBER(38,2),
+	IN_FP NUMBER(38,2),
+	PT_TO NUMBER(38,0),
+	PT_SP NUMBER(38,2),
+	PT_OP NUMBER(38,2),
+	PT_FP NUMBER(38,2)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.PROVIDER_DASHBOARD_PATIENT definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.PROVIDER_DASHBOARD_PATIENT cluster by (
+    PROVIDERID, OFFICEID, CRDATEUNIQUE, PATIENTID, PFNAME, PLNAME, PNAME
+)(
+	PROVIDERID VARCHAR(50),
+	OFFICEID VARCHAR(50),
+	CRDATEUNIQUE DATE,
+	PATIENTID VARCHAR(50),
+	PFNAME VARCHAR(100),
+	PLNAME VARCHAR(100),
+	PNAME VARCHAR(100),
+	CON_TO NUMBER(38,0),
+	CON_SP NUMBER(38,2),
+	CON_OP NUMBER(38,2),
+	CON_FP NUMBER(38,2)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.PROVIDER_DASHBOARD_PAYER definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.PROVIDER_DASHBOARD_PAYER cluster by (
+    PROVIDERID, OFFICEID, CRDATEUNIQUE, PAYERID, PNAME
+)(
+	PROVIDERID VARCHAR(50),
+	OFFICEID VARCHAR(50),
+	CRDATEUNIQUE DATE,
+	PAYERID VARCHAR(50),
+	PNAME VARCHAR(100),
+	CON_TO NUMBER(38,0),
+	CON_SP NUMBER(38,2),
+	CON_OP NUMBER(38,2),
+	CON_FP NUMBER(38,2)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.PROVIDER_DASHBOARD_TOP definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.PROVIDER_DASHBOARD_TOP cluster by (
+    PROVIDERID, OFFICEID
+)(
+	PROVIDERID VARCHAR(50),
+	OFFICEID VARCHAR(50),
+	TODAYTOTAL NUMBER(38,0),
+	TODAYSHIFTPRICE NUMBER(38,2),
+	TODAYOVERLAPPRICE NUMBER(38,2),
+	SEVENTOTAL NUMBER(38,0),
+	SEVENFINALPRICE NUMBER(38,2),
+	THIRTYTOTAL NUMBER(38,0),
+	THIRTYFINALPRICE NUMBER(38,2)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.SETTINGS definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.SETTINGS (
+	"ExtraDistance" NUMBER(38,0),
+	"ExtraDistancePer" NUMBER(38,2),
+	NORESPONSELIMITTIME NUMBER(38,0),
+	ID NUMBER(38,0) DEFAULT 0,
+	"UpdateCronFlag" NUMBER(3,0),
+	"InsertCronFlag" NUMBER(3,0),
+	"ConflictIDFlag" NUMBER(3,0),
+	"GroupIDFlag" NUMBER(3,0),
+	"VisitHistoryFlag" NUMBER(3,0),
+	"LastLoadDate" TIMESTAMP_NTZ(9),
+	"InProgressFlag" NUMBER(38,0),
+	constraint SETTINGS_PK primary key (ID)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.TASK_HISTORY_LIST definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.TASK_HISTORY_LIST (
+	ID NUMBER(38,0) NOT NULL autoincrement start 1 increment 1 noorder,
+	NAME VARCHAR(100),
+	UNNAME VARCHAR(100),
+	EMAILSENT VARCHAR(10),
+	CREATED_AT TIMESTAMP_NTZ(9) DEFAULT CURRENT_TIMESTAMP(),
+	primary key (ID)
+);
+
+
+-- CONFLICTREPORT.PUBLIC.TMP_BILLABLE_UPDATES definition
+
+create or replace TABLE CONFLICTREPORT.PUBLIC.TMP_BILLABLE_UPDATES (
+	ID NUMBER(38,0) NOT NULL,
+	BMF NUMBER(38,0) NOT NULL,
+	BUF VARCHAR(134217728) NOT NULL,
+	BMO NUMBER(38,0) NOT NULL,
+	BUO VARCHAR(134217728) NOT NULL
+);

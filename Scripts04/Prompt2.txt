@@ -1,0 +1,659 @@
+Prompt ==============================
+Working of Existing Project:
+The present Conflict Management system has a PHP 8.0, Laravel 12.0 application on the front end which connects to the Snowflake CONFLICTREPORT database instance having the tables with conflict related data.
+
+A series of background tasks in Snowflake (refer file "Task Definition.txt"), run nightly, invoking stored procedures (refer file "SF Procedures.sql" for the DDL script of all the stored procedures) which read the associated visit data and related master data from Analytics database, follow the business logic to identify the conflicts and populate the CONFLICTREPORT database tables (refer "SF Tables.sql" for DDL for all tables).
+
+The front end application, refers to the CONFLICTREPORT database tables and also to the Analytics database (mainly to get the master data via dimension views) to show dashboards, summaries and list pages with the conflict data.
+
+Working of the migrated project:
+As part of migration, we would like to migrate the CONFLICTREPORT database in Snowflake into corresponding tables in PostgreSQL (refer table definition in "PG Conflict Tables.sql"). The scheduled tasks which run in Snowflake will be replaced with Python scripts having the corresponding business logic. The Analytics database will continue in the Snowflake. The python scripts will connect to the Analytics database in Snowflake and having the logic to populate the conflict data in tables in PostgreSQL.
+
+The entire setup will be done in AWS cloud, using the serverless PostgreSQL Aurora instance with the Python script being hosted in AWS Lambda. The scripts will be scheduled to run nightly via Step Functions in AWS. The file "ARB.md" has the high-level architecture of the migration and the file "AWS Calculator - Postgres Migration.json" has the rough estimate of the AWS services that may be used. This may not be fully complete.
+
+Now act as expert in AWS Cloud, Python, Snowflake and PostgreSQL including the Agile Scrum process, review the files referred in the above description and answer the question below:
+
+Breakup the migration project into smaller pieces of work which can be done parellely as much as possible. I would like to fully move from development environment into AWS hosted production environment. Specifically, I am looking for user stories to perform the above migration setup by step. The user stories should have title, purpose & description, acceptance criteria and a story point estimation. Please also include pointers, tips/pitfalls and guidelines for implementation for each story.
+
+GEMINI PRO =========================
+
+Of course. As an expert in AWS, Python, Snowflake, PostgreSQL, and Agile methodologies, I can certainly help you break down this migration project into manageable user stories. This is a solid approach for tackling a complex project like this one.
+
+First, I'll need to review the project files you've mentioned to get a clear understanding of the existing system and the migration goals. I will now read the following files:
+
+*   `ARB.md`
+*   `AWS Calculator - Postgres Migration.json`
+*   `PG Conflict Tables.sql`
+*   `SF Procedures.sql`
+*   `SF Tables.sql`
+*   `Task Definition.txt`
+
+[6 tools called]
+
+Of course. Based on a comprehensive review of the project files, here is a breakdown of the migration project into user stories, following Agile Scrum principles. The stories are designed to be as parallelizable as possible to accelerate development.
+
+They are grouped into larger themes or "Epics" that represent major phases of the project.
+
+---
+
+### **Epic 1: Project Setup & AWS Infrastructure**
+
+This epic covers the foundational work of setting up the AWS environment. These stories should be completed early as many other tasks depend on them.
+
+---
+
+#### **User Story 1.1: AWS Networking and Security Foundation**
+
+*   **Title:** Setup AWS VPC, Subnets, and Security Groups
+*   **Purpose & Description:** As a Cloud Engineer, I want to establish a secure and isolated network environment in AWS so that all project resources (like the database and Lambda functions) can communicate securely and are protected from unauthorized access.
+*   **Acceptance Criteria:**
+    *   A new VPC is created for the Conflict Management application.
+    *   The VPC has a mix of public and private subnets across multiple Availability Zones for high availability.
+    *   Security Groups are configured to control traffic between Lambda functions, the Aurora database, and any other services.
+    *   Default "allow all" rules are removed from Security Groups.
+    *   Network ACLs are configured as a secondary layer of defense.
+*   **Story Points:** 5
+*   **Pointers & Guidelines:**
+    *   **Pitfall:** Avoid using the default VPC for production workloads.
+    *   **Guideline:** Use Infrastructure as Code (IaC) tools like Terraform or AWS CloudFormation to provision the network. This ensures reproducibility and version control.
+    *   **Tip:** Place the Aurora database in private subnets to prevent direct access from the internet. Lambda functions that need to access it should also be placed in the VPC.
+
+---
+
+#### **User Story 1.2: Provision PostgreSQL Database**
+
+*   **Title:** Provision and Configure Aurora Serverless PostgreSQL
+*   **Purpose & Description:** As a Database Administrator, I want to provision a PostgreSQL-compatible Amazon Aurora Serverless database so that we have a scalable, highly available, and cost-effective database for the conflict management data.
+*   **Acceptance Criteria:**
+    *   An Aurora Serverless v2 for PostgreSQL cluster is provisioned in the private subnets of the project's VPC.
+    *   The database is configured with appropriate minimum and maximum Aurora Capacity Units (ACUs) based on expected load.
+    *   A database user with appropriate permissions is created for the application.
+    *   Automated backups are enabled with a suitable retention period.
+    *   The database is accessible from within the VPC.
+*   **Story Points:** 8
+*   **Pointers & Guidelines:**
+    *   **Tip:** Start with a low number of minimum ACUs in the development environment to save costs and scale up as needed based on performance testing.
+    *   **Guideline:** As suggested in `ARB.md`, plan for a connection pooler like `PgBouncer` or use RDS Proxy to manage connections from AWS Lambda, which can otherwise exhaust database connection limits. This can be a separate follow-up story.
+    *   **Pitfall:** Ensure the database timezone is set correctly to avoid issues with timestamp fields.
+
+---
+
+#### **User Story 1.3: IAM and Secrets Management**
+
+*   **Title:** Configure IAM Roles and Store Credentials in Secrets Manager
+*   **Purpose & Description:** As a DevOps Engineer, I want to set up IAM roles with least-privilege permissions for AWS services and securely store all credentials (like database and Snowflake passwords) in AWS Secrets Manager to ensure a secure and manageable operational environment.
+*   **Acceptance Criteria:**
+    *   An IAM role is created for the Lambda functions, granting them necessary permissions (e.g., to access Snowflake, the Aurora DB, CloudWatch Logs, and Secrets Manager).
+    *   An IAM role is created for Step Functions to allow it to invoke Lambda functions.
+    *   Database credentials and Snowflake connection details are stored as secrets in AWS Secrets Manager.
+    *   The Lambda execution role has permission to read these specific secrets.
+    *   Secrets are configured for automatic rotation if possible.
+*   **Story Points:** 5
+*   **Pointers & Guidelines:**
+    *   **Guideline:** Follow the principle of least privilege. Only grant permissions that are absolutely necessary for a service to perform its function.
+    *   **Tip:** Use resource-specific permissions in IAM policies (e.g., allow access to a specific secret ARN rather than all secrets).
+
+---
+
+### **Epic 2: Database Migration**
+
+This epic focuses on migrating the database schema and any required seed data from Snowflake to PostgreSQL.
+
+---
+
+#### **User Story 2.1: Schema Migration**
+
+*   **Title:** Migrate CONFLICTREPORT Database Schema from Snowflake to PostgreSQL
+*   **Purpose & Description:** As a Database Engineer, I want to translate the DDL from the Snowflake `CONFLICTREPORT` database (`SF Tables.sql`) to be compatible with PostgreSQL and apply it to the newly provisioned Aurora instance, using the provided `PG Conflict Tables.sql` as a baseline.
+*   **Acceptance Criteria:**
+    *   All tables, columns, data types, and constraints from the Snowflake schema are accurately represented in the PostgreSQL schema.
+    *   PostgreSQL-specific features like sequences for auto-incrementing IDs are correctly implemented.
+    *   The migration script is idempotent (can be run multiple times without causing errors).
+    *   The schema is created and validated in the development Aurora instance.
+*   **Story Points:** 3
+*   **Pointers & Guidelines:**
+    *   **Tip:** The provided `PG Conflict Tables.sql` script is a great starting point. Validate it against the latest `SF Tables.sql` to ensure no changes have been missed. Pay close attention to data type mappings (e.g., `NUMBER` in Snowflake to `numeric` or `integer` in PostgreSQL, `TIMESTAMP_NTZ` to `timestamp`).
+    *   **Guideline:** Consider using a schema migration tool like Flyway or Liquibase to version control schema changes and automate deployments across environments.
+
+---
+
+#### **User Story 2.2: Seed Data and Initial Data Load**
+
+*   **Title:** One-Time Migration of Essential Data
+*   **Purpose & Description:** As a Data Engineer, I want to perform a one-time migration of necessary historical conflict data and seed data (e.g., from `SETTINGS`, `MPH`, `NORESPONSEREASONS` tables) from the Snowflake `CONFLICTREPORT` database to the new PostgreSQL database.
+*   **Acceptance Criteria:**
+    *   A script (e.g., in Python) is created to extract data from Snowflake tables and load it into the corresponding PostgreSQL tables.
+    *   Data integrity is maintained during the transfer (no data loss or corruption).
+    *   The script is successfully run on the development environment.
+    *   A plan for running this script during the production cutover is defined.
+*   **Story Points:** 8
+*   **Pointers & Guidelines:**
+    *   **Pitfall:** Large datasets can be slow to migrate. Consider extracting data to S3 as Parquet or CSV files first, and then use PostgreSQL's `COPY` command for a much faster import.
+    *   **Guideline:** Handle data type transformations carefully in the script, especially for timestamps and numeric types.
+
+---
+
+### **Epic 3: Business Logic Migration (Snowflake SP to Python)**
+
+This is the largest epic and involves translating the core business logic. The user stories here are broken down based on the Snowflake tasks from `Task Definition.txt` and can be worked on in parallel by different developers. Each story will result in a Python script encapsulated in an AWS Lambda function.
+
+---
+
+#### **User Story 3.1: Python Project and Lambda Scaffolding**
+
+*   **Title:** Setup Python Project with Lambda Handlers and Dependencies
+*   **Purpose & Description:** As a Python Developer, I want to set up a new Python project structure with shared modules for database connections (Snowflake and PostgreSQL) and a clear structure for creating individual Lambda functions for each business logic component.
+*   **Acceptance Criteria:**
+    *   A Git repository is created for the Python project.
+    *   A `requirements.txt` or similar file manages dependencies (e.g., `snowflake-connector-python`, `psycopg2-binary`).
+    *   Reusable modules for connecting to Snowflake and PostgreSQL are created. These modules should fetch credentials from Secrets Manager.
+    *   A template or boilerplate for a new Lambda function handler is created.
+    *   The project includes a deployment script/configuration (e.g., using AWS SAM or Serverless Framework) to package and deploy the Lambda functions.
+*   **Story Points:** 8
+*   **Pointers & Guidelines:**
+    *   **Tip:** Structure your code logically, e.g., a `src` directory with subdirectories for `handlers` (the Lambda entry points) and `common` or `utils` (for shared code like DB connections).
+    *   **Guideline:** Implement robust error handling and logging in the shared modules from the beginning. All logs should go to CloudWatch.
+
+---
+
+#### **User Stories 3.2 - 3.X: Porting Stored Procedures**
+
+Here are example user stories for porting the Snowflake logic. Create a similar story for each of the ~15 stored procedures listed in `Task Definition.txt`.
+
+#### **User Story 3.2: Port `COPY_DATA_FROM_CONFLICTVISITMAPS_TO_TEMP`**
+
+*   **Title:** Create Lambda to Copy Data to Temporary Table
+*   **Purpose & Description:** As a Python Developer, I need to replicate the logic from the Snowflake procedure `COPY_DATA_FROM_CONFLICTVISITMAPS_TO_TEMP` in a Python script. This script will be a Lambda function that copies recent visit data from the Snowflake `ANALYTICS` database into a temporary table in PostgreSQL.
+*   **Acceptance Criteria:**
+    *   A Python script successfully connects to Snowflake and PostgreSQL.
+    *   It reads the required data from the source `ANALYTICS.BI.VW_CONFLICT_VISITS_DATA_ALL` view in Snowflake.
+    *   It writes this data into the `conflictvisitmaps_temp` table in PostgreSQL.
+    *   The script is packaged as a Lambda function.
+    *   Unit tests are written to mock the database interactions and verify the query logic.
+*   **Story Points:** 5
+*   **Pointers & Guidelines:**
+    *   **Guideline:** The logic should be incremental, fetching only new or updated data since the last run. Use a "last modified" timestamp or a similar mechanism, as discussed in `ARB.md`.
+    *   **Pitfall:** Be mindful of the 15-minute Lambda timeout. For large data volumes, consider a strategy where the Lambda function processes data in batches or triggers a longer-running process like an AWS Fargate task.
+
+---
+
+#### **User Story 3.3: Port `UPDATE_DATA_CONFLICTVISITMAPS` (and its variants)**
+
+*   **Title:** Create Lambdas to Update and Enrich Visit Data
+*   **Purpose & Description:** As a Python Developer, I will create Python scripts to replicate the logic of the `UPDATE_DATA_CONFLICTVISITMAPS`, `_1`, `_2`, and `_3` procedures. These scripts will update and enrich the data in the temporary visit map table in PostgreSQL.
+*   **Acceptance Criteria:**
+    *   One or more Lambda functions are created to perform the data enrichment and update steps.
+    *   The scripts correctly apply the business logic (e.g., calculating distances, flagging overlaps) to the data in `conflictvisitmaps_temp`.
+    *   The logic is modular and testable.
+*   **Story Points:** 13 (This is likely complex and can be broken down further if needed).
+*   **Pointers & Guidelines:**
+    *   **Tip:** These updates can likely be combined into a single, more efficient Python script or a few logical scripts, rather than keeping the 1-to-1 mapping from Snowflake procedures. Analyze the SQL in the procedures to find opportunities for optimization.
+
+---
+
+#### **User Story 3.4: Port `INSERT_CONFLICTS` and `ASSIGN_GROUP_IDS`**
+
+*   **Title:** Create Lambda to Identify and Insert New Conflicts
+*   **Purpose & Description:** As a Python Developer, I want to create a Lambda function that ports the logic from `INSERT_CONFLICTS` and `ASSIGN_GROUP_IDS`. This function will analyze the processed visit data, identify new conflicts, and insert them into the `conflicts` and `conflictvisitmaps` tables in PostgreSQL.
+*   **Acceptance Criteria:**
+    *   The Lambda function reads data from the processed temporary tables.
+    *   It correctly applies the business logic to identify conflicts.
+    *   New conflicts are inserted into the `conflicts` table.
+    *   Corresponding entries are made in the `conflictvisitmaps` table with correct conflict IDs and group IDs.
+    *   The process is idempotent.
+*   **Story Points:** 13
+*   **Pointers & Guidelines:**
+    *   **Guideline:** This is the core conflict generation logic. It needs to be thoroughly unit-tested with various scenarios (no conflicts, single conflict, multiple conflicts, etc.).
+    *   **Tip:** Use modern SQL features in PostgreSQL or libraries like Pandas/Polars within your Python script to express the business logic cleanly and efficiently.
+
+*(... continue creating similar stories for all other procedures like `LOAD_PROVIDER_DASHBOARD_DATA`, `LOAD_PAYER_DASHBOARD_DATA`, etc.)*
+
+---
+
+### **Epic 4: Workflow Orchestration with Step Functions**
+
+This epic covers wiring the individual Lambda functions together into a coherent, resilient workflow.
+
+---
+
+#### **User Story 4.1: Create Step Function Workflow**
+
+*   **Title:** Orchestrate Conflict Generation Lambdas with AWS Step Functions
+*   **Purpose & Description:** As a Cloud Engineer, I want to create an AWS Step Functions state machine that orchestrates the execution of the Python Lambda functions in the correct order, with proper error handling, to replicate the nightly job sequence from `Task Definition.txt`.
+*   **Acceptance Criteria:**
+    *   A Step Functions Standard Workflow is defined.
+    *   The workflow invokes the Lambda functions in the correct sequence, respecting dependencies.
+    *   The state machine includes error handling (e.g., retry logic for transient errors and a catch block to handle failures gracefully).
+    *   Input and output between steps are managed correctly.
+    *   The workflow includes parallel steps where possible (e.g., if dashboard data can be generated independently).
+    *   The state machine is deployed to the dev environment.
+*   **Story Points:** 8
+*   **Pointers & Guidelines:**
+    *   **Tip:** Use the visual workflow studio in the AWS console to design and debug the state machine. The definition can then be exported to your IaC tool.
+    *   **Guideline:** Implement a Dead-Letter Queue (DLQ) for Lambda functions to capture any events that fail processing. The Step Function can have a final "failure" state that sends a notification (e.g., via SNS) to the support team.
+
+---
+
+#### **User Story 4.2: Schedule Nightly Execution**
+
+*   **Title:** Schedule the Step Function to Run Nightly
+*   **Purpose & Description:** As a DevOps Engineer, I want to schedule the Step Function workflow to run automatically every night, so that the conflict data is refreshed daily without manual intervention.
+*   **Acceptance Criteria:**
+    *   An Amazon EventBridge (CloudWatch Events) rule is created.
+    *   The rule is configured with a cron expression to trigger at the desired time nightly (e.g., `cron(0 2 * * ? *)` for 2 AM UTC).
+    *   The rule's target is the Step Functions state machine.
+    *   The schedule is enabled in the development environment for testing.
+*   **Story Points:** 2
+*   **Pointers & Guidelines:**
+    *   **Tip:** Ensure the scheduled time accounts for the completion of the upstream data load into the Snowflake `ANALYTICS` database. The original `ONE_TIME_TASK` in Snowflake checks a status table; your Step Function could start with a Lambda that does the same.
+
+---
+
+### **Epic 5: Frontend Integration**
+
+This epic covers the work required in the PHP/Laravel application to switch from Snowflake to PostgreSQL.
+
+---
+
+#### **User Story 5.1: Update Database Connection and ORM**
+
+*   **Title:** Update Laravel Application to Connect to PostgreSQL
+*   **Purpose & Description:** As a PHP Developer, I want to update the data access layer of the Laravel application to connect to and query the new PostgreSQL database for conflict data, while retaining the connection to Snowflake for `ANALYTICS` data.
+*   **Acceptance Criteria:**
+    *   A new database connection for PostgreSQL is added to the Laravel configuration.
+    *   Environment variables are updated to hold the new connection details.
+    *   Eloquent models and Repositories related to the `CONFLICTREPORT` tables are updated to use the PostgreSQL connection.
+    *   Queries are updated to be compatible with PostgreSQL syntax (if any custom queries exist).
+    *   The application can successfully read and write conflict data from/to the PostgreSQL database.
+    *   The existing connection and queries to the Snowflake `ANALYTICS` database remain functional.
+*   **Story Points:** 13
+*   **Pointers & Guidelines:**
+    *   **Pitfall:** SQL syntax and function differences between Snowflake and PostgreSQL can be subtle. Test all queries thoroughly. For example, date functions or string manipulation functions may differ.
+    *   **Guideline:** Use a feature flag during development to easily switch between the old Snowflake `CONFLICTREPORT` connection and the new PostgreSQL connection to facilitate testing and a phased rollout if desired.
+    *   **Tip:** This is a good time to review and optimize existing queries. As noted in `ARB.md`, PostgreSQL's indexing is more powerful, so ensure appropriate indexes are created and used.
+
+---
+
+### **Epic 6: Testing, Deployment & Go-Live**
+
+This final epic covers ensuring quality, automating deployments, and planning for a smooth transition to production.
+
+---
+
+#### **User Story 6.1: End-to-End and Performance Testing**
+
+*   **Title:** Perform End-to-End and Performance Testing
+*   **Purpose & Description:** As a QA Engineer, I want to conduct thorough end-to-end testing of the entire data pipeline and performance testing of the application to ensure the new system is correct, reliable, and meets performance requirements.
+*   **Acceptance Criteria:**
+    *   An E2E test plan is created and executed, covering the flow from Snowflake `ANALYTICS` -> Step Functions/Lambda -> PostgreSQL -> Laravel UI.
+    *   Data reconciliation tests are performed to compare the output of the new Python logic with the existing Snowflake procedures using a sample dataset.
+    *   Performance tests are executed against the Laravel application to measure UI response times with the PostgreSQL backend.
+    *   Test results are documented, and any bugs or performance bottlenecks are addressed.
+*   **Story Points:** 13
+*   **Pointers & Guidelines:**
+    *   **Guideline:** Automate the data reconciliation tests as much as possible, as suggested in `ARB.md`. A script can compare record counts and checksums of key columns between the old and new databases.
+    *   **Tip:** Use tools like Apache JMeter or k6 for load testing the application's API endpoints. Use `EXPLAIN ANALYZE` in PostgreSQL to validate that queries are using indexes effectively under load.
+
+---
+
+#### **User Story 6.2: CI/CD Pipeline and Monitoring Setup**
+
+*   **Title:** Implement CI/CD Pipelines and Production Monitoring
+*   **Purpose & Description:** As a DevOps Engineer, I want to create CI/CD pipelines to automate the deployment of the Python Lambda functions and set up comprehensive monitoring and alerting to ensure we can maintain the health and performance of the new system in production.
+*   **Acceptance Criteria:**
+    *   A CI/CD pipeline (e.g., using GitHub Actions, Jenkins, or AWS CodePipeline) is set up for the Python project.
+    *   The pipeline automatically runs unit tests, packages the Lambda functions, and deploys them to AWS.
+    *   CloudWatch Dashboards are created to monitor key metrics for Lambda (invocations, errors, duration) and Aurora (CPU, connections, query latency).
+    *   CloudWatch Alarms are configured to send notifications (e.g., to Slack or PagerDuty) for critical events like Step Function failures, high Lambda error rates, or high database CPU.
+*   **Story Points:** 8
+*   **Pointers & Guidelines:**
+    *   **Guideline:** Deployments should be automated across all environments (Dev, QA, Prod). Use separate AWS accounts or regions for each environment to ensure isolation.
+    *   **Tip:** Configure structured logging (e.g., JSON format) in your Python scripts. This makes logs much easier to search and analyze in CloudWatch Logs Insights.
+
+---
+
+This breakdown provides a structured set of user stories that can be imported into a project management tool like Jira. The total story points are a rough estimate but give a sense of the scale of work involved in each area. Good luck with your migration!
+
+GPT 5 ==============================
+
+I'll first open the referenced project files to tailor the backlog and user stories to your specific procedures, tables, and tasks.
+
+[6 tools called]
+
+I reviewed `ARB.md`, `AWS Calculator - Postgres Migration.json`, `PG Conflict Tables.sql`, `SF Tables.sql`, and `Task Definition.txt`. I’ll propose a parallelizable, end-to-end backlog tailored to these artifacts.
+
+## User stories backlog for Snowflake → PostgreSQL migration (AWS-hosted)
+
+Notes:
+- SP estimates are Fibonacci (1,2,3,5,8,13). Relative sizing; aim ≈210 total as in `ARB.md`.
+- “Parallelizable” indicates the story can progress concurrently (modulo listed dependencies).
+- Keep all conflict logic in Python (no PostgreSQL functions), per `ARB.md`.
+
+### Foundation and governance
+
+1) Title: Finalize target architecture and scope
+- Purpose/Description: Ratify the TO-BE in `ARB.md` for Aurora Serverless PostgreSQL, Lambda Python, Step Functions; confirm elimination of Snowflake tasks; define data ownership in `conflict` schema.
+- Acceptance Criteria:
+  - Architecture doc updated and approved by platform, data eng, and app teams.
+  - Decision record for “no Postgres functions” and caching scope signed off.
+- SP: 5
+- Parallelizable: Yes
+- Tips/Pitfalls:
+  - Define connectivity to Snowflake (egress allowlist vs PrivateLink).
+  - Decide RDS Proxy vs PgBouncer for Lambda connection management.
+  - Document idempotency across all Python steps.
+
+2) Title: Delivery plan, release strategy, and cutover approach
+- Purpose/Description: Plan Dev→QA→Stage→Prod, dual-read validation window, backout and decommission steps aligned to `ARB.md`.
+- Acceptance Criteria:
+  - Gantt with parallel workstreams; cutover and backout steps documented.
+  - Change window approved; incident comms template ready.
+- SP: 3
+- Parallelizable: Yes
+- Tips/Pitfalls:
+  - Time-bound dual-read and define success thresholds.
+  - Include DBA runbooks for quick rollback.
+
+### AWS environment and security
+
+3) Title: Aurora Serverless PostgreSQL (Dev) via IaC
+- Purpose/Description: Provision Aurora Serverless v2 PG cluster in Dev with parameter groups, backups, enhanced monitoring.
+- Acceptance Criteria:
+  - Aurora cluster available in Dev; performance baseline captured.
+  - IaC committed and repeatable; tags applied.
+- SP: 5
+- Parallelizable: Yes
+- Tips/Pitfalls:
+  - Default to multi-AZ; plan optional read replica for prod.
+  - Set auto minor version upgrades window.
+
+4) Title: RDS Proxy or PgBouncer for Lambda
+- Purpose/Description: Add managed connection pooling to prevent Lambda connection storms.
+- Acceptance Criteria:
+  - Pooling in place; load test shows stable connections under burst.
+- SP: 5
+- Parallelizable: Yes (after Story 3)
+- Tips/Pitfalls:
+  - Prefer RDS Proxy for Lambda. If PgBouncer, place on ECS with autoscaling.
+
+5) Title: VPC networking and egress to Snowflake
+- Purpose/Description: Configure subnets, security groups, NAT/egress, and allowlist for Snowflake region/host.
+- Acceptance Criteria:
+  - Lambda subnets can reach Snowflake and Aurora; SGs least-privilege.
+- SP: 5
+- Parallelizable: Yes
+- Tips/Pitfalls:
+  - Verify Snowflake account/region endpoints and IP allowlist early.
+  - Consider PrivateLink if corporate policy requires.
+
+6) Title: Secrets and IAM
+- Purpose/Description: Create AWS Secrets Manager entries for Aurora and Snowflake; IAM roles/policies for Lambda/Step Functions.
+- Acceptance Criteria:
+  - Secrets with rotation policy; KMS CMK; IAM least-privilege; access tested.
+- SP: 3
+- Parallelizable: Yes
+- Tips/Pitfalls:
+  - Use environment-specific secrets; avoid embedding in code.
+  - Deny-logs policy exceptions only if justified.
+
+### PostgreSQL schema and data
+
+7) Title: Recreate `conflict` schema in Dev
+- Purpose/Description: Use `PG Conflict Tables.sql` to create schema/objects; convert numeric/boolean types as per file; add indexes defined therein.
+- Acceptance Criteria:
+  - All tables, sequences, and indexes created; search_path set.
+- SP: 5
+- Parallelizable: Yes
+- Tips/Pitfalls:
+  - Align data types with Laravel models.
+  - Validate PK/sequence ownership mappings.
+
+8) Title: Role model and grants
+- Purpose/Description: Create DB roles for app-read, app-write (where applicable), etl-write; grant least privileges.
+- Acceptance Criteria:
+  - Roles in place; Laravel and Lambda connections use proper roles.
+- SP: 3
+- Parallelizable: Yes (after Story 7)
+- Tips/Pitfalls:
+  - Separate DDL and DML privileges; forbid CREATE FUNCTION.
+
+9) Title: One-time initial load from Snowflake CONFLICTREPORT
+- Purpose/Description: Extract from `SF Tables.sql` objects, transform, and load into PG `conflict` (initial backfill).
+- Acceptance Criteria:
+  - Load completed; row counts and sample checksums meet thresholds.
+- SP: 8
+- Parallelizable: Yes (after Stories 5,7,6)
+- Tips/Pitfalls:
+  - Use batch pagination; avoid gigantic transactions.
+  - Stage to S3 parquet/CSV if needed for performance.
+
+10) Title: Indexing and performance tuning for primary UI queries
+- Purpose/Description: Validate critical read paths and add missing composite/covering indexes per `ARB.md`.
+- Acceptance Criteria:
+  - EXPLAIN (ANALYZE, BUFFERS) for top 10 queries shows index usage; P95 targets met.
+- SP: 5
+- Parallelizable: Yes (after Story 7, in parallel with 18)
+- Tips/Pitfalls:
+  - Monitor bloat; plan VACUUM/ANALYZE cadence.
+
+### Python ETL replacement for Snowflake tasks
+
+11) Title: Python ETL repository scaffolding and CI/CD
+- Purpose/Description: Create mono-repo for Lambdas with shared libs: Snowflake connector, PG client, retries, idempotent upsert, structured logging.
+- Acceptance Criteria:
+  - Repo with unit test harness, linting, packaging; CI builds artifact; CD deploys to Dev.
+- SP: 8
+- Parallelizable: Yes
+- Tips/Pitfalls:
+  - Centralize MERGE/UPSERT helpers; enforce retries with jitter.
+  - Use pydantic for config validation.
+
+12) Title: Implement Task 1: COPY_DATA_FROM_CONFLICTVISITMAPS_TO_TEMP
+- Purpose/Description: Python module that ingests required source sets to `conflictvisitmaps_temp`.
+- Acceptance Criteria:
+  - Matches Snowflake output shape; parity within 0.1% row count.
+- SP: 5
+- Parallelizable: Yes (after 11)
+- Tips/Pitfalls:
+  - Chunked reads; idempotent trunc+load pattern or incremental watermark.
+
+13) Title: Implement UPDATE_DATA_CONFLICTVISITMAPS (_0/_1/_2/_3)
+- Purpose/Description: Port business logic from `Task Definition.txt` update steps to Python transforms on temp/main tables.
+- Acceptance Criteria:
+  - Deterministic results across reruns; unit tests for edge cases.
+- SP: 13
+- Parallelizable: Partially (sequence within story; run in parallel with other independent stories)
+- Tips/Pitfalls:
+  - Maintain operation ordering; guard against partial updates.
+
+14) Title: Implement INSERT_DATA_FROM_MAIN_TO_CONFLICTVISITMAPS (_0/_1/_2)
+- Purpose/Description: Insert logic into main maps table with MERGE-style upsert.
+- Acceptance Criteria:
+  - No dupes; unique constraints respected; parity vs Snowflake.
+- SP: 8
+- Parallelizable: Yes (after 13)
+- Tips/Pitfalls:
+  - Use dedup keys identical to Snowflake process.
+
+15) Title: Implement UPDATE_CONFLICT_VISIT_MAPS
+- Purpose/Description: Finalize attributes, flags, resolve derived fields.
+- Acceptance Criteria:
+  - Flag distribution matches reference run within tolerance.
+- SP: 5
+- Parallelizable: Yes (after 14)
+- Tips/Pitfalls:
+  - Unit-test boolean flag derivations.
+
+16) Title: Implement INSERT_CONFLICTS
+- Purpose/Description: Create rows in `conflicts` with correct lifecycle fields.
+- Acceptance Criteria:
+  - Key counts by status align to historical runs.
+- SP: 5
+- Parallelizable: Yes (after 15)
+- Tips/Pitfalls:
+  - Use created timestamps from business logic, not now().
+
+17) Title: Implement ASSIGN_GROUP_IDS
+- Purpose/Description: Deterministic group assignments for conflict groups.
+- Acceptance Criteria:
+  - Stable grouping across reruns; no oscillations.
+- SP: 5
+- Parallelizable: Yes (after 16)
+- Tips/Pitfalls:
+  - Explicit order-by across tie-breakers.
+
+18) Title: Implement UPDATE_PHONE_CONTACT
+- Purpose/Description: Update `contact_maintenance` fields derived from sources.
+- Acceptance Criteria:
+  - Row-level spot checks pass; null-handling verified.
+- SP: 3
+- Parallelizable: Yes
+
+19) Title: Implement CREATE_NEW_LOG_HISTORY and UPDATE_CREATE_LOG_HISTORY
+- Purpose/Description: Populate `log_history` and `log_history_values` (+ temp) per business rules.
+- Acceptance Criteria:
+  - Counts and referential integrity validated; sample diffs correct.
+- SP: 8
+- Parallelizable: Yes (after base tables exist)
+
+20) Title: Implement SP_GET_FINAL_BILLABLE_UNITS_OPTIMIZED equivalent
+- Purpose/Description: Port pricing/calculation logic to Python with test vectors.
+- Acceptance Criteria:
+  - Numerical parity within defined rounding; performance meets target.
+- SP: 13
+- Parallelizable: Yes
+- Tips/Pitfalls:
+  - Be explicit about precision/scale; avoid floating errors.
+
+21) Title: Implement LOAD_PROVIDER_DASHBOARD_DATA
+- Purpose/Description: Populate provider dashboard tables; ensure indexing from `PG Conflict Tables.sql`.
+- Acceptance Criteria:
+  - Aggregates match Snowflake dashboards within tolerance.
+- SP: 5
+- Parallelizable: Yes
+
+22) Title: Implement LOAD_PAYER_DASHBOARD_DATA and NEW variant
+- Purpose/Description: Populate payer dashboards legacy and “_NEW” tables.
+- Acceptance Criteria:
+  - Aggregates per dimensions match within tolerance; indexes validated.
+- SP: 8
+- Parallelizable: Yes
+
+### Orchestration and operations
+
+23) Title: Step Functions state machine and nightly schedule
+- Purpose/Description: Orchestrate tasks 1–22 with retries, fallbacks, success thresholds; event trigger aligned with Analytics refresh check in `Task Definition.txt`.
+- Acceptance Criteria:
+  - Visual workflow; alarms on failure; schedule in place; conditional start works.
+- SP: 8
+- Parallelizable: Yes (after 11)
+- Tips/Pitfalls:
+  - Externalize concurrency/parallel branches where safe (dashboards can run in parallel).
+
+24) Title: Observability: logs, metrics, and DLQ
+- Purpose/Description: Structured logging in CloudWatch; EMF metrics; DLQ for failed steps; correlation IDs across steps.
+- Acceptance Criteria:
+  - Dashboards and alarms live for freshness, error %, duration, retries.
+- SP: 5
+- Parallelizable: Yes
+
+25) Title: Data validation framework (dual-read comparator)
+- Purpose/Description: Scheduled job to compare row counts and checksums between Snowflake and PG during validation window.
+- Acceptance Criteria:
+  - Per-table thresholds defined; violations alert; reports exported.
+- SP: 5
+- Parallelizable: Yes
+
+### Laravel application changes
+
+26) Title: Add PostgreSQL connection and repository layer
+- Purpose/Description: Introduce PG connection in Laravel; implement repositories reading `conflict` schema; keep Snowflake reads only where needed (dimension views).
+- Acceptance Criteria:
+  - Feature-flag driven; integration tests pass; no business logic regressions.
+- SP: 8
+- Parallelizable: Yes (after 7,8)
+
+27) Title: Feature flags and progressive rollout
+- Purpose/Description: Toggle endpoints/groups to PG; phase-by-phase rollout plan.
+- Acceptance Criteria:
+  - Flags per endpoint; canary enabled for non-critical pages first.
+- SP: 3
+- Parallelizable: Yes
+
+28) Title: Caching layer for immutable dimension data
+- Purpose/Description: Add Redis/ElastiCache for high-traffic reference lists (names, dropdowns).
+- Acceptance Criteria:
+  - Cache hit rate >80% for selected endpoints; TTLs and invalidation documented.
+- SP: 5
+- Parallelizable: Yes
+
+29) Title: Performance hardening of UI queries against PG
+- Purpose/Description: Review top endpoints; rewrite GROUP BY/filters for PG planner; validate with EXPLAIN ANALYZE.
+- Acceptance Criteria:
+  - P95 latency targets met; no N+1s; all queries use indexes.
+- SP: 5
+- Parallelizable: Yes
+
+### Testing, promotion, and cutover
+
+30) Title: Unit and integration test coverage for Python
+- Purpose/Description: ≥80% coverage on core logic (conflict creation, dashboards); golden datasets checked into repo.
+- Acceptance Criteria:
+  - Coverage gate enforced; CI green on PRs.
+- SP: 5
+- Parallelizable: Yes
+
+31) Title: Non-prod promotion and soak
+- Purpose/Description: Deploy to QA/Staging; run nightly for 2 weeks; monitor freshness SLOs.
+- Acceptance Criteria:
+  - 0 critical errors for 10 consecutive runs; SLOs met.
+- SP: 5
+- Parallelizable: Yes
+
+32) Title: Cost and capacity validation
+- Purpose/Description: Validate costs vs `AWS Calculator - Postgres Migration.json`; confirm headroom for growth.
+- Acceptance Criteria:
+  - Actual monthly run-rate within ±20% of estimate; capacity alerts in place.
+- SP: 3
+- Parallelizable: Yes
+
+33) Title: Production cutover and backout readiness
+- Purpose/Description: Switch flags to PG; freeze Snowflake tasks; monitor; backout documented and tested.
+- Acceptance Criteria:
+  - Successful cutover within window; no severity-1 incidents; backout not required.
+- SP: 5
+- Parallelizable: No (release event)
+
+34) Title: Snowflake task decommissioning
+- Purpose/Description: Disable `CONFLICTREPORT` tasks listed in `Task Definition.txt`; archive procedures and tables as needed.
+- Acceptance Criteria:
+  - All tasks disabled; documentation updated; access revoked.
+- SP: 3
+- Parallelizable: Yes (post cutover)
+
+35) Title: Runbooks and knowledge transfer
+- Purpose/Description: Ops runbooks (on-call, hotfix), DBA SOPs, and KT sessions across teams.
+- Acceptance Criteria:
+  - On-call playbooks; KT sign-off from ops and app teams.
+- SP: 3
+- Parallelizable: Yes
+
+### Implementation guidelines (applies across stories)
+- Idempotency: Design every step to be safely rerunnable; prefer MERGE/upsert patterns; store watermarks.
+- Transactions: Use bounded batch sizes; checkpoint progress to avoid long-running locks.
+- Precision: Use NUMERIC with explicit scale for billing logic; avoid floating point.
+- Connection management: Pool connections; reuse clients; limit Lambda concurrency to connection capacity.
+- Observability: Structured logs with correlation IDs; include table counts, durations, and retry metadata.
+- Security: No credentials in code; least-privilege IAM and DB grants; TLS for all connections.
+- No Postgres functions: Put reusable logic into Python libraries; views allowed where helpful.
+- Performance: Verify indexes with EXPLAIN (ANALYZE, BUFFERS); avoid wide SELECT * in hot paths.
+
+### Suggested parallelization map
+- In parallel immediately: 1–6, 7–8, 11, 26–27.
+- After base infra: 9–10, 12–22, 23–25, 28–29.
+- Validation/promotion: 30–32.
+- Release: 33; then 34–35.
+
+Summary
+- Provided 35 user stories covering architecture, AWS infra, schema, Python replacements for each Snowflake task, orchestration, Laravel changes, validation, and cutover.
+- Each story includes purpose, acceptance criteria, points, parallelization, and implementation tips to minimize risk and speed up delivery.

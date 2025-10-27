@@ -1,0 +1,66 @@
+{
+	"Name": "Postgres Migration",
+	"Total Cost": {
+		"monthly": "439.33",
+		"upfront": "0.00",
+		"12 months": "5271.96"
+	},
+	"Metadata": {
+		"Currency": "USD",
+		"Locale": "en_US",
+		"Created On": "21/10/2025",
+		"Legal Disclaimer": "AWS Pricing Calculator provides only an estimate of your AWS fees and doesn't include any taxes that might apply. Your actual fees depend on a variety of factors, including your actual usage of AWS services.",
+		"Share Url": "https://calculator.aws/#/estimate?id=27d9adb904401b47e76917da57ff315fe2dab1fe"
+	},
+	"Groups": {
+		"Services": [
+			{
+				"Service Name": "AWS Lambda",
+				"Description": "AWS Lambda - per env",
+				"Region": "US East (Ohio)",
+				"Service Cost": {
+					"monthly": "63.22",
+					"upfront": "0.00",
+					"12 months": "758.64"
+				},
+				"Properties": {
+					"Architecture": "x86",
+					"Amount of ephemeral storage allocated": "2 GB",
+					"Invoke Mode": "Buffered",
+					"Number of requests": "100 per month",
+					"Concurrency": "10",
+					"Time for which Provisioned Concurrency is enabled": "6 hours",
+					"Number of requests for Provisioned Concurrency": "100 per month"
+				}
+			},
+			{
+				"Service Name": "Amazon Aurora PostgreSQL-Compatible DB",
+				"Description": "Aurora PostgreSQL",
+				"Region": "US East (Ohio)",
+				"Service Cost": {
+					"monthly": "373.71",
+					"upfront": "0.00",
+					"12 months": "4484.52"
+				},
+				"Properties": {
+					"Aurora PostgreSQL Cluster Configuration Option": "Aurora Standard",
+					"Storage amount": "1 TB"
+				}
+			},
+			{
+				"Service Name": "Step Functions - Standard Workflows",
+				"Description": "AWS Step Functions",
+				"Region": "US East (Ohio)",
+				"Service Cost": {
+					"monthly": "2.40",
+					"upfront": "0.00",
+					"12 months": "28.80"
+				},
+				"Properties": {
+					"Workflow requests": "1000 per month",
+					"State transitions per workflow": "100"
+				}
+			}
+		]
+	}
+}

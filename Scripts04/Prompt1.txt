@@ -1,0 +1,200 @@
+The high level architecture of my present Conflict Management project (in health care domain involving entities such as Payer, Provider, Caregiver, Patient etc.) is as follows:
+
+- Conflict Management is a web based application created using PHP 8.0 and Laravel 12 that connects to Snowflake database instance.
+
+- Snowflake has two database instances - Analytics and CONFLICTREPORT (refer to tables in "SF Conflict Tables.sql"). 
+
+- Analytics instance holds the master data and the primary data of visits which is populated via nightly ETL scripts from the source OLTP SQL Database.
+
+- The Analytics database exposes the data via Views.
+
+- The CONFLICTREPORT database has stored procedures that read the Views from the Analytics database, which are triggered by nightly Tasks defined in Snowflake (refer to the *.sql files under the Tasks folder). A series of more than 10 tasks run in sequence and generate the Conflicts and other related data in the tables in CONFLICTREPORT database.
+
+
+What is required to be done:
+- I would like to migrate from Snowflake database instance to PostgreSQL for my Conflict Management project. The primary rationale behind the migration is to overcome the exorbitant cost of maintaining a Snowflake instance and also to make it more scalable and performant. 
+
+- The Analytics and CONFLICTREPORT databases will be migrated to two different schemas in PostgreSQL - analytics and conflict.
+
+- The analytics schema will holds the data needed by Conflict Management, will be kept up to date by reading the Views in the Analytics database in the Snowflake via sync scripts written in Python from an AWS Lambda orchestrated by AWS Glue.
+
+- Similarly the work corresponding to the Snowflake tasks will also be done by Python scripts from an AWS Lambda orchestrated by AWS Glue. 
+
+- The client side PHP application which presently refers to the Snowflake instance for both the Analytics and CONFLICTREPORT databases, will now refer to both the above schema in PostgreSQL without the need to access the Snowflake.
+
+What has been done so far:
+I have setup a PostgreSQL database instance conflict_management with two empty schemas - analytics and conflict (refer to the tables in "PG Conflict Tables.sql")
+
+With the above background suggest the next steps along with details to achieve the full migration, step-by-step. I am looking for user stories along with the details of implementation such that we build the entire infrastructure and validate our approach before doing a full scale migration. Another goal is to ged rid of unecessary steps and achieve optimization over the present flow using Snowflake.
+
+===================
+
+### Scope and guiding principles
+- **Parity-first**: match Snowflake outputs before optimizing.
+- **Incremental syncs**: watermarks + upsert into staging then MERGE into base.
+- **Stateless Lambdas**: Glue-orchestrated, idempotent operations.
+- **Postgres 15+**: native MERGE, improved perf features.
+- **Simple SQL**: keep GROUP BYs clean and readable [[memory:4221959]].
+
+### Architecture target state
+- **PostgreSQL database `conflict_management`**
+  - `analytics` schema: source-modeled tables fed from Snowflake Views (nightly + incremental).
+  - `conflict` schema: derived tables produced by Python/PLpgSQL tasks.
+- **ETL/Orchestration**
+  - AWS Glue Workflow → Jobs triggering Lambda functions (Python 3.11).
+  - Secrets in AWS Secrets Manager; KMS for encryption; VPC + SGs for DB access.
+  - Bulk loads via `COPY FROM STDIN` (psycopg) or staged CSVs for very large tables.
+- **Laravel app**
+  - Add `pgsql` connection; feature-flag switch from Snowflake to Postgres.
+  - Use Query Builder/DB layer to avoid dialect-specific SQL; keep SQL clean [[memory:4221959]].
+  - For current Snowflake DSN `cmdsn`, confirm `.env` entries with `type` if needed [[memory:3049827]].
+
+### Phased plan with user stories, acceptance criteria, and step-by-step
+
+#### Phase 0 — Inventory and POC slice (1-2 weeks)
+- **US-0.1 Inventory Snowflake**
+  - As a data engineer, I can list all Snowflake views, SPs, tasks, dependencies, row counts, and update cadence.
+  - Accept: inventory spreadsheet with object names, DDLs, lineage, sizes, and SLOs.
+  - Steps:
+    - Export DDL for Analytics Views and CONFLICTREPORT procedures/tasks.
+    - Record data volumes and last-modified/CDC fields.
+- **US-0.2 Bootstrap Postgres schemas**
+  - As an engineer, I can create tables in `analytics` and `conflict` from current PG DDL files.
+  - Accept: `analytics.*` and `conflict.*` exist; `ANALYZE` OK; extensions enabled.
+  - Steps:
+    - Enable extensions: `uuid-ossp`, `pg_stat_statements`, `pgcrypto`, `pg_cron` (optional), `plpython3u` (optional).
+    - Apply DDL from `PG Conflict Tables.sql`, adjust types as needed (see mapping table below).
+- **US-0.3 POC sync of 2 tables**
+  - As a DE, I can sync a small dimension and one fact table end-to-end nightly + incremental.
+  - Accept: row/column counts within tolerance; key samples match; job idempotent.
+  - Steps:
+    - Create `analytics_stg.table` and `analytics.table`.
+    - Python Lambda: read Snowflake View in chunks; write CSV to memory; `COPY` into `analytics_stg`; MERGE into `analytics` using natural/business keys; swap or delete stg; `ANALYZE`.
+    - Watermark: use `updated_at` or change_number; persist last watermark in dedicated control table.
+
+#### Phase 1 — Foundations (1-2 weeks)
+- **US-1.1 Provision Postgres infra**
+  - As an SRE, I can provision RDS/Aurora PG, parameter groups, backups, monitoring.
+  - Accept: VPC, SGs, subnets, CloudWatch metrics/alarms, enhanced monitoring.
+- **US-1.2 AWS foundations for ETL**
+  - As an SRE, I can securely run Glue/Lambda in VPC with Secrets Manager and KMS.
+  - Accept: IAM roles with least privilege; private subnets; Secrets rotation.
+
+#### Phase 2 — Full analytics sync framework (2-4 weeks)
+- **US-2.1 Build incremental sync framework**
+  - As a DE, I can define per-table configs: source view name, PKs, watermark column, frequency, batch size.
+  - Accept: YAML/JSON config driving a generic sync Lambda; retries; per-table metrics.
+  - Steps:
+    - Config-driven loader; `COPY` for batch; MERGE in PG 15+; support deletes (via soft flag or tombstone table).
+- **US-2.2 Data quality and parity**
+  - As QA, I can verify parity vs. Snowflake for all analytics tables.
+  - Accept: row count deltas <0.1% (or strict), column min/max/avg match, key sample diffs = 0.
+  - Steps:
+    - Row counts, checksums, histograms; exception samples stored in `analytics_validation.*`.
+
+#### Phase 3 — Conflict pipeline port (2-4 weeks)
+- **US-3.1 Port Snowflake tasks to Postgres/Python**
+  - As a DE, I can run the conflicts generation pipeline outside Snowflake.
+  - Accept: outputs in `conflict.*` match Snowflake reference (n>=30-day window).
+  - Steps:
+    - For each Task in `Tasks\*.sql`: convert to PG SQL/PLpgSQL or Python transformations.
+    - Orchestrate in Glue as a DAG; keep each task idempotent; use staging tables per step.
+    - Prefer set-based SQL. Where needed, use PL/pgSQL for procedural control.
+- **US-3.2 Optimize and simplify**
+  - As a DE, I can remove redundant steps and combine compatible ones.
+  - Accept: fewer stages, shorter wall-clock time; same outputs and DQ.
+  - Steps:
+    - Merge adjacent updates when possible; use single MERGE with conditional updates.
+    - Materialize expensive intermediate datasets; refresh concurrently where supported.
+
+#### Phase 4 — Laravel application switchover (1-2 weeks)
+- **US-4.1 Dual-DB feature flag**
+  - As an engineer, I can switch the app between Snowflake and Postgres at runtime.
+  - Accept: config value toggles data source; smoke tests pass.
+  - Steps:
+    - Add `pgsql` conn in `config/database.php`; `.env` keys; use `DB::connection('pgsql')`.
+    - Keep queries simple/portable; clean GROUP BYs [[memory:4221959]].
+    - Verify current Snowflake DSN `cmdsn` and `.env` using `type` if needed [[memory:3049827]].
+- **US-4.2 Read-only UAT on Postgres**
+  - As a user, I can view Conflicts and dashboards from Postgres side-by-side.
+  - Accept: page-level diffs = 0; performance equal or better.
+
+#### Phase 5 — Cutover, backfill, rollback (3-5 days)
+- **US-5.1 Backfill and freeze window**
+  - As an operator, I can perform a controlled cutover with minimal downtime.
+  - Accept: final sync; app flag switched; monitoring green; rollback plan ready.
+  - Steps:
+    - Freeze writes (if any), run final incremental, flip feature flag, monitor.
+- **US-5.2 Decommission Snowflake**
+  - Accept: data retained/exported; cost center closed; access removed.
+
+### Snowflake→Postgres SQL mapping quick guide
+- **MERGE**: use PG 15+ MERGE. For older, emulate with `INSERT ... ON CONFLICT` + `UPDATE`.
+- **QUALIFY**: rewrite using subquery with window function filter.
+- **IFF / NVL**: `COALESCE`.
+- **ARRAY / VARIANT**: `jsonb` + GIN indexes as needed.
+- **IDENTIFIER case-sensitivity**: standardize to lower_snake_case in PG.
+- **Sequences**: `GENERATED BY DEFAULT AS IDENTITY` or explicit `CREATE SEQUENCE`.
+- **Stages/COPY**: use PG `COPY ... FROM STDIN` via psycopg or S3 import for Aurora.
+
+### Postgres design recommendations
+- **Partitioning**: for large facts (e.g., visits), range partition by date; keep ~6-24 monthly partitions.
+- **Indexes**: composite on join/filter keys; covering indexes for hot queries; partial where sparse.
+- **Staging**: `UNLOGGED` for `_stg` tables to speed load; swap into base; run `ANALYZE`.
+- **Concurrency**: use `pgbouncer` transaction pooling; limit Lambda concurrency.
+- **Autovacuum**: tune thresholds for large update/merge tables; schedule `VACUUM (FULL)` sparingly.
+- **Observability**: enable `pg_stat_statements`; CloudWatch alarms (connections, CPU, iowait, replication lag).
+
+### Glue/Lambda ETL skeletons
+- Table config (example):
+```yaml
+table: provider
+source_view: ANALYTICS.PUBLIC.V_PROVIDER
+target_schema: analytics
+pk: [provider_id]
+watermark_column: updated_at
+batch_size: 100000
+schedule: nightly
+```
+- Upsert pattern (Python, outline):
+```python
+import psycopg
+from snowflake.connector import connect
+
+def sync_table(cfg):
+    sf = connect(user=..., password=..., account=..., warehouse=..., database='ANALYTICS', schema='PUBLIC')
+    pg = psycopg.connect(conninfo=...)
+    with pg, pg.cursor() as cur:
+        cur.execute("select last_watermark from control.watermarks where table_name=%s for update", (cfg['table'],))
+        last_wm = cur.fetchone()[0] or '1970-01-01'
+        # stream rows from Snowflake in chunks
+        # write into analytics_stg.<table> via COPY ; then MERGE into analytics.<table>
+        # update control.watermarks on success
+```
+
+### Data quality and validation
+- **Row/column parity**: counts by partition/date; null ratios; min/max/avg.
+- **Key consistency**: FK checks across `analytics` and `conflict`.
+- **Functional parity**: recompute conflicts for a 30-60 day window and diff outputs.
+- **Dashboards**: snapshot JSON responses from Laravel against both backends.
+
+### Performance and optimization vs. Snowflake
+- Eliminate redundant temp tables by merging adjacent UPDATEs.
+- Replace multi-pass dedup with single windowed MERGE.
+- Precompute heavy joins in materialized views with concurrent refresh.
+- Index-once rule: indexes only where they pay for your top queries.
+
+### What I’ll do next
+- Finish Snowflake inventory and produce the object/lineage matrix.
+- Propose the first two POC tables and their detailed sync configs.
+- Draft the initial PG DDL adjustments for partitioning and indexes on those tables.
+
+- I started “Inventory Snowflake objects…” and outlined the full migration plan with user stories. Next, I’ll enumerate candidate POC tables and their configs so we can run the first end-to-end sync.
+
+- Key outputs provided:
+  - End-to-end migration plan with phases and concrete user stories.
+  - SQL mapping guidance and Postgres design recommendations.
+  - ETL skeleton and validation strategy.
+  - Laravel switchover approach with feature flag and DSN verification steps.
+
+If you share the contents of `SF Conflict Tables.sql` and 1-2 representative `Tasks/Task*.sql`, I’ll map them to PG DDL and provide the exact conversion for the first POC slice.
