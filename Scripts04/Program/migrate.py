@@ -41,7 +41,6 @@ def get_snowflake_connection(config):
             database=config['database'],
             schema=config['schema'],
             authenticator=config.get('authenticator'),
-            # Support for different auth methods can be added here
         )
         return conn
     except Exception as e:
