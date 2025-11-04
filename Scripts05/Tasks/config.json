@@ -1,0 +1,21 @@
+{
+  "snowflake": {
+    "user": "CONFLICTREPORT_USER",
+    "account": "IKB38126.us-east-1",
+    "warehouse": "CONFLICTREPORT_APP_WH",
+    "database": "CONFLICTREPORT_SANDBOX",
+    "schema": "PUBLIC",
+    "port": 443,
+    "authenticator": "SNOWFLAKE_JWT",
+    "auth_method": "keypair",
+    "rsa_key": "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCucKmTC6Qv4jpZ\nEtj3oBoTffJMuxGrjA9SOWeBqhtW//3y1d7dqtXKvKMNKwkk4KOSbBLrqIyc+Bmz\n9PVQl207nwXmofCbcqKTthM1gEwCyb8DsKRHHub2j+eZXsEDBwyo9p6dRbhwP223\nkvnKw8Mjx7m2e6c2Ewq6VqU4My9x2+wjPjOE2bJxqtnwEyc2tjym4NLv/+W5dN4N\n6EA39YMYe8ZFMAEzAhk0hUyKpRR5R0bDrRekQFRk1zvN/G46pS71IPJGip1SjtiI\ntcgQG0dmBxMfm1ceoeT7PmnynRqfNiS5b4bD4HUNWHJeEC1oR2EkOTeXhdzdVyLn\nSaqNA0KzAgMBAAECggEAQcHkmrLbvNU6C5PoSEiJK+nhaf1m5tUQfX14QE/gqIYt\ns9ndfpBEsX00teUQOF+aKbsl0sIh55Y7EjR4OV4r5jrHHa7UJbUsBiSvzw5DGRX2\nNKzk8I58oFuVAaLPfZWttw/osP60TVQLxxTXpxDuwdErd9fbK6438BBzjeD1tKSE\nQLF1ilCudTuqOsMI+OXbKq4M65tJqW9h8BnrLQwWtRSGm6w0IVloQsIVMFnnuFOv\n5zAtiybpMLDe3Y/P7mFP4n08QhZdFgN/vHZQl6Zko3zx7SxMbek377OFhAzWa4FV\n3yVkV6jIIkP5kenz6xKZupStsq3SIWWG2g8aIbwBsQKBgQDcz1RZRlFeyGu9a2fi\nt8jQc+4UCgfsHq8c5/etM1uirMMZ4vgiXRkcb3ePquFFU/PJM4RI8gePO5Pul+G2\nx9AH0GN7u8Va0Uk2ZhSHZzmhWVVlKRXBZTwJMuYBrG3LEMjXHTjZHLHcBKvEvisM\ndntteS8oinsNQA/yznfSwPEoCwKBgQDKPYYKaRPmDMO5FnlNrW9iuOt5u9K4SJ6x\n+QqfRuLEdiysAjFoDA7LAiVlObgEItXAk8ZmUEXYA6hWoEzgERKJSWPk6EX1GvBA\nM6o5yjToEaF9R6AAnog7VX7ZX1nibXziVb9UuTYKQGl9rfODZW8uMT9MGg1HePjj\nURkCU1vw+QKBgQCR8Sba6rMVZnpvc/Hx028S98y/yfF6ir1K6ba171/9oRpCndVL\nQSU7uiDYACVsYRScQ0SHwhBlBwe7hv9Ug7RntcBLI8xJPlKZddbTt9JLZnQerI0I\nihSoL8/+Ay1+LdXQ+Ct+tIyJ0zyEiPyC/DyQGqykqwKxu0nPPc/MqGG8CQKBgF7b\neopZfMbTR94BZ4YCihMA7xma+hwLm7uYNt48LlK9pvhK0wedWDbp28ZdyyzNdfqs\nlUsZ7ZiDJqry5vvVph8UeDE+rMlpCDTkxrvyVtxeoKMVPDvuH7HMyQGF0q/8cK3s\nUCCZ+nnWemRDecswgXRmDu1P7tiOKhbcy+EmXiJpAoGATWggq6lcADjyZOOuVBiq\nIE/uHVB0DrscN7uvBICqtRLZodUI1kLGytRZPiOfAjYNAYNpKZblibbQ+MaF93f3\nF4M48T6gDw/kLou5wGWA/nOZerviZQMoGrio8PTJDPL2wX5xttNGZvpEPQMKanF3\niGTII+6SwJ5vyw4jidrEJvo="
+  },
+  "postgres": {
+    "host": "awspgsqlpoc.cluster-c2an0zoe7aox.us-east-1.rds.amazonaws.com",
+    "port": 5432,
+    "database": "conflict_management",
+    "user": "cm_user",
+    "password": "uGStSD2hgf&l16$1Bh",
+    "schema": "conflict"
+  }
+}
