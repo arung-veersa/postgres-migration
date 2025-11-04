@@ -3,8 +3,8 @@
     "user": "CONFLICTREPORT_USER",
     "account": "IKB38126.us-east-1",
     "warehouse": "CONFLICTREPORT_APP_WH",
-    "database": "CONFLICTREPORT_SANDBOX",
-    "schema": "PUBLIC",
+    "database": "ANALYTICS",
+    "schema": "BI",
     "port": 443,
     "authenticator": "SNOWFLAKE_JWT",
     "auth_method": "keypair",
@@ -16,6 +16,6 @@
     "database": "conflict_management",
     "user": "cm_user",
     "password": "uGStSD2hgf&l16$1Bh",
-    "schema": "conflict"
+    "schema": "conflict_dev"
   }
 }
