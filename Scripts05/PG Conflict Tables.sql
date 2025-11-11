@@ -614,187 +614,150 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 ALTER SEQUENCE notifications_id_seq OWNED BY notifications."ID";
 
--- PAYER_DASHBOARD_AGENCY
-CREATE TABLE IF NOT EXISTS payer_dashboard_agency (
-	"PAYERID" varchar(50),
-	"CRDATEUNIQUE" date,
-	"PROVIDERID" varchar(50),
-	"P_NAME" varchar(100),
-	"TIN" varchar(100),
-	"CON_TO" numeric(38,0),
-	"CON_SP" numeric(38,2),
-	"CON_OP" numeric(38,2),
-	"CON_FP" numeric(38,2)
+-- PAYER_DASHBOARD_AGENCY_COUNT
+CREATE TABLE payer_dashboard_agency_count (
+	"PAYERID" varchar(50) NULL,
+	"VISITDATE" date NULL,
+	"PROVIDERID" varchar(50) NULL,	
+	"P_NAME" varchar(100) NULL,
+	"TIN" varchar(100) NULL,
+	"VISIT_KEY" varchar(100) NULL	
 );
-CREATE INDEX IF NOT EXISTS idx_payer_dashboard_agency_cluster ON payer_dashboard_agency ("PAYERID", "CRDATEUNIQUE", "PROVIDERID", "P_NAME", "TIN");
+CREATE INDEX idx_payer_dashboard_agency_count_cluster ON payer_dashboard_agency_count USING btree ("PAYERID","VISITDATE","PROVIDERID","P_NAME","TIN","VISIT_KEY"  );
 
--- PAYER_DASHBOARD_AGENCY_NEW
-CREATE TABLE IF NOT EXISTS payer_dashboard_agency_new (
-	"PAYERID" varchar(50),
-	"CRDATEUNIQUE" date,
-	"PROVIDERID" varchar(50),
-	"P_NAME" varchar(100),
-	"TIN" varchar(100),
-	"STATUSFLAG" varchar(5),
-	"COSTTYPE" varchar(20),
-	"VISITTYPE" varchar(20),
-	"CON_TO" numeric(38,0),
-	"CON_SP" numeric(38,2),
-	"CON_OP" numeric(38,2),
-	"CON_FP" numeric(38,2)
+-- PAYER_DASHBOARD_AGENCY_IMPACT
+CREATE TABLE payer_dashboard_agency_impact (
+	"PAYERID" varchar(50) NULL,	
+	"VISITDATE" date NULL,
+	"PROVIDERID" varchar(50) NULL,
+	"P_NAME" varchar(100) NULL,
+	"TIN" varchar(100) NULL,
+	"CON_SP" numeric(38, 2) NULL,
+	"CON_OP" numeric(38, 2) NULL,
+	"CON_FP" numeric(38, 2) NULL
 );
-CREATE INDEX IF NOT EXISTS idx_payer_dashboard_agency_new_cluster ON payer_dashboard_agency_new ("PAYERID", "CRDATEUNIQUE", "PROVIDERID", "P_NAME", "TIN", "STATUSFLAG", "COSTTYPE", "VISITTYPE");
+CREATE INDEX idx_payer_dashboard_agency_impact_cluster ON payer_dashboard_agency_impact USING btree ("PAYERID","VISITDATE","PROVIDERID","P_NAME","TIN");
 
--- PAYER_DASHBOARD_CAREGIVER
-CREATE TABLE IF NOT EXISTS payer_dashboard_caregiver (
-	"PAYERID" varchar(50),
-	"CRDATEUNIQUE" date,
-	"CAREGIVERID" varchar(50),
-	"C_NAME" varchar(100),
-	"C_LNAME" varchar(100),
-	"C_FNAME" varchar(100),
-	"CON_TO" numeric(38,0),
-	"CON_SP" numeric(38,2),
-	"CON_OP" numeric(38,2),
-	"CON_FP" numeric(38,2)
+-- PAYER_DASHBOARD_CAREGIVER_COUNT
+CREATE TABLE payer_dashboard_caregiver_count (
+	"PAYERID" varchar(50) NULL,
+	"VISITDATE" date NULL,
+	"SSN" varchar(50) NULL,		
+	"C_NAME" varchar(100) NULL,
+	"VISIT_KEY" varchar(100) NULL
 );
-CREATE INDEX IF NOT EXISTS idx_payer_dashboard_caregiver_cluster ON payer_dashboard_caregiver ("PAYERID", "CRDATEUNIQUE", "CAREGIVERID", "C_NAME", "C_LNAME", "C_FNAME");
+CREATE INDEX idx_payer_dashboard_caregiver_count_cluster ON payer_dashboard_caregiver_count USING btree ("VISITDATE","PAYERID","SSN","C_NAME","VISIT_KEY"  );
 
--- PAYER_DASHBOARD_CAREGIVER_NEW
-CREATE TABLE IF NOT EXISTS payer_dashboard_caregiver_new (
-	"PAYERID" varchar(50),
-	"CRDATEUNIQUE" date,
-	"SSN" varchar(50),
-	"CAREGIVERID" varchar(50),
-	"C_NAME" varchar(100),
-	"C_LNAME" varchar(100),
-	"C_FNAME" varchar(100),
-	"STATUSFLAG" varchar(5),
-	"COSTTYPE" varchar(20),
-	"VISITTYPE" varchar(20),
-	"CON_TO" numeric(38,0),
-	"CON_SP" numeric(38,2),
-	"CON_OP" numeric(38,2),
-	"CON_FP" numeric(38,2)
+CREATE TABLE payer_dashboard_caregiver_impact (
+	"PAYERID" varchar(50) NULL,	
+	"VISITDATE" date NULL,
+	"SSN" varchar(50) NULL,		
+	"C_NAME" varchar(100) NULL,
+	"CON_SP" numeric(38, 2) NULL,
+	"CON_OP" numeric(38, 2) NULL,
+	"CON_FP" numeric(38, 2) NULL
 );
-CREATE INDEX IF NOT EXISTS idx_payer_dashboard_caregiver_new_cluster ON payer_dashboard_caregiver_new ("PAYERID", "CRDATEUNIQUE", "SSN", "C_NAME", "STATUSFLAG", "COSTTYPE", "VISITTYPE");
+CREATE INDEX idx_payer_dashboard_caregiver_impact_cluster ON payer_dashboard_caregiver_impact USING btree ("VISITDATE","PAYERID","SSN","C_NAME");
 
--- PAYER_DASHBOARD_CON_TYP
-CREATE TABLE IF NOT EXISTS payer_dashboard_con_typ (
-	"PAYERID" varchar(50),
-	"CRDATEUNIQUE" date,
-	"CONTYPE" varchar(50),
-	"CONTYPES" varchar(50),
-	"CO_TO" numeric(38,0),
-	"CO_SP" numeric(38,2),
-	"CO_OP" numeric(38,2),
-	"CO_FP" numeric(38,2)
+-- PAYER_DASHBOARD_CON_TYP_COUNT
+CREATE TABLE payer_dashboard_con_typ_count (
+	"PAYERID" varchar(50) NULL,
+	"VISITDATE" date NULL,
+	"CONTYPE" varchar(50) NULL,
+	"CONTYPEDESC" varchar(100) NULL,
+	"VISIT_KEY" varchar(100) NULL	
 );
-CREATE INDEX IF NOT EXISTS idx_payer_dashboard_con_typ_cluster ON payer_dashboard_con_typ ("PAYERID", "CRDATEUNIQUE", "CONTYPE", "CONTYPES");
+CREATE INDEX idx_payer_dashboard_con_typ_count_cluster ON payer_dashboard_con_typ_count USING btree ("PAYERID","VISITDATE","CONTYPE","CONTYPEDESC","VISIT_KEY"  );
 
--- PAYER_DASHBOARD_CON_TYP_NEW
-CREATE TABLE IF NOT EXISTS payer_dashboard_con_typ_new (
-	"PAYERID" varchar(50),
-	"CRDATEUNIQUE" date,
-	"CONTYPE" varchar(50),
-	"CONTYPES" varchar(50),
-	"STATUSFLAG" varchar(5),
-	"COSTTYPE" varchar(20),
-	"VISITTYPE" varchar(20),
-	"CO_TO" numeric(38,0),
-	"CO_SP" numeric(38,2),
-	"CO_OP" numeric(38,2),
-	"CO_FP" numeric(38,2)
+-- PAYER_DASHBOARD_CON_TYP_IMPACT
+CREATE TABLE payer_dashboard_con_typ_impact (
+	"PAYERID" varchar(50) NULL,
+	"VISITDATE" date NULL,
+	"CONTYPE" varchar(50) NULL,
+	"CONTYPEDESC" varchar(100) NULL,
+	"CON_SP" numeric(38, 2) NULL,
+	"CON_OP" numeric(38, 2) NULL,
+	"CON_FP" numeric(38, 2) NULL
 );
-CREATE INDEX IF NOT EXISTS idx_payer_dashboard_con_typ_new_cluster ON payer_dashboard_con_typ_new ("PAYERID", "CRDATEUNIQUE", "CONTYPES", "STATUSFLAG", "COSTTYPE", "VISITTYPE");
+CREATE INDEX idx_payer_dashboard_con_typ_impact_cluster ON payer_dashboard_con_typ_impact USING btree ("PAYERID","VISITDATE","CONTYPE","CONTYPEDESC" );
 
--- PAYER_DASHBOARD_PATIENT
-CREATE TABLE IF NOT EXISTS payer_dashboard_patient (
-	"PAYERID" varchar(50),
-	"CRDATEUNIQUE" date,
-	"PATIENTID" varchar(50),
-	"PFNAME" varchar(100),
-	"PLNAME" varchar(100),
-	"PNAME" varchar(100),
-	"ADMISSIONID" varchar(100),
-	"CON_TO" numeric(38,0),
-	"CON_SP" numeric(38,2),
-	"CON_OP" numeric(38,2),
-	"CON_FP" numeric(38,2)
+-- PAYER_DASHBOARD_PATIENT_COUNT
+CREATE TABLE payer_dashboard_patient_count (
+	"PAYERID" varchar(50) NULL,
+	"VISITDATE" date NULL,
+	"PATIENTID" varchar(50) NULL,
+	"PFNAME" varchar(100) NULL,
+	"PLNAME" varchar(100) NULL,
+	"PNAME" varchar(100) NULL,
+	"ADMISSIONID" varchar(100) NULL,
+	"VISIT_KEY" varchar(100) NULL	
 );
-CREATE INDEX IF NOT EXISTS idx_payer_dashboard_patient_cluster ON payer_dashboard_patient ("PAYERID", "CRDATEUNIQUE", "PATIENTID", "PFNAME", "PLNAME", "PNAME", "ADMISSIONID");
+CREATE INDEX idx_payer_dashboard_patient_count_cluster ON payer_dashboard_patient_count USING btree ("PAYERID","VISITDATE","PATIENTID", "PFNAME","PLNAME","PNAME","ADMISSIONID","VISIT_KEY"  );
 
--- PAYER_DASHBOARD_PATIENT_NEW
-CREATE TABLE IF NOT EXISTS payer_dashboard_patient_new (
-	"PAYERID" varchar(50),
-	"CRDATEUNIQUE" date,
-	"PATIENTID" varchar(50),
-	"PFNAME" varchar(100),
-	"PLNAME" varchar(100),
-	"PNAME" varchar(100),
-	"ADMISSIONID" varchar(100),
-	"CON_TO" numeric(38,0),
-	"CON_SP" numeric(38,2),
-	"CON_OP" numeric(38,2),
-	"CON_FP" numeric(38,2),
-	"STATUSFLAG" varchar(5),
-	"COSTTYPE" varchar(20),
-	"VISITTYPE" varchar(20)
+-- PAYER_DASHBOARD_PATIENT_IMPACT
+CREATE TABLE payer_dashboard_patient_impact (
+	"PAYERID" varchar(50) NULL,
+	"VISITDATE" date NULL,
+	"PATIENTID" varchar(50) NULL,
+	"PFNAME" varchar(100) NULL,
+	"PLNAME" varchar(100) NULL,
+	"PNAME" varchar(100) NULL,
+	"ADMISSIONID" varchar(100) NULL,
+	"CON_SP" numeric(38, 2) NULL,
+	"CON_OP" numeric(38, 2) NULL,
+	"CON_FP" numeric(38, 2) NULL
 );
-CREATE INDEX IF NOT EXISTS idx_payer_dashboard_patient_new_cluster ON payer_dashboard_patient_new ("PAYERID", "CRDATEUNIQUE", "PATIENTID", "PFNAME", "PLNAME", "PNAME", "ADMISSIONID");
+CREATE INDEX idx_payer_dashboard_patient_impact_cluster ON payer_dashboard_patient_impact USING btree ("PAYERID","VISITDATE","PATIENTID", "PFNAME","PLNAME","PNAME","ADMISSIONID");
 
--- PAYER_DASHBOARD_PAYER
-CREATE TABLE IF NOT EXISTS payer_dashboard_payer (
-	"PAYERID" varchar(50),
-	"CRDATEUNIQUE" date,
-	"CONPAYERID" varchar(50),
-	"PNAME" varchar(100),
-	"CON_TO" numeric(38,0),
-	"CON_SP" numeric(38,2),
-	"CON_OP" numeric(38,2),
-	"CON_FP" numeric(38,2)
+-- PAYER_DASHBOARD_PAYER_COUNT
+CREATE TABLE payer_dashboard_payer_count (
+	"PAYERID" varchar(50) NULL,
+	"VISITDATE" date NULL,
+	"CONPAYERID" varchar(50) NULL,
+	"PNAME" varchar(100) NULL,
+	"VISIT_KEY" varchar(100) NULL	
 );
-CREATE INDEX IF NOT EXISTS idx_payer_dashboard_payer_cluster ON payer_dashboard_payer ("PAYERID", "CRDATEUNIQUE", "CONPAYERID", "PNAME");
+CREATE INDEX idx_payer_dashboard_payer_count_cluster ON payer_dashboard_payer_count USING btree ("PAYERID","VISITDATE","CONPAYERID","PNAME", "VISIT_KEY"  );
 
--- PAYER_DASHBOARD_PAYER_NEW
-CREATE TABLE IF NOT EXISTS payer_dashboard_payer_new (
-	"PAYERID" varchar(50),
-	"CRDATEUNIQUE" date,
-	"CONPAYERID" varchar(50),
-	"PNAME" varchar(100),
-	"STATUSFLAG" varchar(5),
-	"COSTTYPE" varchar(20),
-	"VISITTYPE" varchar(20),
-	"CON_TO" numeric(38,0),
-	"CON_SP" numeric(38,2),
-	"CON_OP" numeric(38,2),
-	"CON_FP" numeric(38,2)
+-- PAYER_DASHBOARD_PAYER_IMPACT
+CREATE TABLE payer_dashboard_payer_impact (
+	"PAYERID" varchar(50) NULL,
+	"VISITDATE" date NULL,
+	"CONPAYERID" varchar(50) NULL,
+	"PNAME" varchar(100) NULL,
+	"CON_SP" numeric(38, 2) NULL,
+	"CON_OP" numeric(38, 2) NULL,
+	"CON_FP" numeric(38, 2) NULL	
 );
-CREATE INDEX IF NOT EXISTS idx_payer_dashboard_payer_new_cluster ON payer_dashboard_payer_new ("PAYERID", "CRDATEUNIQUE", "CONPAYERID", "PNAME", "STATUSFLAG", "COSTTYPE", "VISITTYPE");
+CREATE INDEX idx_payer_dashboard_payer_impact_cluster ON payer_dashboard_payer_impact USING btree ("PAYERID","VISITDATE","CONPAYERID","PNAME");
 
--- PAYER_DASHBOARD_TOP
-CREATE TABLE IF NOT EXISTS payer_dashboard_top (
-	"PAYERID" varchar(50),
-	"STATUS" varchar(20),
-	"STATUS_VALUE" varchar(50),
-	"SEVEN_TO" numeric(38,0),
-	"SEVEN_SP" numeric(38,2),
-	"SEVEN_OP" numeric(38,2),
-	"SEVEN_FP" numeric(38,2),
-	"THIRTY_TO" numeric(38,0),
-	"THIRTY_SP" numeric(38,2),
-	"THIRTY_OP" numeric(38,2),
-	"THIRTY_FP" numeric(38,2),
-	"SIXTY_TO" numeric(38,0),
-	"SIXTY_SP" numeric(38,2),
-	"SIXTY_OP" numeric(38,2),
-	"SIXTY_FP" numeric(38,2),
-	"NINETY_TO" numeric(38,0),
-	"NINETY_SP" numeric(38,2),
-	"NINETY_OP" numeric(38,2),
-	"NINETY_FP" numeric(38,2)
+-- PAYER_DASHBOARD_PAYER_CHART_COUNT
+CREATE TABLE payer_dashboard_payer_chart_count (
+	"PAYERID" varchar(50) NULL,
+	"VISITDATE" date NULL,
+	"CONPAYERID" varchar(50) NULL,
+	"PNAME" varchar(100) NULL,
+	"STATUSFLAG" varchar(5) NULL,
+	"COSTTYPE" varchar(20) NULL,
+	"VISITTYPE" varchar(20) NULL,
+	"VISIT_KEY" varchar(100) NULL	
 );
-CREATE INDEX IF NOT EXISTS idx_payer_dashboard_top_cluster ON payer_dashboard_top ("PAYERID", "STATUS", "STATUS_VALUE");
+CREATE INDEX idx_payer_dashboard_payer_chart_count_cluster ON payer_dashboard_payer_chart_count USING btree ("VISITDATE","PAYERID","CONPAYERID","PNAME", "STATUSFLAG","COSTTYPE","VISITTYPE","VISIT_KEY"  );
+
+-- PAYER_DASHBOARD_PAYER_CHART_IMPACT
+CREATE TABLE payer_dashboard_payer_chart_impact (
+	"PAYERID" varchar(50) NULL,
+	"VISITDATE" date NULL,
+	"CONPAYERID" varchar(50) NULL,
+	"PNAME" varchar(100) NULL,
+	"STATUSFLAG" varchar(5) NULL,
+	"COSTTYPE" varchar(20) NULL,
+	"VISITTYPE" varchar(20) NULL,
+	"CON_SP" numeric(38, 2) NULL,
+	"CON_OP" numeric(38, 2) NULL,
+	"CON_FP" numeric(38, 2) NULL	
+);
+CREATE INDEX idx_payer_dashboard_payer_chart_impact_cluster ON payer_dashboard_payer_chart_impact USING btree ("VISITDATE","PAYERID","CONPAYERID","PNAME", "STATUSFLAG","COSTTYPE","VISITTYPE"  );
 
 -- PAYER_PROVIDER_REMINDERS
 CREATE TABLE IF NOT EXISTS payer_provider_reminders (
@@ -964,3 +927,218 @@ CREATE TABLE IF NOT EXISTS tmp_billable_updates (
 	"BMO" numeric(38,0) NOT NULL,
 	"BUO" text NOT NULL
 );
+
+-- STATE_DASHBOARD_AGENCY_COUNT
+CREATE TABLE state_dashboard_agency_count (
+	"PAYERID" varchar(50) NULL,
+	"PROVIDERID" varchar(50) NULL,
+	"VISITDATE" date NULL,
+	"P_NAME" varchar(100) NULL,
+	"STATUSFLAG" varchar(5) NULL,
+	"COSTTYPE" varchar(20) NULL,
+	"VISITTYPE" varchar(20) NULL,
+	"COUNTY" varchar(100) NULL,
+	"SERVICECODE" varchar(50) NULL,
+	"VISIT_KEY" varchar(100) NULL
+);
+CREATE INDEX idx_state_dashboard_agency_count_cluster ON state_dashboard_agency_count USING btree ("VISITDATE","PAYERID","PROVIDERID","STATUSFLAG","COSTTYPE","VISITTYPE","COUNTY","SERVICECODE","VISIT_KEY"  );
+
+-- STATE_DASHBOARD_AGENCY_IMPACT
+CREATE TABLE state_dashboard_agency_impact (
+	"PAYERID" varchar(50) NULL,
+	"PROVIDERID" varchar(50) NULL,
+	"VISITDATE" date NULL,
+	"P_NAME" varchar(100) NULL,
+	"STATUSFLAG" varchar(5) NULL,
+	"COSTTYPE" varchar(20) NULL,
+	"VISITTYPE" varchar(20) NULL,
+	"COUNTY" varchar(100) NULL,
+	"SERVICECODE" varchar(50) NULL,
+	"CON_SP" numeric(38, 2) NULL,
+	"CON_OP" numeric(38, 2) NULL,
+	"CON_FP" numeric(38, 2) NULL
+);
+CREATE INDEX idx_state_dashboard_agency_impact_cluster ON state_dashboard_agency_impact USING btree ("VISITDATE","PAYERID","PROVIDERID","STATUSFLAG","COSTTYPE","VISITTYPE","COUNTY","SERVICECODE");
+
+
+-- STATE_DASHBOARD_CAREGIVER_COUNT
+CREATE TABLE state_dashboard_caregiver_count (
+	"PAYERID" varchar(50) NULL,
+	"PROVIDERID" varchar(50) NULL,
+	"VISITDATE" date NULL,
+	"SSN" varchar(50) NULL,
+	"C_NAME" varchar(100) NULL,
+	"STATUSFLAG" varchar(5) NULL,
+	"COSTTYPE" varchar(20) NULL,
+	"VISITTYPE" varchar(20) NULL,
+	"COUNTY" varchar(100) NULL,
+	"SERVICECODE" varchar(50) NULL,
+	"VISIT_KEY" varchar(100) NULL
+);
+CREATE INDEX idx_state_dashboard_caregiver_count_cluster ON state_dashboard_caregiver_count USING btree ("VISITDATE","PAYERID","PROVIDERID","STATUSFLAG","COSTTYPE","VISITTYPE","COUNTY","SERVICECODE","VISIT_KEY"  );
+
+-- STATE_DASHBOARD_CAREGIVER_IMPACT
+CREATE TABLE state_dashboard_caregiver_impact (
+	"PAYERID" varchar(50) NULL,
+	"PROVIDERID" varchar(50) NULL,
+	"VISITDATE" date NULL,
+	"SSN" varchar(50) NULL,
+	"C_NAME" varchar(100) NULL,
+	"STATUSFLAG" varchar(5) NULL,
+	"COSTTYPE" varchar(20) NULL,
+	"VISITTYPE" varchar(20) NULL,
+	"COUNTY" varchar(100) NULL,
+	"SERVICECODE" varchar(50) NULL,
+	"CON_SP" numeric(38, 2) NULL,
+	"CON_OP" numeric(38, 2) NULL,
+	"CON_FP" numeric(38, 2) NULL
+);
+CREATE INDEX idx_state_dashboard_caregiver_impact_cluster ON state_dashboard_caregiver_impact USING btree ("VISITDATE","PAYERID","PROVIDERID","STATUSFLAG","COSTTYPE","VISITTYPE","COUNTY","SERVICECODE");
+
+-- STATE_DASHBOARD_CON_TYP_COUNT
+CREATE TABLE state_dashboard_con_type_count (
+	"PAYERID" varchar(50) NULL,
+	"PROVIDERID" varchar(50) NULL,
+	"VISITDATE" date NULL,
+	"CONTYPE" varchar(50) NULL,
+	"CONTYPEDESC" varchar(100) NULL,
+	"STATUSFLAG" varchar(5) NULL,
+	"COSTTYPE" varchar(20) NULL,
+	"VISITTYPE" varchar(20) NULL,
+	"COUNTY" varchar(100) NULL,
+	"SERVICECODE" varchar(50) NULL,
+	"VISIT_KEY" varchar(100) NULL
+);
+CREATE INDEX idx_state_dashboard_con_type_count_cluster ON state_dashboard_con_type_count USING btree ("VISITDATE","PAYERID","PROVIDERID","STATUSFLAG","COSTTYPE","VISITTYPE","COUNTY","SERVICECODE","VISIT_KEY"  );
+
+-- STATE_DASHBOARD_CON_TYP_IMPACT
+CREATE TABLE state_dashboard_con_type_impact (
+	"PAYERID" varchar(50) NULL,
+	"PROVIDERID" varchar(50) NULL,
+	"VISITDATE" date NULL,
+	"CONTYPE" varchar(50) NULL,
+	"CONTYPEDESC" varchar(100) NULL,
+	"STATUSFLAG" varchar(5) NULL,
+	"COSTTYPE" varchar(20) NULL,
+	"VISITTYPE" varchar(20) NULL,
+	"COUNTY" varchar(100) NULL,
+	"SERVICECODE" varchar(50) NULL,
+	"CON_SP" numeric(38, 2) NULL,
+	"CON_OP" numeric(38, 2) NULL,
+	"CON_FP" numeric(38, 2) NULL
+);
+CREATE INDEX idx_state_dashboard_con_type_impact_cluster ON state_dashboard_con_type_impact USING btree ("VISITDATE","PAYERID","PROVIDERID","STATUSFLAG","COSTTYPE","VISITTYPE","COUNTY","SERVICECODE");
+
+-- STATE_DASHBOARD_PATIENT_COUNT
+CREATE TABLE state_dashboard_patient_count (
+	"PAYERID" varchar(50) NULL,
+	"PROVIDERID" varchar(50) NULL,
+	"VISITDATE" date NULL,
+	"PATIENTID" varchar(50) NULL,
+	"PNAME" varchar(100) NULL,
+	"STATUSFLAG" varchar(5) NULL,
+	"COSTTYPE" varchar(20) NULL,
+	"VISITTYPE" varchar(20) NULL,
+	"COUNTY" varchar(100) NULL,
+	"SERVICECODE" varchar(50) NULL,
+	"VISIT_KEY" varchar(100) NULL	
+);
+CREATE INDEX idx_state_dashboard_patient_count_cluster ON state_dashboard_patient_count USING btree ("VISITDATE","PAYERID","PROVIDERID","STATUSFLAG","COSTTYPE","VISITTYPE","COUNTY","SERVICECODE","VISIT_KEY"  );
+
+-- STATE_DASHBOARD_PATIENT_IMPACT
+CREATE TABLE state_dashboard_patient_impact (
+	"PAYERID" varchar(50) NULL,
+	"PROVIDERID" varchar(50) NULL,
+	"VISITDATE" date NULL,
+	"PATIENTID" varchar(50) NULL,
+	"PNAME" varchar(100) NULL,
+	"STATUSFLAG" varchar(5) NULL,
+	"COSTTYPE" varchar(20) NULL,
+	"VISITTYPE" varchar(20) NULL,
+	"COUNTY" varchar(100) NULL,
+	"SERVICECODE" varchar(50) NULL,
+	"CON_SP" numeric(38, 2) NULL,
+	"CON_OP" numeric(38, 2) NULL,
+	"CON_FP" numeric(38, 2) NULL
+);
+CREATE INDEX idx_state_dashboard_patient_impact_cluster ON state_dashboard_patient_impact USING btree ("VISITDATE","PAYERID","PROVIDERID","STATUSFLAG","COSTTYPE","VISITTYPE","COUNTY","SERVICECODE");
+
+-- STATE_DASHBOARD_PAYER_COUNT
+CREATE TABLE state_dashboard_payer_count (
+	"PAYERID" varchar(50) NULL,
+	"PROVIDERID" varchar(50) NULL,
+	"VISITDATE" date NULL,
+	"PNAME" varchar(100) NULL,
+	"STATUSFLAG" varchar(5) NULL,
+	"COSTTYPE" varchar(20) NULL,
+	"VISITTYPE" varchar(20) NULL,
+	"COUNTY" varchar(100) NULL,
+	"SERVICECODE" varchar(50) NULL,
+	"VISIT_KEY" varchar(100) NULL	
+);
+CREATE INDEX idx_state_dashboard_payer_count_cluster ON state_dashboard_payer_count USING btree ("VISITDATE","PAYERID","PROVIDERID","STATUSFLAG","COSTTYPE","VISITTYPE","COUNTY","SERVICECODE","VISIT_KEY"  );
+
+-- STATE_DASHBOARD_PAYER_IMPACT
+CREATE TABLE state_dashboard_payer_impact (
+	"PAYERID" varchar(50) NULL,
+	"PROVIDERID" varchar(50) NULL,
+	"VISITDATE" date NULL,
+	"PNAME" varchar(100) NULL,
+	"STATUSFLAG" varchar(5) NULL,
+	"COSTTYPE" varchar(20) NULL,
+	"VISITTYPE" varchar(20) NULL,
+	"COUNTY" varchar(100) NULL,
+	"SERVICECODE" varchar(50) NULL,
+	"CON_SP" numeric(38, 2) NULL,
+	"CON_OP" numeric(38, 2) NULL,
+	"CON_FP" numeric(38, 2) NULL
+);
+CREATE INDEX idx_state_dashboard_payer_impact_cluster ON state_dashboard_payer_impact USING btree ("VISITDATE","PAYERID","PROVIDERID","STATUSFLAG","COSTTYPE","VISITTYPE","COUNTY","SERVICECODE");
+
+
+--PAYER_CONFLICT_SUMMARY_COUNT
+CREATE TABLE payer_conflict_summary_count (
+	"PAYERID" varchar(50) NULL,
+	"PROVIDERID" varchar(50) NULL,
+	"CONPAYERID" varchar(50) NULL,
+	"PROVIDER_NAME" varchar(100) NULL,
+	"TIN" varchar(100) NULL,
+	"CONTRACT" varchar(100) NULL,
+	"PATIENT_FNAME" varchar(100) NULL,
+	"PATIENT_LNAME" varchar(100) NULL,
+	"ADMISSIONID" varchar(100) NULL,
+	"CAREGIVER_NAME" varchar(100) NULL,
+	"CONTYPE" varchar(50) NULL,
+	"CONTYPEDESC" varchar(100) NULL,
+	"VISITDATE" date NULL,
+	"CRDATEUNIQUE" date NULL,		
+	"STATUSFLAG" varchar(5) NULL,
+	"VISIT_KEY" varchar(100) NULL	
+);
+CREATE INDEX idx_payer_conflict_summary_count_cluster ON payer_conflict_summary_count USING btree ("PAYERID","PROVIDERID","PROVIDER_NAME","TIN","CONTRACT","PATIENT_FNAME","PATIENT_LNAME", "ADMISSIONID",
+ "CAREGIVER_NAME", "CONTYPE","VISITDATE","CRDATEUNIQUE","STATUSFLAG","VISIT_KEY"  );
+
+--PAYER_CONFLICT_SUMMARY_IMPACT
+CREATE TABLE payer_conflict_summary_impact (
+	"PAYERID" varchar(50) NULL,
+	"PROVIDERID" varchar(50) NULL,
+	"CONPAYERID" varchar(50) NULL,
+	"PROVIDER_NAME" varchar(100) NULL,
+	"TIN" varchar(100) NULL,
+	"CONTRACT" varchar(100) NULL,
+	"PATIENT_FNAME" varchar(100) NULL,
+	"PATIENT_LNAME" varchar(100) NULL,
+	"ADMISSIONID" varchar(100) NULL,
+	"CAREGIVER_NAME" varchar(100) NULL,
+	"CONTYPE" varchar(50) NULL,
+	"CONTYPEDESC" varchar(100) NULL,
+	"VISITDATE" date NULL,
+	"CRDATEUNIQUE" date NULL,		
+	"STATUSFLAG" varchar(5) NULL,
+	"CON_SP" numeric(38, 2) NULL,
+	"CON_OP" numeric(38, 2) NULL,
+	"CON_FP" numeric(38, 2) NULL
+		
+);
+CREATE INDEX idx_payer_conflict_summary_impact_cluster ON payer_conflict_summary_impact USING btree ("PAYERID","PROVIDERID","PROVIDER_NAME","TIN","CONTRACT","PATIENT_FNAME","PATIENT_LNAME", "ADMISSIONID",
+ "CAREGIVER_NAME", "CONTYPE","VISITDATE","CRDATEUNIQUE","STATUSFLAG" );

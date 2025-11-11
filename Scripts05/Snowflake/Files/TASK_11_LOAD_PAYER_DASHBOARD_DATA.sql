@@ -1,0 +1,310 @@
+CREATE OR REPLACE PROCEDURE CONFLICTREPORT.PUBLIC.LOAD_PAYER_DASHBOARD_DATA()
+RETURNS VARCHAR
+LANGUAGE JAVASCRIPT
+EXECUTE AS CALLER
+AS '
+	// Section 1: Truncate All Target Tables
+    var SQL_TRUNCATE_CON_TYPE_COUNT = `TRUNCATE TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_CON_TYP_COUNT;`;
+	var SQL_TRUNCATE_CON_TYPE_IMPACT = `TRUNCATE TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_CON_TYP_IMPACT;`;
+	var SQL_TRUNCATE_AGENCY_COUNT = `TRUNCATE TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_AGENCY_COUNT;`;
+	var SQL_TRUNCATE_AGENCY_IMPACT = `TRUNCATE TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_AGENCY_IMPACT;`;
+	var SQL_TRUNCATE_PATIENT_COUNT = `TRUNCATE TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_PATIENT_COUNT;`;
+	var SQL_TRUNCATE_PATIENT_IMPACT = `TRUNCATE TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_PATIENT_IMPACT;`;
+	var SQL_TRUNCATE_PAYER_COUNT = `TRUNCATE TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_PAYER_COUNT;`;
+	var SQL_TRUNCATE_PAYER_IMPACT = `TRUNCATE TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_PAYER_IMPACT;`;
+	var SQL_TRUNCATE_CAREGIVER_COUNT= `TRUNCATE TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_CAREGIVER_COUNT;`;
+	var SQL_TRUNCATE_CAREGIVER_IMPACT = `TRUNCATE TABLE CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_CAREGIVER_IMPACT;`;
+	
+	// Section 2: Load CON_TYPE_COUNT Data
+    var SQL_INSERT_CON_TYPE_COUNT = `
+		INSERT INTO CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_CON_TYP_COUNT (
+			PAYERID,
+			VISITDATE,
+			CONTYPE,
+			CONTYPEDESC,
+			VISIT_KEY
+		)
+		SELECT 
+			"PayerID" AS PAYERID,
+			"VisitDate" AS VISITDATE,
+			CONTYPE,
+			CASE 
+				WHEN CONTYPE = ''only_to'' THEN ''Time Overlap Only''
+				WHEN CONTYPE = ''only_td'' THEN ''Time Distance Only''
+				WHEN CONTYPE = ''only_is'' THEN ''In Service Only''
+				WHEN CONTYPE = ''both_to_td'' THEN ''Time Overlap and Time Distance''
+				WHEN CONTYPE = ''both_to_is'' THEN ''Time Overlap and In Service''
+				WHEN CONTYPE = ''both_td_is'' THEN ''Time Distance and In Service''
+				WHEN CONTYPE = ''all_to_td_is'' THEN ''All Three (Time Overlap, Time Distance, and In Service)''
+				ELSE NULL
+			END AS CONTYPEDESC,
+			VISIT_KEY
+		FROM CONFLICTREPORT.PUBLIC.DT_PAYER_CONFLICTS_COMMON
+		GROUP BY 
+			"PayerID",
+			"VisitDate" ,
+			CONTYPE,
+			VISIT_KEY;
+    `;
+	
+	// Section 3: Load CON_TYPE_IMPACT Data
+    var SQL_INSERT_CON_TYPE_IMPACT = `
+		INSERT INTO CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_CON_TYP_IMPACT (
+			PAYERID, VISITDATE, CONTYPE, CONTYPEDESC,
+			CON_SP, CON_OP, CON_FP
+		)
+		SELECT 
+			"PayerID" AS PAYERID,
+			"VisitDate" AS VISITDATE,
+			CONTYPE,
+			CASE 
+				WHEN CONTYPE = ''only_to'' THEN ''Time Overlap Only''
+				WHEN CONTYPE = ''only_td'' THEN ''Time Distance Only''
+				WHEN CONTYPE = ''only_is'' THEN ''In Service Only''
+				WHEN CONTYPE = ''both_to_td'' THEN ''Time Overlap and Time Distance''
+				WHEN CONTYPE = ''both_to_is'' THEN ''Time Overlap and In Service''
+				WHEN CONTYPE = ''both_td_is'' THEN ''Time Distance and In Service''
+				WHEN CONTYPE = ''all_to_td_is'' THEN ''All Three (Time Overlap, Time Distance, and In Service)''
+				ELSE NULL
+			END AS CONTYPEDESC,
+			SUM(FULL_SHIFT_AMOUNT) AS CON_SP,
+			SUM(OVERLAP_AMOUNT) AS CON_OP,
+			SUM(CASE WHEN "StatusFlag" = ''R'' THEN OVERLAP_AMOUNT ELSE 0 END) AS CON_FP
+		FROM CONFLICTREPORT.PUBLIC.DT_PAYER_CONFLICTS_COMMON
+		GROUP BY 
+			"VisitDate",
+			"PayerID",
+			CONTYPE;
+    `;
+	// Section 4: Load AGENCY_COUNT Data
+    var SQL_INSERT_AGENCY_COUNT = `
+		INSERT INTO CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_AGENCY_COUNT (
+			PAYERID ,
+			VISITDATE,
+			PROVIDERID,
+			P_NAME,
+			TIN,
+			VISIT_KEY
+		)
+		SELECT 
+			"PayerID" AS PAYERID,
+			"VisitDate"  AS VISITDATE,
+			"ProviderID" AS PROVIDERID,
+			"ProviderName" AS P_NAME,
+			"FederalTaxNumber" AS TIN,
+			VISIT_KEY
+		FROM CONFLICTREPORT.PUBLIC.DT_PAYER_CONFLICTS_COMMON
+		WHERE  "ProviderName" IS NOT NULL
+		GROUP BY 
+			"VisitDate",
+			"PayerID",
+			"ProviderID",
+			"ProviderName",
+			"FederalTaxNumber",
+			VISIT_KEY;
+    `;
+	// Section 5: Load AGENCY_IMPACT Data
+    var SQL_INSERT_AGENCY_IMPACT = `
+		INSERT INTO CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_AGENCY_IMPACT (
+			PAYERID,
+			VISITDATE,PROVIDERID, P_NAME,TIN,
+			CON_SP, CON_OP, CON_FP
+		)
+		SELECT 
+			"PayerID" AS PAYERID,
+			"VisitDate"  AS VISITDATE,
+			"ProviderID" AS PROVIDERID,			
+			"ProviderName" AS P_NAME,
+			"FederalTaxNumber" AS TIN,
+			SUM(FULL_SHIFT_AMOUNT) AS CON_SP,
+			SUM(OVERLAP_AMOUNT) AS CON_OP,
+			SUM(CASE WHEN "StatusFlag" = ''R'' THEN OVERLAP_AMOUNT ELSE 0 END) AS CON_FP
+		FROM CONFLICTREPORT.PUBLIC.DT_PAYER_CONFLICTS_COMMON
+		WHERE  "ProviderName" IS NOT NULL
+		GROUP BY 
+			"VisitDate",
+			"PayerID",
+			"ProviderID",
+			"ProviderName",
+			"FederalTaxNumber";
+    `;
+	
+	
+	// Section 6: Load PATIENT_COUNT Data
+    var SQL_INSERT_PATIENT_COUNT = `
+		INSERT INTO CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_PATIENT_COUNT (
+			PAYERID,
+			VISITDATE,
+			PATIENTID,
+			PFNAME,
+			PLNAME,
+			PNAME,
+			ADMISSIONID,
+			VISIT_KEY
+		)
+		SELECT 
+			"PayerID" AS PAYERID,
+			"VisitDate" AS VISITDATE,
+			"PA_PatientID" AS PATIENTID,
+			"PA_PFName" AS PFNAME,
+			"PA_PLName" AS PLNAME,
+			"PA_PName" AS PNAME,
+			"PA_PAdmissionID" AS ADMISSIONID,
+			VISIT_KEY
+		FROM CONFLICTREPORT.PUBLIC.DT_PAYER_CONFLICTS_COMMON
+		WHERE  "PA_PName" IS NOT NULL
+		GROUP BY
+			"VisitDate",
+			"PayerID",
+			"PA_PatientID",
+			"PA_PFName", 
+			"PA_PLName",
+			"PA_PName",
+			"PA_PAdmissionID",
+			VISIT_KEY;
+    `;
+	
+	// Section 7: Load PATIENT_IMPACT Data
+    var SQL_INSERT_PATIENT_IMPACT = `
+		INSERT INTO CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_PATIENT_IMPACT (
+			PAYERID, VISITDATE, PATIENTID,PFNAME,
+			PLNAME, PNAME,ADMISSIONID,
+			CON_SP, CON_OP, CON_FP
+		)
+		SELECT 
+			"PayerID" AS PAYERID,
+			"VisitDate",
+			"PA_PatientID" AS PATIENTID, 
+			"PA_PFName" AS PFNAME,
+			"PA_PLName" AS PLNAME,
+			"PA_PName" AS PNAME,
+			"PA_PAdmissionID" AS ADMISSIONID,
+			SUM(FULL_SHIFT_AMOUNT) AS CON_SP,
+			SUM(OVERLAP_AMOUNT) AS CON_OP,
+			SUM(CASE WHEN "StatusFlag" = ''R'' THEN OVERLAP_AMOUNT ELSE 0 END) AS CON_FP
+		FROM CONFLICTREPORT.PUBLIC.DT_PAYER_CONFLICTS_COMMON
+		WHERE "PA_PName" IS NOT NULL
+		GROUP BY 
+			"VisitDate",
+			"PayerID",
+			"PA_PatientID",
+			"PA_PFName", 
+			"PA_PLName",
+			"PA_PName",
+			"PA_PAdmissionID";
+    `;
+	// Section 8: Load PAYER_COUNT Data
+    var SQL_INSERT_PAYER_COUNT = `
+		INSERT INTO CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_PAYER_COUNT (
+			PAYERID, VISITDATE, CONPAYERID,PNAME,
+			VISIT_KEY
+		)
+		SELECT 
+			"PayerID" AS PAYERID,
+			"VisitDate" AS VISITDATE,
+			"ConPayerID" AS CONPAYERID,
+			"ConContract" AS PNAME,
+			VISIT_KEY
+		FROM CONFLICTREPORT.PUBLIC.DT_PAYER_CONFLICTS_COMMON
+		WHERE "ConPayerID" != ''0'' AND "Contract" IS NOT NULL AND "ContractType" != ''Internal'' AND "ConContractType" != ''Internal''
+		GROUP BY 
+			"VisitDate",
+			"PayerID",
+			"ConPayerID",
+			"ConContract",
+			VISIT_KEY;
+    `;
+	
+	// Section 9: Load PAYER_IMPACT Data
+    var SQL_INSERT_PAYER_IMPACT = `
+		INSERT INTO CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_PAYER_IMPACT (
+			PAYERID,  VISITDATE,CONPAYERID, PNAME,
+			CON_SP, CON_OP, CON_FP
+		)
+		SELECT 
+			"PayerID" AS PAYERID,
+			"VisitDate"  AS VISITDATE,
+			"ConPayerID" AS CONPAYERID,
+			"ConContract"  AS PNAME,
+			SUM(FULL_SHIFT_AMOUNT) AS CON_SP,
+			SUM(OVERLAP_AMOUNT) AS CON_OP,
+			SUM(CASE WHEN "StatusFlag" = ''R'' THEN OVERLAP_AMOUNT ELSE 0 END) AS CON_FP
+		FROM CONFLICTREPORT.PUBLIC.DT_PAYER_CONFLICTS_COMMON
+		WHERE "ConPayerID" != ''0'' AND "Contract" IS NOT NULL AND "ContractType" != ''Internal'' AND "ConContractType" != ''Internal''
+		GROUP BY 
+			"VisitDate","PayerID","ConPayerID",
+			"ConContract";
+    `;
+	
+	// Section 10: Load CAREGIVER_COUNT Data
+    var SQL_INSERT_CAREGIVER_COUNT = `
+		INSERT INTO CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_CAREGIVER_COUNT (
+			PAYERID, VISITDATE, SSN, C_NAME, VISIT_KEY
+		)
+		SELECT 
+			"PayerID" AS PAYERID,
+			"VisitDate"  AS VISITDATE,
+			"SSN",
+			MAX(CONCAT("AideFName",'' '', "AideLName")) AS C_NAME,
+			VISIT_KEY
+		FROM CONFLICTREPORT.PUBLIC.DT_PAYER_CONFLICTS_COMMON
+		WHERE  "SSN" IS NOT NULL
+		GROUP BY 
+			"PayerID",
+			"VisitDate",
+			"SSN",
+			VISIT_KEY;
+    `;
+	// Section 11: Load CAREGIVER_IMPACT Data
+    var SQL_INSERT_CAREGIVER_IMPACT = `
+		INSERT INTO CONFLICTREPORT.PUBLIC.PAYER_DASHBOARD_CAREGIVER_IMPACT (
+			PAYERID, VISITDATE, SSN, C_NAME,
+			CON_SP, CON_OP, CON_FP
+		)
+		SELECT 
+			"PayerID" AS PAYERID,
+			"VisitDate"  AS VISITDATE,
+			"SSN",
+			MAX(CONCAT("AideFName",'' '', "AideLName")) AS C_NAME,
+			SUM(FULL_SHIFT_AMOUNT) AS CON_SP,
+			SUM(OVERLAP_AMOUNT) AS CON_OP,
+			SUM(CASE WHEN "StatusFlag" = ''R'' THEN OVERLAP_AMOUNT ELSE 0 END) AS CON_FP
+		FROM CONFLICTREPORT.PUBLIC.DT_PAYER_CONFLICTS_COMMON
+		WHERE  "SSN" IS NOT NULL
+		GROUP BY
+            "VisitDate",		
+			"PayerID",
+			"SSN";
+    `;	
+    try {
+        // Execute all truncates first
+        snowflake.execute({ sqlText: SQL_TRUNCATE_CON_TYPE_COUNT });
+		snowflake.execute({ sqlText: SQL_TRUNCATE_CON_TYPE_IMPACT });
+		snowflake.execute({ sqlText: SQL_TRUNCATE_AGENCY_COUNT });
+		snowflake.execute({ sqlText: SQL_TRUNCATE_AGENCY_IMPACT });
+		snowflake.execute({ sqlText: SQL_TRUNCATE_PATIENT_COUNT });
+		snowflake.execute({ sqlText: SQL_TRUNCATE_PATIENT_IMPACT });
+		snowflake.execute({ sqlText: SQL_TRUNCATE_PAYER_COUNT });
+		snowflake.execute({ sqlText: SQL_TRUNCATE_PAYER_IMPACT });
+		snowflake.execute({ sqlText: SQL_TRUNCATE_CAREGIVER_COUNT });
+		snowflake.execute({ sqlText: SQL_TRUNCATE_CAREGIVER_IMPACT });
+		
+        // Execute all inserts
+        snowflake.execute({ sqlText: SQL_INSERT_CON_TYPE_COUNT });
+		snowflake.execute({ sqlText: SQL_INSERT_CON_TYPE_IMPACT });
+		snowflake.execute({ sqlText: SQL_INSERT_AGENCY_COUNT });
+		snowflake.execute({ sqlText: SQL_INSERT_AGENCY_IMPACT });
+		snowflake.execute({ sqlText: SQL_INSERT_PATIENT_COUNT });
+		snowflake.execute({ sqlText: SQL_INSERT_PATIENT_IMPACT });
+		snowflake.execute({ sqlText: SQL_INSERT_PAYER_COUNT });
+		snowflake.execute({ sqlText: SQL_INSERT_PAYER_IMPACT });
+		snowflake.execute({ sqlText: SQL_INSERT_CAREGIVER_COUNT });
+		snowflake.execute({ sqlText: SQL_INSERT_CAREGIVER_IMPACT });
+		
+		
+		
+        return "Payer Dashboard Data Loaded Successfully.";
+    } catch (err) {
+        throw "ERROR: " + err.message;
+    }
+';

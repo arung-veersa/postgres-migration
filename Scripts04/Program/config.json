@@ -43,6 +43,14 @@
       "disable_indexes_constraints": true,
       "chunk_size": 100000,
       "order_by_column": "ID"
+    },
+	{
+      "source_table": "CONFLICTS",
+      "target_table": "conflicts",
+      "filter_condition": "\"CreatedDate\" >= DATEADD(month, -2, CURRENT_DATE)",
+      "disable_indexes_constraints": true,
+      "chunk_size": 100000,
+      "order_by_column": "CONFLICTID"
     }
   ]
 }
