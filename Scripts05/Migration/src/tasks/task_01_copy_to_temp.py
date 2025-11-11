@@ -21,6 +21,7 @@ from io import StringIO
 from src.tasks.base_task import BaseTask
 from src.connectors.snowflake_connector import SnowflakeConnector
 from src.connectors.postgres_connector import PostgresConnector
+from src.repositories.analytics_repository import AnalyticsRepository
 from config.settings import DATE_RANGE_YEARS_BACK, DATE_RANGE_DAYS_FORWARD
 
 
@@ -48,6 +49,8 @@ class Task01CopyToTemp(BaseTask):
         super().__init__('TASK_01')
         self.sf = snowflake_connector
         self.pg = postgres_connector
+        # Minimal repository wrapper over Snowflake with basic caching
+        self.analytics_repo = AnalyticsRepository(self.sf)
     
     def execute(self) -> Dict[str, Any]:
         """
@@ -92,24 +95,8 @@ class Task01CopyToTemp(BaseTask):
         Returns:
             Dictionary with insert and update counts
         """
-        # Query to get payer-provider relationships from Analytics
-        analytics_query = """
-            SELECT DISTINCT 
-                DPP."Payer Id" AS "PayerID",
-                DPP."Application Payer Id" AS "AppPayerID",
-                DPA."Payer Name" AS "Contract",
-                DPP."Provider Id" AS "ProviderID",
-                DPP."Application Provider Id" AS "AppProviderID",
-                DP."Provider Name" AS "ProviderName"
-            FROM ANALYTICS.BI.DIMPROVIDER AS DP
-            INNER JOIN ANALYTICS.BI.DIMPAYERPROVIDER AS DPP 
-                ON DPP."Provider Id" = DP."Provider Id"
-            INNER JOIN ANALYTICS.BI.DIMPAYER AS DPA 
-                ON DPA."Payer Id" = DPP."Payer Id"
-        """
-        
         self.logger.info("Fetching payer-provider relationships from Analytics")
-        relationships_df = self.sf.fetch_dataframe(analytics_query)
+        relationships_df = self.analytics_repo.get_payer_provider_relationships()
         self.logger.info(f"Found {len(relationships_df)} relationships")
         
         if relationships_df.empty:
