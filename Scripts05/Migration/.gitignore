@@ -1,3 +1,35 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+venv/
+.env
+.env.*
+
+# Coverage and test artifacts
+.coverage
+coverage.xml
+coverage.json
+htmlcov/
+.pytest_cache/
+
+# Logs
+logs/
+*.log
+
+# Build/dist caches
+build/
+dist/
+.eggs/
+.mypy_cache/
+.cache/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+
 # Python
 __pycache__/
 *.py[cod]
