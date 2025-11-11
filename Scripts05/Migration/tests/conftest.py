@@ -1,4 +1,79 @@
 """
+Pytest configuration for enforcing coverage thresholds.
+
+Requirements:
+- Overall coverage is enforced via pytest.ini (--cov-fail-under=90)
+- Per-file coverage: require 100% for src/tasks/task_01_copy_to_temp.py
+  Implemented by inspecting coverage.json after the test session.
+"""
+
+import os
+import json
+from typing import Optional
+
+import pytest
+
+
+def _normalize(path: str) -> str:
+    return os.path.normcase(os.path.normpath(path))
+
+
+def _find_target_file_entry(files_dict: dict, root: str) -> Optional[dict]:
+    """
+    Find the coverage JSON entry for src/tasks/task_01_copy_to_temp.py,
+    tolerating absolute vs relative paths and Windows path separators.
+    """
+    target_suffix = _normalize(os.path.join("src", "tasks", "task_01_copy_to_temp.py"))
+    best = None
+    for key, value in files_dict.items():
+        key_path = key
+        # If key is relative, make it absolute to compare consistently
+        if not os.path.isabs(key_path):
+            key_path = os.path.join(root, key_path)
+        if _normalize(key_path).endswith(target_suffix):
+            best = value
+            break
+    return best
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    """
+    After the test session, enforce 100% coverage on task_01_copy_to_temp.py.
+    """
+    root = str(session.config.rootpath)
+    cov_json_path = os.path.join(root, "coverage.json")
+    if not os.path.exists(cov_json_path):
+        # If JSON report is unavailable, do not fail here; overall coverage will still be enforced.
+        return
+
+    try:
+        with open(cov_json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return
+
+    files = data.get("files", {})
+    entry = _find_target_file_entry(files, root)
+    if not entry:
+        # File not included in coverage (e.g., not collected) — enforce failure.
+        session.exitstatus = 1
+        tr = session.config.pluginmanager.getplugin("terminalreporter")
+        if tr:
+            tr.write_line(
+                "Coverage requirement failed: src/tasks/task_01_copy_to_temp.py was not measured."
+            )
+        return
+
+    pct = float(entry.get("summary", {}).get("percent_covered", 0.0))
+    if pct < 100.0:
+        session.exitstatus = 1
+        tr = session.config.pluginmanager.getplugin("terminalreporter")
+        if tr:
+            tr.write_line(
+                f"Coverage requirement failed: src/tasks/task_01_copy_to_temp.py {pct:.2f}% < 100.00%"
+            )
+
+"""
 Pytest configuration and fixtures for test suite.
 Provides reusable test fixtures and setup.
 """

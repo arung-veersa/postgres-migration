@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any
 import psycopg2
 from psycopg2 import sql
 from psycopg2.extras import execute_batch
+from sqlalchemy import create_engine
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -93,11 +94,11 @@ class PostgresConnector:
         Returns:
             Number of rows affected
         """
+        # Avoid converting composed SQL using a live connection just for logging
         if isinstance(query, sql.Composed):
-            log_query = query.as_string(psycopg2.connect(**self.config))
-            logger.debug(f"Executing: {log_query[:100]}...")
+            logger.debug("Executing composed SQL (logging omitted)")
         else:
-            logger.debug(f"Executing: {query[:100]}...")
+            logger.debug(f"Executing: {str(query)[:100]}...")
         
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
@@ -119,10 +120,9 @@ class PostgresConnector:
             DataFrame with results
         """
         if isinstance(query, sql.Composed):
-            log_query = query.as_string(psycopg2.connect(**self.config))
-            logger.debug(f"Fetching DataFrame: {log_query[:150]}...")
+            logger.debug("Fetching DataFrame for composed SQL (logging omitted)")
         else:
-            logger.debug(f"Fetching DataFrame: {query[:150]}...")
+            logger.debug(f"Fetching DataFrame: {str(query)[:150]}...")
         
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
@@ -154,8 +154,6 @@ class PostgresConnector:
         
         # Use pandas to_sql with multi method for better performance
         with self.get_connection() as conn:
-            # Create engine from connection
-            from sqlalchemy import create_engine
             engine = create_engine(
                 f"postgresql://{self.config['user']}:{self.config['password']}"
                 f"@{self.config['host']}:{self.config['port']}/{self.config['database']}"

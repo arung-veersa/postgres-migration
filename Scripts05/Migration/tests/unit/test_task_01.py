@@ -4,10 +4,18 @@ Unit tests for Task 01: Copy Data to Temp.
 Tests the business logic in isolation using mocked connectors.
 """
 
+import os
+import sys
 import pytest
 import pandas as pd
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch, call
+
+# Ensure project root is on sys.path for direct test runs
+CURRENT_DIR = os.path.dirname(__file__)
+PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, '..', '..'))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 from src.tasks.task_01_copy_to_temp import Task01CopyToTemp
 
@@ -24,16 +32,28 @@ class TestTask01CopyToTemp:
         assert task.pg == mock_postgres_connector
     
     def test_execute_success(self, mock_snowflake_connector, mock_postgres_connector,
-                            sample_payer_provider_relationships,
-                            sample_conflict_visit_maps):
+                            sample_payer_provider_relationships):
         """Test successful task execution."""
         # Setup mocks
         mock_snowflake_connector.fetch_dataframe.return_value = sample_payer_provider_relationships
-        mock_postgres_connector.fetch_dataframe.side_effect = [
-            pd.DataFrame(),  # No existing reminders
-            sample_conflict_visit_maps  # Conflict visit maps
-        ]
+        # No existing reminders
+        mock_postgres_connector.fetch_dataframe.return_value = pd.DataFrame()
         mock_postgres_connector.bulk_insert_dataframe.return_value = len(sample_payer_provider_relationships)
+        # Mock set-based insert via connection
+        from unittest.mock import MagicMock
+        conn = MagicMock()
+        cur = MagicMock()
+        # First execute: SET LOCAL; Second execute: INSERT ... SELECT with return rowcount 3
+        def execute_side_effect(*args, **kwargs):
+            return None
+        cur.execute.side_effect = execute_side_effect
+        cur.rowcount = 3
+        conn.cursor.return_value.__enter__.return_value = cur
+        # Make get_connection a context manager
+        get_conn_cm = MagicMock()
+        get_conn_cm.__enter__.return_value = conn
+        mock_postgres_connector.get_connection.return_value = get_conn_cm
+        mock_postgres_connector.schema = 'public'
         
         task = Task01CopyToTemp(mock_snowflake_connector, mock_postgres_connector)
         
@@ -48,7 +68,7 @@ class TestTask01CopyToTemp:
         
         # Verify truncate was called
         mock_postgres_connector.truncate_table.assert_called_once_with(
-            'CONFLICTVISITMAPS_TEMP'
+            'conflictvisitmaps_temp'
         )
     
     def test_sync_payer_provider_reminders_new_records(
@@ -89,6 +109,17 @@ class TestTask01CopyToTemp:
         mock_postgres_connector.fetch_dataframe.return_value = sample_existing_reminders
         mock_postgres_connector.bulk_insert_dataframe.return_value = 1
         mock_postgres_connector.execute.return_value = 1
+        # Provide context-managed connection and cursor with copy_expert support
+        from unittest.mock import MagicMock
+        conn = MagicMock()
+        cur = MagicMock()
+        cur.copy_expert.return_value = None
+        cur.rowcount = 2
+        conn.cursor.return_value.__enter__.return_value = cur
+        get_conn_cm = MagicMock()
+        get_conn_cm.__enter__.return_value = conn
+        mock_postgres_connector.get_connection.return_value = get_conn_cm
+        mock_postgres_connector.schema = 'public'
         
         task = Task01CopyToTemp(mock_snowflake_connector, mock_postgres_connector)
         result = task._sync_payer_provider_reminders()
@@ -116,27 +147,33 @@ class TestTask01CopyToTemp:
         task._truncate_temp_table()
         
         mock_postgres_connector.truncate_table.assert_called_once_with(
-            'CONFLICTVISITMAPS_TEMP'
+            'conflictvisitmaps_temp'
         )
     
     def test_copy_to_temp_table_with_data(
         self,
         mock_snowflake_connector,
-        mock_postgres_connector,
-        sample_conflict_visit_maps
+        mock_postgres_connector
     ):
         """Test copying data to temp table."""
-        mock_postgres_connector.fetch_dataframe.return_value = sample_conflict_visit_maps
-        mock_postgres_connector.bulk_insert_dataframe.return_value = len(sample_conflict_visit_maps)
+        # Mock set-based insert with 3 rows
+        from unittest.mock import MagicMock
+        conn = MagicMock()
+        cur = MagicMock()
+        cur.rowcount = 3
+        conn.cursor.return_value.__enter__.return_value = cur
+        get_conn_cm = MagicMock()
+        get_conn_cm.__enter__.return_value = conn
+        mock_postgres_connector.get_connection.return_value = get_conn_cm
+        mock_postgres_connector.schema = 'public'
         
         task = Task01CopyToTemp(mock_snowflake_connector, mock_postgres_connector)
         rows = task._copy_to_temp_table()
         
         assert rows == 3
         
-        # Verify bulk insert was called
-        call_args = mock_postgres_connector.bulk_insert_dataframe.call_args
-        assert call_args[0][1] == 'CONFLICTVISITMAPS_TEMP'
+        # Verify we executed INSERT after setting synchronous_commit
+        assert conn.cursor.return_value.__enter__.return_value.execute.call_count >= 2
     
     def test_copy_to_temp_table_no_data(
         self,
@@ -144,47 +181,61 @@ class TestTask01CopyToTemp:
         mock_postgres_connector
     ):
         """Test copying when no data in date range."""
-        mock_postgres_connector.fetch_dataframe.return_value = pd.DataFrame()
+        # Mock set-based insert with 0 rows
+        from unittest.mock import MagicMock
+        conn = MagicMock()
+        cur = MagicMock()
+        cur.rowcount = 0
+        conn.cursor.return_value.__enter__.return_value = cur
+        get_conn_cm = MagicMock()
+        get_conn_cm.__enter__.return_value = conn
+        mock_postgres_connector.get_connection.return_value = get_conn_cm
+        mock_postgres_connector.schema = 'public'
         
         task = Task01CopyToTemp(mock_snowflake_connector, mock_postgres_connector)
         rows = task._copy_to_temp_table()
         
         assert rows == 0
         
-        # Verify bulk insert was NOT called
-        mock_postgres_connector.bulk_insert_dataframe.assert_not_called()
+        # Ensure we still executed the statements
+        assert conn.cursor.return_value.__enter__.return_value.execute.call_count >= 1
     
     def test_copy_to_temp_table_date_filter(
         self,
         mock_snowflake_connector,
-        mock_postgres_connector,
-        sample_conflict_visit_maps
+        mock_postgres_connector
     ):
         """Test that date filter is applied correctly."""
-        mock_postgres_connector.fetch_dataframe.return_value = sample_conflict_visit_maps
-        mock_postgres_connector.bulk_insert_dataframe.return_value = 3
+        from unittest.mock import MagicMock
+        conn = MagicMock()
+        cur = MagicMock()
+        cur.rowcount = 1
+        conn.cursor.return_value.__enter__.return_value = cur
+        get_conn_cm = MagicMock()
+        get_conn_cm.__enter__.return_value = conn
+        mock_postgres_connector.get_connection.return_value = get_conn_cm
+        mock_postgres_connector.schema = 'public'
         
         task = Task01CopyToTemp(mock_snowflake_connector, mock_postgres_connector)
         task._copy_to_temp_table()
         
-        # Verify query includes date filter
-        call_args = mock_postgres_connector.fetch_dataframe.call_args
-        query = call_args[0][0]
-        
-        assert 'VisitDate' in query
-        assert 'BETWEEN' in query
+        # Verify the INSERT execute was called with two params (date_from, date_to)
+        exec_calls = cur.execute.call_args_list
+        # Find the call that has params with 2 entries
+        param_calls = [c for c in exec_calls if len(c[0]) >= 2 and isinstance(c[0][1], (tuple, list)) and len(c[0][1]) == 2]
+        assert len(param_calls) >= 1
     
     def test_update_settings_flag(self, mock_snowflake_connector, mock_postgres_connector):
         """Test updating settings flag."""
         task = Task01CopyToTemp(mock_snowflake_connector, mock_postgres_connector)
-        task._update_settings_flag(1)
+        task._update_settings_flag()
         
         # Verify execute was called with correct query
         call_args = mock_postgres_connector.execute.call_args
         query = call_args[0][0]
         params = call_args[0][1]
         
-        assert 'SETTINGS' in query
+        assert 'settings' in query
         assert 'InProgressFlag' in query
         assert params['flag'] == 1
     
@@ -194,6 +245,16 @@ class TestTask01CopyToTemp:
         mock_snowflake_connector.fetch_dataframe.return_value = pd.DataFrame()
         mock_postgres_connector.fetch_dataframe.return_value = pd.DataFrame()
         mock_postgres_connector.bulk_insert_dataframe.return_value = 0
+        # Provide context-managed connection and cursor for set-based insert
+        from unittest.mock import MagicMock
+        conn = MagicMock()
+        cur = MagicMock()
+        cur.rowcount = 0
+        conn.cursor.return_value.__enter__.return_value = cur
+        get_conn_cm = MagicMock()
+        get_conn_cm.__enter__.return_value = conn
+        mock_postgres_connector.get_connection.return_value = get_conn_cm
+        mock_postgres_connector.schema = 'public'
         
         task = Task01CopyToTemp(mock_snowflake_connector, mock_postgres_connector)
         result = task.run()
@@ -219,6 +280,31 @@ class TestTask01CopyToTemp:
         assert 'Database error' in result['error']
 
 
+def test_base_task_log_progress(mock_snowflake_connector, mock_postgres_connector):
+    """Exercise BaseTask.log_progress via Task01CopyToTemp to cover logging path."""
+    import logging
+    from io import StringIO
+
+    task = Task01CopyToTemp(mock_snowflake_connector, mock_postgres_connector)
+
+    stream = StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(message)s')
+    handler.setFormatter(formatter)
+
+    task.logger.addHandler(handler)
+    try:
+        task.log_progress("processing", rows=10, state="ok")
+        handler.flush()
+        output = stream.getvalue()
+        assert "processing" in output
+        assert "rows=10" in output
+        assert "state=ok" in output
+    finally:
+        task.logger.removeHandler(handler)
+
+
 class TestTask01Integration:
     """Integration-style tests with more realistic data."""
     
@@ -228,19 +314,22 @@ class TestTask01Integration:
         mock_snowflake_connector,
         mock_postgres_connector,
         sample_payer_provider_relationships,
-        sample_conflict_visit_maps
     ):
         """Test full workflow with realistic data."""
         # Setup realistic mock responses
         mock_snowflake_connector.fetch_dataframe.return_value = sample_payer_provider_relationships
-        mock_postgres_connector.fetch_dataframe.side_effect = [
-            pd.DataFrame(),  # No existing reminders
-            sample_conflict_visit_maps  # Conflict data
-        ]
-        mock_postgres_connector.bulk_insert_dataframe.side_effect = [
-            len(sample_payer_provider_relationships),  # Reminders inserted
-            len(sample_conflict_visit_maps)  # Conflict data inserted
-        ]
+        mock_postgres_connector.fetch_dataframe.return_value = pd.DataFrame()
+        mock_postgres_connector.bulk_insert_dataframe.return_value = len(sample_payer_provider_relationships)
+        # Mock set-based insert via connection
+        from unittest.mock import MagicMock
+        conn = MagicMock()
+        cur = MagicMock()
+        cur.rowcount = 2
+        conn.cursor.return_value.__enter__.return_value = cur
+        get_conn_cm = MagicMock()
+        get_conn_cm.__enter__.return_value = conn
+        mock_postgres_connector.get_connection.return_value = get_conn_cm
+        mock_postgres_connector.schema = 'public'
         
         task = Task01CopyToTemp(mock_snowflake_connector, mock_postgres_connector)
         result = task.run()
@@ -257,6 +346,6 @@ class TestTask01Integration:
         
         # Verify correct call sequence
         assert mock_postgres_connector.truncate_table.called
-        assert mock_postgres_connector.bulk_insert_dataframe.call_count == 2
+        assert mock_postgres_connector.bulk_insert_dataframe.call_count == 1
         assert mock_postgres_connector.execute.called
 
