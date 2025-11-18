@@ -1,0 +1,16 @@
+Column Name	#	Data Type	Length	Scale	Not Null	Auto Generated	Auto Increment	Default	Description
+Payer Id	1	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Payer Primary Key
+Payer Name	2	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Tags or system purposesf
+Payer Initials	3	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Initials
+Is Active	4	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Is Active
+Is Demo	5	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Is Demo
+Payer State	6	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Payer State
+Unbilling Process	7	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Unbilling Process
+Initiative Names	8	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Initiative Names
+Application Payer Id	9	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Environment	10	VARCHAR	50	[NULL]	false	false	false	[NULL]	
+Created Date Time	11	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	
+Unique Payer Id	12	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Updated Datatimestamp	13	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	
+Usage Tags	14	VARIANT	[NULL]	[NULL]	false	false	false	[NULL]	Tags for system purposes
+Source System	15	VARCHAR	3	[NULL]	false	false	false	[NULL]	

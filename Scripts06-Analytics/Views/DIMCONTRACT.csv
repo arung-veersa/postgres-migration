@@ -1,0 +1,51 @@
+"Contract Id","Application Contract Id","Environment","Contract Name","Contract Start Date","Contract End Date","Contact Person","NPI","Federal Tax Number","Is Private Pay","Is Medic Aid","ICD Code","ICD Code Effective Date","Is Active","Address Type","Address Line 1","Address Line 2","Address County","Address City","Address State","Address ZIP","Address Latitude","Address Longitude","Phone Number 1","Phone Description 1","Phone Number 2","Phone Description 2","Contract Notes","Office List","Authorization Required","Contract Type Name","Unique Contract Id","Updated Datatimestamp","Usage Tags","Source System"
+"1d992fc3-9fc3-48c8-8e3d-5e55b3a0b538","316462",PROD-AWS:CLO,Horizon NJ (AKB),,,"","","",false,,ICD-10 Effective Date,2015-10-01 09:30:00.000 +0530,true,,"","",,"",NJ,"",,,,Phone,,,"","Ohel Childrens Home and Family Services, Inc.",true,,Horizon NJ (AKB),2025-07-28 05:45:39.953 +0530,"{
+  ""object"": ""CONTRACT"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha
+"827f947c-8856-46f5-8585-d30127539948","68922",PROD:APP,CenterLight HealthCare (PACE) (RCH),,,"","1952857419","813666131",false,,ICD-10 Effective Date,2015-10-01 09:30:00.000 +0530,true,,"","",,"",NY,"",,,,Phone,,,"",Rochester,true,,CenterLight HealthCare (PACE) (RCH),2025-08-02 05:45:45.790 +0530,"{
+  ""object"": ""CONTRACT"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha
+"9e949d99-3432-4312-97da-9e868c24c2e1","69738",PROD:APP,CenterLight HealthCare (PACE) (CH6),,,"","","460726180",false,,ICD-10 Effective Date,2015-10-01 09:30:00.000 +0530,true,,"","",,"",NY,"",,,"",Phone,,,"","135-27 38th ave, flushing",true,,CenterLight HealthCare (PACE) (CH6),2025-10-12 05:45:41.760 +0530,"{
+  ""object"": ""CONTRACT"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha
+c981cb8c-582f-4779-847e-0d50c37324d8,"70230",PROD:APP,Elderplan MJHS (GHC),,,,,,false,,ICD-10 Effective Date,2015-10-01 09:30:00.123 +0530,true,,"","",,"",NY,"10041",,,"",Phone,,,,Gentle Hands Home Care LLC,true,,Elderplan MJHS (GHC),2025-08-07 05:46:41.100 +0530,"{
+  ""object"": ""CONTRACT"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha
+"9193ef0f-c5cc-4fb8-8b13-0fc8344d538a","547781",PROD-AWS:CLO,Medicaid,,,"","","",false,,ICD-10 Effective Date,2015-10-01 09:30:00.000 +0530,true,,"","",,NEW YORK,NY,"10001",,,"",Phone,,,"",RCL - FL,false,,Medicaid,2025-11-16 05:46:31.223 +0530,"{
+  ""object"": ""CONTRACT"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha
+"85820d59-6501-49ad-b800-6fdd05180206","309786",PROD-AWS:CLO,Horizon NJ (JYI),,,,,,false,,ICD-10 Effective Date,2015-10-01 09:30:00.123 +0530,true,,"","",,"",NJ,"",,,,Phone,,,,Nurses Of New Jersey Llc,true,,Horizon NJ (JYI),2025-07-28 05:45:39.953 +0530,"{
+  ""object"": ""CONTRACT"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha
+d763aa65-7e16-4f3f-bd34-cf4b046dd261,"72169",PROD:APP,SWHNY-MLTC (CSI),,,,,,false,,ICD-10 Effective Date,2015-10-01 09:30:00.123 +0530,true,,"","",,"",NY,"",,,,Phone,,,,"Bayshore Home Healthcare, Inc. CS1",true,,SWHNY-MLTC (CSI),2025-11-17 05:46:46.270 +0530,"{
+  ""object"": ""CONTRACT"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha
+"584de184-abe9-4011-9bbb-35885406cd2d","66812",PROD:APP,Private Pay,,,,,,true,,,,false,,,,,,,"",,,,Phone,,,,Brookside Home Care Inc,,,Private Pay,2025-01-20 02:45:42.650 +0530,"{
+  ""object"": ""CONTRACT"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha
+"308d42d7-07f2-4941-b99c-f421e4ab57d3","72176",PROD:APP,CenterLight HealthCare (PACE) (YHC),,,,,,false,,ICD-10 Effective Date,2015-10-01 09:30:00.123 +0530,true,,"","",,"",NY,"",,,,Phone,,,,York Healthcare,true,,CenterLight HealthCare (PACE) (YHC),2025-11-17 05:46:46.270 +0530,"{
+  ""object"": ""CONTRACT"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha
+"65de7e3c-6f4c-419f-bf43-00f2047741c5","72171",PROD:APP,Empire Blue Cross Blue Shield,,,"","","",false,,ICD-10 Effective Date,2015-10-01 09:30:00.000 +0530,false,,"","",,NEW YORK,NY,"10003",,,"",Phone,,,"","Accredited Aides Plus, Inc",true,,Empire Blue Cross Blue Shield,2025-11-17 05:46:46.270 +0530,"{
+  ""object"": ""CONTRACT"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha

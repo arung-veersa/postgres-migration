@@ -1,0 +1,9 @@
+copy C:\Users\ArunGupta\Repos\Conflict\app\Constants\DatabaseConstants.php
+copy C:\Users\ArunGupta\Repos\Conflict\app\Constants\StateDashboardQueriesConstants.php
+copy C:\Users\ArunGupta\Repos\Conflict\app\helpers.php
+copy C:\Users\ArunGupta\Repos\Conflict\app\Http\Controllers\DashboardController.php
+copy C:\Users\ArunGupta\Repos\Conflict\app\Http\Controllers\JwtLoginController.php
+copy C:\Users\ArunGupta\Repos\Conflict\app\Http\Controllers\SetupController.php
+copy C:\Users\ArunGupta\Repos\Conflict\app\Http\Controllers\UsersController.php
+copy C:\Users\ArunGupta\Repos\Conflict\app\Models\ConflictManagementModel.php
+copy C:\Users\ArunGupta\Repos\Conflict\app\Repositories\PayerListRepository.php

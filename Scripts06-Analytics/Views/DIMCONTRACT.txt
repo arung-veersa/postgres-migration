@@ -1,0 +1,36 @@
+Column Name	#	Data Type	Length	Scale	Not Null	Auto Generated	Auto Increment	Default	Description
+Contract Id	1	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Contract Primary Key
+Application Contract Id	2	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Environment	3	VARCHAR	50	[NULL]	false	false	false	[NULL]	
+Contract Name	4	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Contract Name
+Contract Start Date	5	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	Contract Start Date
+Contract End Date	6	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	Contract End Date
+Contact Person	7	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Contact Person
+NPI	8	VARCHAR	250	[NULL]	false	false	false	[NULL]	National Provider Identifier (NPI) **[Read more](https://www.cms.gov/Regulations-and-Guidance/Administrative-Simplification/NationalProvIdentStand)**
+Federal Tax Number	9	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Otherwise known as Employer Identification Number (EIN) **[Read more]( https://www.irs.gov/businesses/small-businesses-self-employed/employer-id-numbers/)**
+Is Private Pay	10	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Is Private Pay
+Is Medic Aid	11	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	
+ICD Code	12	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	International Classification of Diseases (ICD) Code **[Read more](https://www.who.int/standards/classifications/classification-of-diseases)**
+ICD Code Effective Date	13	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	ICD Code Effective Date"
+Is Active	14	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Is Active
+Address Type	15	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address Type
+Address Line 1	16	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address Line 1
+Address Line 2	17	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address Line 2
+Address County	18	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address County
+Address City	19	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address City
+Address State	20	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address State
+Address ZIP	21	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address ZIP
+Address Latitude	22	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address Latitude
+Address Longitude	23	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address Longitude
+Phone Number 1	24	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Phone Number 1
+Phone Description 1	25	VARCHAR	50	[NULL]	false	false	false	[NULL]	Phone Description 1
+Phone Number 2	26	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Phone Number 2
+Phone Description 2	27	VARCHAR	50	[NULL]	false	false	false	[NULL]	Phone Description 2
+Contract Notes	28	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Contract Notes
+Office List	29	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Authorization Required	30	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Authorization Required
+Contract Type Name	31	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Unique Contract Id	32	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Updated Datatimestamp	33	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	
+Usage Tags	34	VARIANT	[NULL]	[NULL]	false	false	false	[NULL]	Tags for system purposes
+Source System	35	VARCHAR	3	[NULL]	false	false	false	[NULL]	

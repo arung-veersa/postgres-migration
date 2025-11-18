@@ -1,0 +1,51 @@
+"Payer Id","Application Payer Id","Contract Id","Application Contract Id","Provider Id","Application Provider Id","Environment","Not Rounding Visit Time","Chha Vendor Id","Bill Unbalanced","Bill Missed Visit","Bill Temp Aide","Bill Non Aide Compliant","Bill Non POC Compliant","Bill Overlapping Patient","Bill Overlapping Aide","Bill Restricted Aide","Bill Timesheet Not Approved","Bill Insufficient Duty Minutes","Bill Missing Clinical Document","Bill Non Custom Validation Compliance","Bill Non Mediciand Compliance","Bill Open Event","Bill Over 24 Hours","Bill Unauthorized","Usage Tags"
+"78d29d80-28d3-424b-bbc4-369c53f14721","72839",a06589f1-97eb-46bc-8094-72f65df523e0,"72168",cc1c2676-7b81-46ed-a441-6d521421ff06,"8275",PROD:APP,false,"113535",false,false,false,true,false,false,false,false,false,false,false,false,false,false,false,false,"{
+  ""object"": ""PAYER_PROVIDER"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}"
+"20a5ee72-74bf-408f-9865-df4967911ea9","71111","","0","1910d4a7-ac7e-45fe-8c5e-34fba0eed1d0","266",PROD:APP,false,"113548",false,false,false,true,false,false,false,false,false,false,false,false,false,false,false,false,"{
+  ""object"": ""PAYER_PROVIDER"",
+  ""payerState"": ""NY"",
+  ""providerState"": ""NY""
+}"
+"061d58ea-27ad-4155-aa7f-7324be273ea7","58557",d851b1ad-3885-4617-b25f-7cc828123bde,"57996","7f3e50f5-fdb3-4720-aa41-544942c1c5e7","296",PROD:APP,true,"96377",false,false,false,true,true,false,false,false,false,false,false,false,false,false,false,false,"{
+  ""object"": ""PAYER_PROVIDER"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}"
+"8cb96834-64fc-4c57-a5c0-d6e6b7141e95","5841","25189d10-beed-44a7-8d6a-02c93bf3f6f8","5723",fc015014-ff1b-4958-8ba9-9eacefee3bee,"517",PROD:APP,true,"6938",false,false,false,true,false,true,false,false,false,false,false,false,false,false,false,false,"{
+  ""object"": ""PAYER_PROVIDER"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}"
+"2db5d07e-ac99-43b2-b732-f5f1ed31f13e","70962","42e93128-49b8-4bed-9756-e19a01886cae","70301","02bbef33-a5de-4b00-a7fc-40a57081102f","8183",PROD:APP,false,"111302",false,false,false,true,false,false,false,false,false,false,false,false,false,false,false,false,"{
+  ""object"": ""PAYER_PROVIDER"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}"
+a73cb8d6-8118-4a9c-b31f-5614b9d04998,"29138","56bd6bfc-024a-4cd0-aaff-b9992741d718","28668",b07f7806-b1ed-43cc-a051-d08321e107ac,"4786",PROD-APP2:AP2,false,"54127",false,false,false,true,false,false,false,false,false,false,false,false,false,false,false,false,"{
+  ""object"": ""PAYER_PROVIDER"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}"
+"7a383ed8-a639-47b7-b345-c57b140060bf","58218","32d6e088-ca16-4821-9ca4-45780a3e51f8","57657",dea6444e-80d1-4de3-83ff-3c04bfa9beb1,"1476",PROD:APP,true,"95977",false,false,false,true,false,false,false,false,false,false,false,false,false,false,false,false,"{
+  ""object"": ""PAYER_PROVIDER"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}"
+"945a6bc0-4f89-4c2d-a5c3-4980d0d3000d","3905",bae88be9-e119-46e7-bad8-1473cadfc99f,"3827",d89e4b71-e9ed-4c6b-a9d4-eaa198e490fd,"341",PROD:APP,true,"4741",false,false,false,true,false,false,false,false,false,false,false,false,false,false,false,false,"{
+  ""object"": ""PAYER_PROVIDER"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}"
+"18310cd2-c8d6-4c46-b21b-ae0c330592b1","66744","48cd5a4f-ac11-4186-9a5b-00506d65283e","66132",c9cc9806-632f-4617-b7e8-bd92033f8685,"206",PROD:APP,true,"106292",false,false,false,true,false,false,false,false,false,false,false,false,false,false,false,false,"{
+  ""object"": ""PAYER_PROVIDER"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}"
+b67bc89a-2900-459b-9ae4-156b5b491de8,"67194",f48005d8-5f8a-49b0-80c5-bb143a543188,"66577",d7e38596-d2f7-451c-a7f7-f6059701690c,"1719",PROD:APP,true,"106823",false,false,false,true,false,false,false,false,false,false,false,false,false,false,false,false,"{
+  ""object"": ""PAYER_PROVIDER"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}"

@@ -1,0 +1,37 @@
+Column Name	#	Data Type	Length	Scale	Not Null	Auto Generated	Auto Increment	Default	Description
+Patient Id	1	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Patient Primary Key
+Application Patient Id	2	NUMBER	38	[NULL]	false	false	false	[NULL]	
+Application Patient ID	3	NUMBER	38	[NULL]	false	false	false	[NULL]	
+Environment	4	VARCHAR	50	[NULL]	false	false	false	[NULL]	
+Patient Name	5	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Name
+Patient Firstname	6	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Patient Middlename	7	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Patient Lastname	8	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Medical Number	9	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Medical Number
+Medicaid Number	10	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Date of Birth	11	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	Date of Birth
+Status	12	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Status
+Gender	13	VARCHAR	50	[NULL]	false	false	false	[NULL]	Gender
+Payer Priority Code	14	VARCHAR	500	[NULL]	false	false	false	[NULL]	Payer Priority Code
+Payer TAL	15	VARCHAR	500	[NULL]	false	false	false	[NULL]	Payer TAL
+Has Visit	16	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Does patient have any visits
+Is Authorized	17	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Does Patient have any authorizations
+Admission Id	18	VARCHAR	500	[NULL]	false	false	false	[NULL]	Admission Id
+Is Authorization Elapsing	19	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Is Authorization Elapsing
+Is Payer Created Patient	20	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Did Payer Create Patient
+Payer Id	21	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Payer Id. Foreign key (dimPayer."Payer Id")
+Application Payer Id	22	NUMBER	38	[NULL]	false	false	false	[NULL]	
+Provider Id	23	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Provider Id. Foreign key (dimProvider."Provider Id")
+Application Provider Id	24	NUMBER	38	5	false	false	false	[NULL]	
+Office Id	25	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Application Office Id	26	NUMBER	38	5	false	false	false	[NULL]	
+Patient Team	27	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Member Team Name	28	VARCHAR	500	[NULL]	false	false	false	[NULL]	
+Patient Branch	29	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Patient Location	30	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Unique Patient Id	31	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Updated Datatimestamp	32	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	
+Usage Tags	33	VARIANT	[NULL]	[NULL]	false	false	false	[NULL]	Tags for system purposes
+Primary Language	34	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Secondary Language	35	VARCHAR	100	[NULL]	false	false	false	[NULL]	
+Source System	36	VARCHAR	3	[NULL]	false	false	false	[NULL]	

@@ -1,0 +1,41 @@
+"Office Id","Application Office Id","Environment","Office Name","Office Code","Is Active","NPI","Federal Tax Number","Address Type","Address Primary","Address Line 1","Address Line 2","Address County","Address City","Address ZIP","Address State","Address Latitude","Address Longitude","Phone Number 1","Phone Number 1 Description","Phone Number 2","Phone Number 2 Description","Timezone","Provider Id","Application Provider Id","Unique Office Id","Updated Datatimestamp","Usage Tags","Source System"
+d0d8a9cf-a690-44e3-b79b-38cac81b021c,"15867",PROD:APP,N and J TBI HCSS (Staffing),TBI,true,"1811553498","475197208",,false,"98-51 Queens Blvd","",,REGO PARK,"11374",NY,,,"7185515554",Phone,"",Phone2,EST,c6792043-647e-46ad-8cbb-16df8180f26a,"3466","475197208",2025-11-17 05:45:47.810 +0530,"{
+  ""object"": ""OFFICE"",
+  ""providerState"": ""NY""
+}",hha
+"6de072ef-39b3-445d-80ba-489a5335554e","15504",PROD:APP,Office 20 March,O20,true,"","",,false,Address 1,"",,NEW YORK,"10005",NY,,,"",Phone,"",Phone2,MDT,"1d7d6c57-b57b-4dca-81e4-dc30a9dd9bf6","891","",2025-09-17 05:45:49.240 +0530,"{
+  ""object"": ""OFFICE"",
+  ""providerState"": ""NY""
+}",hha
+"6e0cef07-9416-45a3-bd81-6d63dea6ab7c","510523",PROD-AWS:CLO,allcare alliance llc,SPH,true,"1467333781","394240013",,false,"13 e stemmer ln","",,suffern,"10901",NY,,,"347-644-2030",Phone,"347-644-2030",Phone2,EST,"9bbe7b8e-a96d-45e7-a885-404529e12e27","510523","394240013",2025-11-14 05:45:51.890 +0530,"{
+  ""object"": ""OFFICE"",
+  ""providerState"": ""NY""
+}",hha
+be2e579a-986b-41d5-95f9-75a5fa94c93d,"8264",PROD:APP,Ultimate Services for You INC,QHJ,true,"1265742027","113616241",,false,"1506 Sheepshead Bay Road","2nd Floor",,Brooklyn,"11235",NY,,,"7188910080",Phone,"7188910080",Phone2,EST,f180c95d-590c-4405-ade5-61e5f5ff4cce,"8264","113616241",2025-08-29 05:46:06.753 +0530,"{
+  ""object"": ""OFFICE"",
+  ""providerState"": ""NY""
+}",hha
+c1a5d0b8-b030-493d-80ea-4fa605ec88ae,"15818",PROD:APP, (1506 Sheepshead Bay Road) QH1,QH1,false,"","113616241",,false,"1506 Sheepshead Bay Road","2nd Floor",,Brooklyn,"11235",NY,,,"7188910080",Phone,"",Phone2,EST,f180c95d-590c-4405-ade5-61e5f5ff4cce,"8264","113616241",2025-08-29 05:46:06.753 +0530,"{
+  ""object"": ""OFFICE"",
+  ""providerState"": ""NY""
+}",hha
+"6c35fb5c-913d-420c-a576-5e35d6d8b079","8265",PROD:APP,Harbor Care LLC,UPV,true,"1780985010","835714311",,false,"3900B Shore Parkway","",,Brooklyn,"11235",NY,,,"7187432432",Phone,"",Phone2,EST,"0f42c3c0-77e9-40b2-a97b-5dbb3d8e394a","8265","835714311",2025-09-14 05:46:07.457 +0530,"{
+  ""object"": ""OFFICE"",
+  ""providerState"": ""NY""
+}",hha
+"6941eda6-6eab-455f-ab03-662524bc72af","18752",PROD-APP2:AP2,Caremosphere Inc,KUK,true,"1093450348","880782301",,false,"6511 CREEDMOOR RD",Stre 207,,Raleigh,"276131687",NY,,,"800-666-8865",Phone,"800-666-8865",Phone2,EST,e8867013-b609-43e7-906d-0edf46f54cc9,"10542","880782301",2025-09-19 05:45:54.887 +0530,"{
+  ""object"": ""OFFICE"",
+  ""providerState"": ""NY""
+}",hha
+"94fe687d-18f0-46f7-bfaf-4714b21b4498","18830",PROD-APP2:AP2,AZ DEMO,AAA,true,"","000000011",,false,"","",,MESA,"85201",AZ,,,"",Phone,"",Phone2,MDT,"3ae0dc4c-aef1-4424-96ff-30c5058e11e8","10612","000000011",2025-10-09 05:45:45.143 +0530,"{
+  ""object"": ""OFFICE"",
+  ""providerState"": ""NY""
+}",hha
+"3b6bf183-2c6a-4281-8c69-20a9c38245d0","15813",PROD:APP,Tia's Office,TIA,true,"","",,false,"","",,PHOENIX,"85001",AZ,,,"",Phone,"",Phone2,MDT,c7585bfc-8949-4579-ad30-73b26f523b59,"785","",2025-10-23 05:45:42.693 +0530,"{
+  ""object"": ""OFFICE"",
+  ""providerState"": ""NY""
+}",hha
+"50e3eb64-3dba-4489-a57a-179372e1dff0","15819",PROD:APP,HOME CHOICE MI,HCM,true,"1457241390","392997199",,false,"8262 Twelve Mile Rd ","",,WARREN,"48093",MI,,,"",Phone,"",Phone2,EST,"98ba4de3-5a56-4a0b-b974-c100507a4fc1","953","392997199",2025-10-23 05:45:42.693 +0530,"{
+  ""object"": ""OFFICE"",
+  ""providerState"": ""NY""
+}",hha

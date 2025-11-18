@@ -1,0 +1,41 @@
+"Provider Id","Application Provider Id","Environment","Environemnt","Provider Name","Provider Initial","Provider Code","Live Date","NPI","Federal Tax Number","MPI Number","Address Type","Primary Address","Address Line 1","Address Line 2","Address County","Address City","Address State","Address ZIP","Address Latitude","Address Longitude","Phone Number 1","Phone Description 1","Phone Number 2","Phone Description 2","Phone Number 3","Phone Description 3","Product Type","Is Active","Is Demo","Has Confirmed Visit","Entry Type","Region Type","General Type","Platform Type","HHAX Unique Id","Provider Version","Provider Minor Version","App Version Id","Conflict Start Date","Read Only","Using Conflict Report","Display Time Format","Provider Time Zone","Is Third Party Provider","Unique Provider Id","Updated Datatimestamp","Usage Tags","Source System"
+cc1c2676-7b81-46ed-a441-6d521421ff06,"8275",PROD:APP,PROD:APP,"At Home Care, Incorporated",YOIV,YOI,2025-11-12 11:42:45.603 +0530,"1003819806","161287069",,,false,"1 Foxcare Drive",Suite 102,,Oneonta,NY,"13820",40.71278,-74.00594,"607-432-7924",Home,"607-432-7924",Phone2,,Phone3,Enterprise,true,false,false,EDI (3rd party EVV),"NY_FidelisCare-Market,NY_UHCNY-Market","",Enterprise,"0013q00002HvNX7AAN",25.07,1.0,"4.00000",,false,,"24Hour",,yes,"161287069",2025-11-17 05:45:48.407 +0530,"{
+  ""object"": ""PROVIDER"",
+  ""providerState"": ""NY""
+}",hha
+"9bbe7b8e-a96d-45e7-a885-404529e12e27","510523",PROD-AWS:CLO,PROD-AWS:CLO,allcare alliance llc,SPHL,SPH,2025-11-10 13:03:24.487 +0530,"1467333781","394240013",,,false,"13 e stemmer ln","",,suffern,NY,"10901",40.71278,-74.00594,"347-644-2030",Home,"347-644-2030",Phone2,,Phone3,Enterprise,true,false,false,HHA EVV (Free EVV),"","",Enterprise-Free,"001UH00000ftRGCYA2",25.07,1.0,"4.00000",,false,,"12 Hour",,,"394240013",2025-11-17 05:46:21.457 +0530,"{
+  ""object"": ""PROVIDER"",
+  ""providerState"": ""NY""
+}",hha
+d716e471-e9e8-4263-8a2d-27ebdee7a135,"8269",PROD:APP,PROD:APP,test,DTMZ,DTM,2025-10-31 09:30:00.000 +0530,"0000000000","000000000",,,false,"2044 Ocean Ave",Suite B4,,Brooklyn,NY,"11230",40.71278,-74.00594,"718-627-1150",Home,"718-627-1150",Phone2,,Phone3,Enterprise,false,false,false,EntryType-Not Applicable,"Platform-Not Applicable,TX-Market","","","001UH00000UzK0gYAF",25.07,1.0,"4.00000",,false,,"24 Hour",,,"000000000",2025-11-04 05:45:56.043 +0530,"{
+  ""object"": ""PROVIDER"",
+  ""providerState"": ""NY""
+}",hha
+"40fb0f8e-dacd-4630-999d-4e0c7021dc86","11022",PROD-APP2:AP2,PROD-APP2:AP2,Caresify PA New ENT,DTLH,DTL,2025-11-06 15:43:23.197 +0530,"1326492307","111111033",,,false,"6313 Rising Sun Ave","",,Philadelphia,NY,"19111",40.71278,-74.00594,"215.631.3999",Home,"215.631.3999",Phone2,,Phone3,Enterprise,true,false,false,HHA EVV,"","",Enterprise,"0010Z00001wOAGSQA4",25.07,1.0,"4.00000",,false,,"24 Hour",,,"111111033",2025-11-17 05:45:40.860 +0530,"{
+  ""object"": ""PROVIDER"",
+  ""providerState"": ""NY""
+}",hha
+"024f9306-1bd4-4b80-b20d-4bbfb54b74ee","8274",PROD:APP,PROD:APP,Bruvildo_Inc,WWQK,WWQ,2025-11-03 10:30:00.000 +0530,"1841745585","473372130",,,false,"164A N-Central Ave",,,Valley Stream,NY,"11580",40.71278,-74.00594,"516-601-8021",Home,,Phone2,,Phone3,Enterprise,true,false,false,HHA EVV,NY-Unknown,"",Enterprise-Free,"001UH00000VvWcQYAV",25.07,1.0,"4.00000",,false,,"24 Hour",,,"473372130",2025-11-17 05:45:48.407 +0530,"{
+  ""object"": ""PROVIDER"",
+  ""providerState"": ""NY""
+}",hha
+fe758021-1273-4882-be49-8357aa2f24f2,"8273",PROD:APP,PROD:APP,CHAI HOMECARE LLC,CZVM,CZV,2025-11-03 12:35:32.623 +0530,"1366078446","823980338",,,false,"1613 McDonald Ave","",,Brooklyn,NY,"11230",40.71278,-74.00594,"718-670-6300",Home,"718-670-6300",Phone2,,Phone3,Enterprise,true,false,false,HHA EVV,"","",Enterprise,"001UH00000dqlqsYAA",25.07,1.0,"4.00000",,false,,"24 Hour",,,"823980338",2025-11-17 05:45:48.407 +0530,"{
+  ""object"": ""PROVIDER"",
+  ""providerState"": ""NY""
+}",hha
+"43882db3-ff0e-4961-a304-b3cc7b556916","8272",PROD:APP,PROD:APP,DIANA GONZALEZ,PCCC,PCC,2025-11-03 10:30:00.000 +0530,"1255144960","786263766",,,false,"11701 BEACH CHANNEL DRIVE","",,ROCKAWAY PARK,NY,"11694",40.71278,-74.00594,"424-409-1160",Home,"424-409-1160",Phone2,,Phone3,Enterprise,true,false,false,HHA EVV (Free EVV),NY_Healthfirst-Market,"",Enterprise-Free,"001UH00000dfOkhYAE",25.07,1.0,"4.00000",,false,,"24 Hour",,,"786263766",2025-11-17 05:45:48.407 +0530,"{
+  ""object"": ""PROVIDER"",
+  ""providerState"": ""NY""
+}",hha
+"0b830269-7d41-46f4-87d8-1b2f87afcdc9","8271",PROD:APP,PROD:APP,Home Care Services For Independent Living New ENT,DTNZ,DTN,2025-11-03 10:30:00.000 +0530,"1619090784","111111077",,,false,"2044 Ocean Ave",Suite B4,,Brooklyn,NY,"11230",40.71278,-74.00594,"718-627-1150",Home,"718-627-1150",Phone2,,Phone3,Enterprise,true,false,false,EntryType-Not Applicable,"","",Enterprise-Free,"001UH00000UzK0gYAF",25.07,1.0,"4.00000",,false,,"24 Hour",,,"111111077",2025-11-17 05:45:48.407 +0530,"{
+  ""object"": ""PROVIDER"",
+  ""providerState"": ""NY""
+}",hha
+"709f0035-2b0f-4eb1-9844-432c6027d951","8270",PROD:APP,PROD:APP,"Apex Therapeutic Services,LLC DBA Apex Therapeutic",CGJL,CGJ,2025-10-31 09:30:00.000 +0530,"1619353489","010549901",,,false,"1010 Northern Blvd, Suite 424",Great Neck,,Great Neck,NY,"11021",40.71278,-74.00594,"516-472-7002",Home,"516-472-7002",Phone2,,Phone3,Enterprise,true,false,false,HHA EVV (Free EVV),"","",Enterprise-Free,"001UH00000YuErDYAV",25.07,1.0,"4.00000",,false,,"24 Hour",,,"010549901",2025-11-17 05:45:48.407 +0530,"{
+  ""object"": ""PROVIDER"",
+  ""providerState"": ""NY""
+}",hha
+c3951e77-cb43-4bc2-a844-233cabca5bfd,"8268",PROD:APP,PROD:APP,Riseboro Homecare Inc. New ENT,DTMO,DTM,2025-10-24 09:30:00.000 +0530,"1134264948","111111066",,,false,"535 Bushwick Ave","",,Brooklyn,NY,"11206",40.71278,-74.00594,"718-821-0254",Home,"718-821-0254",Phone2,,Phone3,Enterprise,true,false,false,HHA EVV,"","",Enterprise,"0010Z00001x5KDSQA2",25.07,1.0,"4.00000",,false,,"24 Hour",,,"111111066",2025-11-17 05:45:48.407 +0530,"{
+  ""object"": ""PROVIDER"",
+  ""providerState"": ""NY""
+}",hha

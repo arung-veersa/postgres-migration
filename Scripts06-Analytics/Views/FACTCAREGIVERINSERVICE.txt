@@ -1,0 +1,23 @@
+Column Name	#	Data Type	Length	Scale	Not Null	Auto Generated	Auto Increment	Default	Description
+Environment	1	VARCHAR	100	[NULL]	false	false	false	[NULL]	environment of data
+Application Caregiver Inservice Id	2	NUMBER	38	[NULL]	false	false	false	[NULL]	environment specific sql unique key
+Application Caregiver Id	3	NUMBER	38	[NULL]	false	false	false	[NULL]	caregiver id
+Caregiver Id	4	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Application Inservice Id	5	NUMBER	38	[NULL]	false	false	false	[NULL]	
+Description	6	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	describes inservice activities
+Topics	7	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	describes topics in inservice activities
+Inservice start date	8	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	
+From time	9	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Inservice end date	10	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	
+End time	11	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Created By	12	NUMBER	38	[NULL]	false	false	false	[NULL]	
+Created Date	13	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	
+Updated By	14	NUMBER	38	[NULL]	false	false	false	[NULL]	
+Updated Date	15	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	
+Allow for Inservice Overlap	16	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	
+Application Provider Id	17	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Provider Id	18	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Application Office Id	19	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Office Id	20	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Usage Tags	21	VARIANT	[NULL]	[NULL]	false	false	false	[NULL]	
+Source System	22	VARCHAR	3	[NULL]	false	false	false	[NULL]	

@@ -1,0 +1,51 @@
+"Service Code Id","Application Service Code Id","Environment","Rate Type","Service Code","Export Code","Weekday Export Code","Weekend Export Code","Service Type","Service Category","Procedure Code","Modifier 1","Modifier 2","Modifier 3","Modifier 4","Modifier Description","Bypass Prebilling Validation","Bypass Billing Review Validation","PA Mandated","Vendor Type","Used Export Code","Vendor Id","Application Vendor Id","Provider Id","Application Provider Id","Payer Id","Application Payer Id","Office Id","Application Office Id","Contract Id","Application Contract Id","Discipline","Discipline Id","Discipline Type","No Auth Required for Billing Flag","Unique Service Code Id","Updated Datatimestamp","Is Active","Usage Tags","Source System"
+"25940809-c105-4258-af9a-4e6674e52452","22567751",PROD-AWS:CLO,Hourly,RESPITE,S5150,S5150,,,,S5150,"","","","","",false,false,Not Mandated,Provider,,c5bda90f-adab-4ff0-a0e7-037f95be2350,"510109",c5bda90f-adab-4ff0-a0e7-037f95be2350,"510109",,,,"0",ebd51750-d453-4b8d-9e59-d39172d61c71,"541026.0",RESP,25,"2",false,RESPITE,2025-11-17 06:01:02.627 +0530,true,"{
+  ""object"": ""SERVICE_CODE"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha
+"6ec46a1f-eeb4-4ff1-8adc-27099d29885f","22567755",PROD-AWS:CLO,Hourly,HHA,,,,,,,,,,,,false,false,Not Mandated,Provider,,c5bda90f-adab-4ff0-a0e7-037f95be2350,"510109",c5bda90f-adab-4ff0-a0e7-037f95be2350,"510109",,,,"0",ebd51750-d453-4b8d-9e59-d39172d61c71,"541026.0",HHA,2,"2",false,HHA,2025-11-17 06:01:02.627 +0530,true,"{
+  ""object"": ""SERVICE_CODE"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha
+"1deb01dd-aa82-4f88-8a50-f9669f33ec72","22814538",PROD-AWS:CLO,Hourly,S5125:SE:HQ,S5125:SE:HQ,S5125:SE:HQ,S5125:SE:HQ,Other (Non Skilled),Home Health,S5125,SE,HQ,"","","",false,false,Not Mandated,Provider,,bb55f161-f88f-4c6c-af28-e7ecb1c01c81,"4862",bb55f161-f88f-4c6c-af28-e7ecb1c01c81,"4862",,,,"0",b145e8db-c509-4f42-85f7-60ec2793a1aa,"529512.0",Other (Non Skilled),15,"2",false,S5125:SE:HQ,2025-11-17 06:01:02.627 +0530,true,"{
+  ""object"": ""SERVICE_CODE"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha
+fc627bed-d7c8-42d1-a692-4b92116aa718,"22814539",PROD-AWS:CLO,Hourly,S5125:SE:HQ,S5125:SE:HQ,S5125:SE:HQ,S5125:SE:HQ,Other (Non Skilled),Home Health,S5125,SE,HQ,"","","",false,false,Not Mandated,Provider,,bb55f161-f88f-4c6c-af28-e7ecb1c01c81,"4862",bb55f161-f88f-4c6c-af28-e7ecb1c01c81,"4862",,,,"0","1e4fb0ff-ed68-4d44-b46f-e4bebf7b37e3","529513.0",Other (Non Skilled),15,"2",false,S5125:SE:HQ,2025-11-17 06:01:02.627 +0530,true,"{
+  ""object"": ""SERVICE_CODE"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha
+ac9d5134-3dfb-4223-8d46-78d2a35e660d,"22814541",PROD-AWS:CLO,Hourly,S5125:SE:HQ,S5125:SE:HQ,S5125:SE:HQ,S5125:SE:HQ,Other (Non Skilled),Home Health,S5125,SE,HQ,"","","",false,false,Not Mandated,Provider,,bb55f161-f88f-4c6c-af28-e7ecb1c01c81,"4862",bb55f161-f88f-4c6c-af28-e7ecb1c01c81,"4862",,,,"0","2405200e-728d-4aa2-9c63-30cb21c9f6e9","529514.0",Other (Non Skilled),15,"2",false,S5125:SE:HQ,2025-11-17 06:01:02.627 +0530,true,"{
+  ""object"": ""SERVICE_CODE"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha
+"7b6bdd7c-2f70-44d0-ae64-2a8a3c6b74a0","22814543",PROD-AWS:CLO,Hourly,S5125:SE:HQ,S5125:SE:HQ,S5125:SE:HQ,S5125:SE:HQ,Other (Non Skilled),Home Health,S5125,SE,HQ,"","","",false,false,Not Mandated,Provider,,bb55f161-f88f-4c6c-af28-e7ecb1c01c81,"4862",bb55f161-f88f-4c6c-af28-e7ecb1c01c81,"4862",,,,"0","6ea03653-50f0-4e49-b6fc-585b49eb21e8","532250.0",Other (Non Skilled),15,"2",false,S5125:SE:HQ,2025-11-17 06:01:02.627 +0530,true,"{
+  ""object"": ""SERVICE_CODE"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha
+bceaa88c-7b16-4d12-891b-600be32e032c,"22814589",PROD-AWS:CLO,Hourly,S5125:SE:HQ,S5125:SE:HQ,S5125:SE:HQ,S5125:SE:HQ,Other (Non Skilled),Home Health,S5125,SE,HQ,"","","",false,false,Not Mandated,Provider,,d7c4a345-72a0-4b09-8c83-c18d4591b993,"4930",d7c4a345-72a0-4b09-8c83-c18d4591b993,"4930",,,,"0",a90520b0-fb5e-47e1-a9b4-b5190657252e,"311784.0",Other (Non Skilled),15,"2",false,S5125:SE:HQ,2025-11-17 06:01:02.627 +0530,true,"{
+  ""object"": ""SERVICE_CODE"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha
+"1fd2f427-1918-4d0c-b51f-6f7b454d4c48","22814910",PROD-AWS:CLO,Hourly,S5125:SE:HQ,S5125:SE:HQ,S5125:SE:HQ,S5125:SE:HQ,Other (Non Skilled),Home Health,S5125,SE,HQ,"","","",false,false,Not Mandated,Provider,,f738edd2-f3eb-48cd-beba-fcc1de0e3812,"4875",f738edd2-f3eb-48cd-beba-fcc1de0e3812,"4875",,,,"0","1e469400-cb08-4a95-b00b-6c37480c9251","310556.0",Other (Non Skilled),15,"2",false,S5125:SE:HQ,2025-11-17 06:01:02.627 +0530,true,"{
+  ""object"": ""SERVICE_CODE"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha
+b9df8e99-5c37-405a-97ca-67392c5bc57d,"22814911",PROD-AWS:CLO,Hourly,S5125:SE:HQ,S5125:SE:HQ,S5125:SE:HQ,S5125:SE:HQ,Other (Non Skilled),Home Health,S5125,SE,HQ,"","","",false,false,Not Mandated,Provider,,f738edd2-f3eb-48cd-beba-fcc1de0e3812,"4875",f738edd2-f3eb-48cd-beba-fcc1de0e3812,"4875",,,,"0","05581bfd-11ae-4caf-baf0-c8edecf9f851","307119.0",Other (Non Skilled),15,"2",false,S5125:SE:HQ,2025-11-17 06:01:02.627 +0530,true,"{
+  ""object"": ""SERVICE_CODE"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha
+"30f5439f-fc4d-4cd5-85c6-b37f721861a9","22814912",PROD-AWS:CLO,Hourly,S5125:SE:HQ,S5125:SE:HQ,S5125:SE:HQ,S5125:SE:HQ,Other (Non Skilled),Home Health,S5125,SE,HQ,"","","",false,false,Not Mandated,Provider,,f738edd2-f3eb-48cd-beba-fcc1de0e3812,"4875",f738edd2-f3eb-48cd-beba-fcc1de0e3812,"4875",,,,"0","42060990-133b-4cf2-b6e7-d5afd3a3c1b4","307118.0",Other (Non Skilled),15,"2",false,S5125:SE:HQ,2025-11-17 06:01:02.627 +0530,true,"{
+  ""object"": ""SERVICE_CODE"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha

@@ -1,0 +1,51 @@
+"Patient Id","Application Patient Id","Application Patient ID","Environment","Patient Name","Patient Firstname","Patient Middlename","Patient Lastname","Medical Number","Medicaid Number","Date of Birth","Status","Gender","Payer Priority Code","Payer TAL","Has Visit","Is Authorized","Admission Id","Is Authorization Elapsing","Is Payer Created Patient","Payer Id","Application Payer Id","Provider Id","Application Provider Id","Office Id","Application Office Id","Patient Team","Member Team Name","Patient Branch","Patient Location","Unique Patient Id","Updated Datatimestamp","Usage Tags","Primary Language","Secondary Language","Source System"
+"82bfcabc-a694-4e1f-af46-94532fc00d4c",3410306,3410306,PROD:APP,Serafina Carlone,Serafina,,Carlone,N61094,,1928-08-03 09:30:00.000 +0530,Discharged,Female,,TAL 1 - Non-ambulatory,false,false,N61094,false,true,"97fd1252-37f4-4809-a8fe-684a4331a0ec",13007,,,,,,Default,,,N61094,2025-01-23 17:39:47.641 +0530,"{
+  ""object"": ""PATIENT"",
+  ""payerState"": ""NY"",
+  ""providerState"": ""<NULL>""
+}",,,hha
+"62d6a365-8996-4de6-8bd3-a0e2b9f94aca",13633946,13633946,PROD:APP,IOSIF KAZANSKY,IOSIF,,KAZANSKY,"000108609",,1933-09-19 09:30:00.000 +0530,Waiting,Male,"2 ",,false,false,"207988",false,true,"3b4b2e44-48e7-4b84-a571-e0ae18d64274",1,,,"00000000-0000-0000-0000-4366b7f545ef",,,BROOK 2/SI,,,"000108609",2023-05-17 23:08:08.927 +0530,"{
+  ""object"": ""PATIENT"",
+  ""payerState"": ""NY"",
+  ""providerState"": ""<NULL>""
+}",,,hha
+"62d6a9a1-c40f-48e4-8b99-74f953c911f1",1626619,1626619,PROD:APP,Tiffany Hunter,Tiffany,,Hunter,H173457,,1972-09-26 09:30:00.000 +0530,Discharged,Female,"0",,false,false,H173457,false,true,"5af0c048-d6f0-41dc-adab-850b2b45fdfb",1645,,,"00000000-0000-0000-0000-4366b7f545ef",,,Default,,,H173457,2023-05-17 23:02:56.183 +0530,"{
+  ""object"": ""PATIENT"",
+  ""payerState"": ""NY"",
+  ""providerState"": ""<NULL>""
+}",,,hha
+"62d6b39f-d9f3-4fb0-bec2-447c820ef136",6197743,6197743,PROD:APP,STEFANNIE RODRIGUEZ,STEFANNIE,,RODRIGUEZ,CNR00003095201,,1987-12-20 10:30:00.000 +0530,Waiting,Female,,,false,false,"30542",false,true,"30a7335e-937f-4211-b600-f67f4447aa7b",15190,,,"00000000-0000-0000-0000-4366b7f545ef",,,PPT,,,CNR00003095201,2023-05-17 23:03:56.310 +0530,"{
+  ""object"": ""PATIENT"",
+  ""payerState"": ""NY"",
+  ""providerState"": ""<NULL>""
+}",,,hha
+"62d6b451-da05-41e9-b6ab-00be11f40143",6678148,6678148,PROD:APP,VINCENZO TOLA,VINCENZO,,TOLA,RH100009940501,,1949-03-14 10:30:00.000 +0530,Waiting,Male,"2",,false,false,"139826",false,true,"3b4b2e44-48e7-4b84-a571-e0ae18d64274",1,,,"00000000-0000-0000-0000-4366b7f545ef",,,Default,,,RH100009940501,2023-05-17 23:05:18.380 +0530,"{
+  ""object"": ""PATIENT"",
+  ""payerState"": ""NY"",
+  ""providerState"": ""<NULL>""
+}",English,,hha
+"62d6b72d-bad3-418d-b08e-80f5dda7194b",14827153,14827153,PROD:APP,RAMON GONZALEZ,RAMON,,GONZALEZ,"000038533",,1950-01-04 10:30:00.000 +0530,Waiting,Male,"2 ",,false,false,"65143",false,true,a511c981-6cc5-4e57-9692-9b473e314f02,2568,,,"00000000-0000-0000-0000-4366b7f545ef",,,CHHA,,,"000038533",2023-05-17 23:08:43.093 +0530,"{
+  ""object"": ""PATIENT"",
+  ""payerState"": ""NY"",
+  ""providerState"": ""<NULL>""
+}",,,hha
+a6a7e088-b58a-496f-b7a3-98625f5d4b0b,16008324,16008324,PROD:APP,JOSEPH TULLO,JOSEPH,,TULLO,"102490562",DR84447J,2002-10-01 09:30:00.000 +0530,Waiting,Male,,,false,false,DR84447J,false,true,"6cc68070-ebcc-44bf-a8b6-9476c030c9a9",56952,,,"00000000-0000-0000-0000-4366b7f545ef",,,Default,,,DR84447J,2023-05-17 23:09:31.323 +0530,"{
+  ""object"": ""PATIENT"",
+  ""payerState"": ""NY"",
+  ""providerState"": ""<NULL>""
+}",,,hha
+a6a7f742-a33f-42cd-a024-8874cfe45b6c,8549491,8549491,PROD:APP,JANET RHODES,JANET,,RHODES,RH100011087701,,1961-12-31 10:30:00.000 +0530,Waiting,Female,,,false,false,"152006",false,true,"3b4b2e44-48e7-4b84-a571-e0ae18d64274",1,,,"00000000-0000-0000-0000-4366b7f545ef",,,ELINA,,,RH100011087701,2023-05-17 23:04:54.910 +0530,"{
+  ""object"": ""PATIENT"",
+  ""payerState"": ""NY"",
+  ""providerState"": ""<NULL>""
+}",,,hha
+a6a7f9d9-c2f5-442b-867c-894a1dd32e4b,13514836,13514836,PROD:APP,NIRMAL CHANDRARATNA,NIRMAL,,CHANDRARATNA,"000148484",,1972-10-03 09:30:00.000 +0530,Waiting,Male,,,false,false,"206283",false,true,"3b4b2e44-48e7-4b84-a571-e0ae18d64274",1,,,"00000000-0000-0000-0000-4366b7f545ef",,,ROBIN,,,"000148484",2023-05-17 23:08:19.177 +0530,"{
+  ""object"": ""PATIENT"",
+  ""payerState"": ""NY"",
+  ""providerState"": ""<NULL>""
+}",,,hha
+a6a7fb03-d1f6-4086-908d-205ec7769f71,16366221,16366221,PROD:APP,KULDEEP KAUR,KULDEEP,,KAUR,"124212470",FS57290Z,1974-12-16 10:30:00.000 +0530,Waiting,Female,,,false,false,FS57290Z,false,true,"6cc68070-ebcc-44bf-a8b6-9476c030c9a9",56952,,,"00000000-0000-0000-0000-4366b7f545ef",,,Default,,,FS57290Z,2023-05-17 23:09:27.573 +0530,"{
+  ""object"": ""PATIENT"",
+  ""payerState"": ""NY"",
+  ""providerState"": ""<NULL>""
+}",,,hha

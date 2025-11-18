@@ -1,0 +1,30 @@
+Column Name	#	Data Type	Length	Scale	Not Null	Auto Generated	Auto Increment	Default	Description
+Office Id	1	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Office Primary Key
+Application Office Id	2	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Environment	3	VARCHAR	50	[NULL]	false	false	false	[NULL]	
+Office Name	4	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Name
+Office Code	5	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Code
+Is Active	6	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Is Active
+NPI	7	VARCHAR	100	[NULL]	false	false	false	[NULL]	National Provider Identifier (NPI) **[Read more](https://www.cms.gov/Regulations-and-Guidance/Administrative-Simplification/NationalProvIdentStand)**
+Federal Tax Number	8	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Otherwise known as Employer Identification Number (EIN) **[Read more]( https://www.irs.gov/businesses/small-businesses-self-employed/employer-id-numbers/)**
+Address Type	9	VARCHAR	20	[NULL]	false	false	false	[NULL]	Address Type
+Address Primary	10	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Primary Address
+Address Line 1	11	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address Line 1
+Address Line 2	12	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address Line 2
+Address County	13	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address County
+Address City	14	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address City
+Address ZIP	15	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address ZIP Code
+Address State	16	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address State
+Address Latitude	17	DOUBLE	[NULL]	[NULL]	false	false	false	[NULL]	Address Latitude
+Address Longitude	18	DOUBLE	[NULL]	[NULL]	false	false	false	[NULL]	Address Longitude
+Phone Number 1	19	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Phone Number 1
+Phone Number 1 Description	20	VARCHAR	20	[NULL]	false	false	false	[NULL]	Phone Number 1 Description
+Phone Number 2	21	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Phone Number 2
+Phone Number 2 Description	22	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Phone Number 2 Description
+Timezone	23	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Time Zone
+Provider Id	24	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Application Provider Id	25	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Unique Office Id	26	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Updated Datatimestamp	27	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	
+Usage Tags	28	VARIANT	[NULL]	[NULL]	false	false	false	[NULL]	Tags for system purposes
+Source System	29	VARCHAR	3	[NULL]	false	false	false	[NULL]	

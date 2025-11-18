@@ -1,0 +1,37 @@
+"Environment","Caregiver Vacation Id","Application Caregiver Id","Global Caregiver Id","Start Date","End Date","Duration","Notes","Caregiver Absence Type Id","Absence Type Name","Absence Type Description","Active","Application Service Code Id","Service Code Id","Application Contract Id","Contract Id","Application Provider Id","Provider Id","Application Office Id","Office Id","Created Date","Created By","Updated Date","Updated By","Usage Tags","Source System"
+PROD:APP,6610315.00000,3798821.00000,"6b1ffac2-03de-4df2-83b6-3c92b350b20f",2025-11-18 10:30:00.000 +0530,2025-11-18 10:30:00.000 +0530,0,"",3905.00000,Dr Appt,Dr Appt,true,,,-1,,"839","05edb671-06f4-4fd2-93fc-e81513bd5af1","1148","8af4e785-5d7f-43bd-a349-c0099221eb3b",2025-11-15 23:22:41.867 +0530,173920.00000,2025-11-15 23:22:41.867 +0530,173920.00000,"{
+  ""object"": ""CAREGIVER_ABSENCE""
+}",hha
+PROD:APP,6610047.00000,4294726.00000,"6104f8c5-aec5-4043-ba15-d3c967abbbdb",2025-11-15 10:30:00.000 +0530,2025-11-15 10:30:00.000 +0530,0,"",584.00000,Personal,,true,,,-1,,"370","161271f1-48b9-4cee-a19d-670ec5760fd0","370","8904928d-6791-4abd-a804-66379706abd8",2025-11-15 18:37:13.057 +0530,162196.00000,2025-11-15 18:37:13.057 +0530,162196.00000,"{
+  ""object"": ""CAREGIVER_ABSENCE""
+}",hha
+PROD-APP2:AP2,4432556.00000,3754701.00000,e3cdd844-15cc-402c-baf3-f6434b19b517,2025-11-16 10:30:00.000 +0530,2025-11-16 10:30:00.000 +0530,0,DCW Maya called out for  her shift 11/16/5,7860.00000,Called Out with Notice,,true,,,-1,,"2378",b42983a6-fb07-49a2-b069-842f731f1e69,"4020","8cd9ecb1-19a4-45d0-9fbe-d354db1a6bdd",2025-11-16 03:25:37.777 +0530,181947.00000,2025-11-16 03:25:37.777 +0530,181947.00000,"{
+  ""object"": ""CAREGIVER_ABSENCE""
+}",hha
+PROD-APP2:AP2,4432509.00000,4332808.00000,a15575ef-7026-4b6f-842c-4d3627bfdf63,2025-11-15 10:30:00.000 +0530,2025-11-15 10:30:00.000 +0530,0,"cp ask for pto due client being sick and told her he did not need service today
+11/15",76798.00000,PTO,,true,,,-1,,"6363","25d90590-4b3c-4055-8d11-9a234ca29fd4","11744","32f2caae-7afa-4a21-9832-254322202f05",2025-11-15 21:22:08.820 +0530,210974.00000,2025-11-15 21:22:08.820 +0530,210974.00000,"{
+  ""object"": ""CAREGIVER_ABSENCE""
+}",hha
+PROD:APP,6610335.00000,2683230.00000,"2d71eb48-5caa-4fd1-8d76-662fe3b6fefa",2025-11-15 10:30:00.000 +0530,2025-11-15 10:30:00.000 +0530,0,sick,638.00000,MD APPOINTMENT,MD Appointment,true,,,-1,,"214","0341a376-d068-4326-ae1c-ee57e441acb9","214","1f53b019-b3c0-4441-b5cc-68c2678441ea",2025-11-16 00:09:36.760 +0530,150637.00000,2025-11-16 00:09:36.760 +0530,150637.00000,"{
+  ""object"": ""CAREGIVER_ABSENCE""
+}",hha
+PROD:APP,6610046.00000,4149425.00000,"69b0c719-289a-4783-8695-b2dc84a022a0",2025-11-15 10:30:00.000 +0530,2025-11-15 10:30:00.000 +0530,0,Please be advised HHA THEODORE L AKESHA  was a LMC for 11/15 stating that her BP is low ,2427.00000,Called Out,,true,,,-1,,"733","11f03b34-cead-48c8-b404-5fb3fae1850a","859","2a07e1cc-0f79-46ac-bef7-f652b522200b",2025-11-15 18:36:10.840 +0530,46751.00000,2025-11-15 18:36:10.840 +0530,46751.00000,"{
+  ""object"": ""CAREGIVER_ABSENCE""
+}",hha
+PROD:APP,6610476.00000,4828963.00000,"5f5b0053-4703-4130-82bc-30df284be251",2025-11-16 10:30:00.000 +0530,2025-11-16 10:30:00.000 +0530,0,On 11/15 the caregiver ANT-51649 called out for 11/16 with patient Giustino Catherine due to her son is sick.,4818.00000,Late Cancellation,,true,,,-1,,"1476",dea6444e-80d1-4de3-83ff-3c04bfa9beb1,"2365","28fe5a21-c739-4293-b031-a89e00414326",2025-11-16 04:17:33.527 +0530,186784.00000,2025-11-16 04:17:33.527 +0530,186784.00000,"{
+  ""object"": ""CAREGIVER_ABSENCE""
+}",hha
+PROD-APP2:AP2,4432560.00000,4335470.00000,dca8cb36-6ca7-46e9-8495-d958ab82e454,2025-11-15 10:30:00.000 +0530,2025-11-15 10:30:00.000 +0530,0,aide called off sick,45551.00000,Called Out,,true,,,-1,,"3303",c8753587-62c4-454b-9195-1fbf62006f02,"5356","89a05242-363b-492d-92cd-0c9966f0355b",2025-11-16 04:13:25.630 +0530,142414.00000,2025-11-16 04:13:25.630 +0530,142414.00000,"{
+  ""object"": ""CAREGIVER_ABSENCE""
+}",hha
+PROD:APP,6610074.00000,4188427.00000,"2874f4d7-45c1-4a42-908d-c4a4b7287b54",2025-11-15 10:30:00.000 +0530,2025-11-15 10:30:00.000 +0530,0,"Message Received
+
+ANT-36140 called in stating she is unable to come to work today due to a family emergency.
+Action Taken
+
+Spoke with the PT’s relative, who is aware of the CG’s cancellation and initially agreed to a replacement for today. The PT’s relative requested that ANT-44448 not be assigned moving forward, noting prior performance concerns; ANT-44448 has been added to the declined list. PT’s relative is requesting replacement CGs for both Saturday and Sunday. Spoke with ANT-44448, who is ",4818.00000,Late Cancellation,,true,,,-1,,"1476",dea6444e-80d1-4de3-83ff-3c04bfa9beb1,"2365","28fe5a21-c739-4293-b031-a89e00414326",2025-11-15 18:56:22.463 +0530,186785.00000,2025-11-15 18:56:22.463 +0530,186785.00000,"{
+  ""object"": ""CAREGIVER_ABSENCE""
+}",hha
+PROD:APP,6610392.00000,4869151.00000,f7ae4bbb-5804-4dfc-a8eb-b949b02ecb77,2025-11-15 10:30:00.000 +0530,2025-11-15 10:30:00.000 +0530,0,"",3519.00000,CALLED OFF W/0  REQUIRED NOTICE,,true,,,-1,,"686",b6c934da-f64d-4043-86b4-ca533f38ef31,"1167","99af61b0-50a4-459d-9ddc-e65adf447192",2025-11-16 01:12:10.710 +0530,198049.00000,2025-11-16 01:12:10.710 +0530,198049.00000,"{
+  ""object"": ""CAREGIVER_ABSENCE""
+}",hha

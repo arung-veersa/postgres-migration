@@ -1,0 +1,41 @@
+"User Id","Application User Id","Environment","Vendor Type","Vendor Id","Application Vendor Id","Office Id","Application Office Id","Usage Tags","Source System"
+"24fa8317-0f80-4a69-83f0-cdae1194d6c6","202488",PROD:APP,Vendor,"13fcb831-a0f2-4c76-94ee-243b99c815a0","445","4ee3a9e1-2290-4293-8d1b-259ed3e98cbf","12387","{
+  ""object"": ""USER_OFFICES"",
+  ""providerState"": ""NY""
+}",hha
+efce2b53-b5c7-4d6a-a0aa-fa00ae2fd780,"179663",PROD:APP,Vendor,"72f6107e-a216-44bf-9aaf-6eae40442327","7684",ace5d3cc-dae4-434d-bf82-799d53a42273,"14600","{
+  ""object"": ""USER_OFFICES"",
+  ""providerState"": ""NY""
+}",hha
+"3e396330-4cc0-4843-a503-f2cb790348f3","123191",PROD:APP,Vendor,ef1abfbd-ea94-420a-9fc8-0cce79ed6a14,"377","1ffe0ce0-ccf2-4445-ab7a-005e22412c79","4569","{
+  ""object"": ""USER_OFFICES"",
+  ""providerState"": ""NY""
+}",hha
+"145b1fd9-a414-4f90-8863-7543a6fd1f0d","162642",PROD:APP,Vendor,"04420e21-98f3-4b72-a9bc-ae2f170f0d1a","997","61fbf83c-adab-47ab-aec1-8092d7c2c12f","997","{
+  ""object"": ""USER_OFFICES"",
+  ""providerState"": ""NY""
+}",hha
+"11d87a50-2763-4df6-aca7-22132d813614","197205",PROD:APP,Vendor,b6c934da-f64d-4043-86b4-ca533f38ef31,"686","8d960b9d-0d3a-401d-8f0d-c2b1319780e3","835","{
+  ""object"": ""USER_OFFICES"",
+  ""providerState"": ""NY""
+}",hha
+"7cf524e6-5e8d-497c-acd8-0ba0284fcf6b","183993",PROD:APP,Vendor,"1c2824ac-bb7c-4f7d-afa2-7bf25e04ca9f","337",b4b9c057-1cc8-4d45-801a-17b7800e9cdb,"11882","{
+  ""object"": ""USER_OFFICES"",
+  ""providerState"": ""NY""
+}",hha
+c41bf86a-d2da-4e83-b359-b054b4878456,"150632",PROD:APP,Vendor,b6c934da-f64d-4043-86b4-ca533f38ef31,"686","56aca539-f824-4a7c-a19b-26aa78343d46","5250","{
+  ""object"": ""USER_OFFICES"",
+  ""providerState"": ""NY""
+}",hha
+"2045c993-f0e2-4fb9-8d86-fbc331e5597c","201363",PROD:APP,Vendor,b6c934da-f64d-4043-86b4-ca533f38ef31,"686","105f759d-3790-4241-9b9a-7d3f635581b9","15174","{
+  ""object"": ""USER_OFFICES"",
+  ""providerState"": ""NY""
+}",hha
+a72e6f9a-03e8-4e0c-b733-cc09c5a5d7ac,"202109",PROD:APP,Vendor,"18e7dffc-89c7-4664-97b8-e13daa8340ff","8258",fce6966f-92ef-4f6f-869e-38b4269e5a29,"15795","{
+  ""object"": ""USER_OFFICES"",
+  ""providerState"": ""NY""
+}",hha
+"11d87a50-2763-4df6-aca7-22132d813614","197205",PROD:APP,Vendor,b6c934da-f64d-4043-86b4-ca533f38ef31,"686","25c9a69f-73ba-44d8-92a6-ef669cf952cc","5251","{
+  ""object"": ""USER_OFFICES"",
+  ""providerState"": ""NY""
+}",hha

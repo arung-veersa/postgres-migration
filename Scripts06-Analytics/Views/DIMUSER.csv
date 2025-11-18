@@ -1,0 +1,41 @@
+"User Id","Username","User Fullname","User Firstname","User Lastname","User Email Address","Is Support User","Vendor Type","Vendor Id","Application Vendor Id","Application User Id","Environment","Aggregator Database Name","Usage Tags","Source System"
+dd04cc26-aa79-406c-8629-a0df10eae9d5,SupYOIV,a b,a,b,a@a.com,true,Vendor,cc1c2676-7b81-46ed-a441-6d521421ff06,"8275","202520",PROD:APP,,"{
+  ""object"": ""USER"",
+  ""providerState"": ""NY""
+}",hha
+"67c6736f-749f-471c-90a4-c5da2cee0d8f",sclemons@omnistaffingnys.com,Sabrina Clemons,Sabrina,Clemons,sclemons@omnistaffingnys.com,false,Vendor,c3faadc2-5d1f-42af-8713-14a612b093d0,"197","202562",PROD:APP,,"{
+  ""object"": ""USER"",
+  ""providerState"": ""NY""
+}",hha
+d42e2c9f-1ce5-4bca-b219-d9a7fef810d2,adrianaricci,Adriana Ricci,Adriana,Ricci,adriana@unicareny.com,false,Vendor,"0b6e7b7e-3e6c-422d-925d-1850808362b9","1645","202539",PROD:APP,,"{
+  ""object"": ""USER"",
+  ""providerState"": ""NY""
+}",hha
+e606f8a7-83c9-4f48-99f0-c48b82ee8e22,kcarter@ambercourtal.com,Keyla Carter,Keyla,Carter,kcarter@ambercourtal.com,false,Vendor,"288db73f-a4b0-4ef7-9357-edee21e835f6","8176","202553",PROD:APP,,"{
+  ""object"": ""USER"",
+  ""providerState"": ""NY""
+}",hha
+"175be8ca-20d7-4159-bbf7-a7e8d18b34d7",EvelynGonzalez,Evelyn Gonzalez,Evelyn,Gonzalez,EvelynG@communitycarehhs.com,false,Vendor,"116b4760-fb11-4082-ae56-e9ee961ad338","376","202555",PROD:APP,,"{
+  ""object"": ""USER"",
+  ""providerState"": ""NY""
+}",hha
+"191ecc6c-3183-4d7c-b051-63dd5d187dcf",EvvAPIUser (YOIV)-Provider,"",,,,true,Vendor,cc1c2676-7b81-46ed-a441-6d521421ff06,"8275",-49259,PROD:APP,,"{
+  ""object"": ""USER"",
+  ""providerState"": ""NY""
+}",hha
+"064ff3fe-c556-42be-a3cf-88c4eba9edcd",keagosto23,Keysha Rivera Agosto,Keysha,Rivera Agosto,kagosto@chcany.org,false,Vendor,"11ab5f59-45a6-4f29-9eb9-ce96d2435557","8159","202545",PROD:APP,,"{
+  ""object"": ""USER"",
+  ""providerState"": ""NY""
+}",hha
+"48fa4877-ea5e-43d9-a6e5-720785b29aeb",LeBaez@friendsfamilyhomecare.com,Lesly Baez ,Lesly,Baez ,LeBaez@friendsfamilyhomecare.com,false,Vendor,c54ece3d-a3a5-47da-9776-c15f73057940,"508","202569",PROD:APP,,"{
+  ""object"": ""USER"",
+  ""providerState"": ""NY""
+}",hha
+"381cad45-8a3f-4158-82b5-343ad61805f8",dianaperez,Diana Perez,Diana,Perez,dianap@care365.care,false,Vendor,"075a6819-3bcf-4f62-8a49-647ce7d2f026","4341","202556",PROD:APP,,"{
+  ""object"": ""USER"",
+  ""providerState"": ""NY""
+}",hha
+e0e72a42-e85e-4743-9a28-db305e0c2c08,AGuseva,Anna Guseva,Anna,Guseva,ann365672@gmail.com,false,Vendor,"500e627e-19b7-45ea-9818-75fa62d2af2d","4504","202691",PROD:APP,,"{
+  ""object"": ""USER"",
+  ""providerState"": ""NY""
+}",hha

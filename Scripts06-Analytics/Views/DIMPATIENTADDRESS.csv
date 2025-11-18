@@ -1,0 +1,51 @@
+"Patient Address Id","Application Patient Address Id","Environment","Updated Timestamp","Application Created UTC Timestamp","Application Updated UTC Timestamp","Address Type","Address Line 1","Address Line 2","City","Address State","Zip Code","County","Address Cross Street","Primary Address","Latitude","Longitude","Address Notes","Is Using Google API","Payer Id","Application Payer Id","Provider Id","Application Provider Id","Patient Id","Application Patient Id","Usage Tags","Source System"
+"8de5d79d-6194-44f7-bf34-2aaee7a00832",24186662,PROD:APP,2025-11-17 03:18:46.532 +0530,2025-11-17 08:17:38.367,2025-11-17 08:17:38.813,"Billing, GPS","1605 DR MARTIN L KIN BLVD APT 5A","",BRONX,NY,"10453",Bronx,"",true,40.814981,-73.958052,"",true,a511c981-6cc5-4e57-9692-9b473e314f02,2568,,,b4eae04c-76d7-483d-9780-3447eafe0119,24519159,"{
+  ""object"": ""PATIENT_ADDRESS"",
+  ""payerState"": ""NY"",
+  ""providerState"": ""<NULL>""
+}",hha
+e3b56bd2-5d79-4053-b618-a21fe6ddbc88,24186340,PROD:APP,2025-11-16 19:17:23.904 +0530,2025-11-17 00:16:28.227,2025-11-17 00:16:28.503,"Billing, GPS","10 RIVER RD APT 7E .","",ROOSEVELT ISLAND,NY,"10044",New York,"",true,40.764814,-73.947387,"",true,a511c981-6cc5-4e57-9692-9b473e314f02,2568,,,"56dd6e89-8603-45b8-86dd-f11b1e04365f",24518837,"{
+  ""object"": ""PATIENT_ADDRESS"",
+  ""payerState"": ""NY"",
+  ""providerState"": ""<NULL>""
+}",hha
+fe76d729-95e1-4ab4-b821-e1aa33c0ff5c,24186771,PROD:APP,2025-11-17 06:25:56.228 +0530,2025-11-17 11:25:43.110,2025-11-17 11:25:43.533,"Billing, GPS","61-40 FRESH MEADOW LANE","",FRESH MEADOWS,NY,"11365",Queens,"",true,40.736864,-73.795633,"",true,"57d8a951-68f7-4f3e-a63a-ed4c8f1cca04",890,,,"3fba66ac-1d30-4ed6-8c66-040740e42ca3",24519264,"{
+  ""object"": ""PATIENT_ADDRESS"",
+  ""payerState"": ""NY"",
+  ""providerState"": ""<NULL>""
+}",hha
+"0b9743d8-ac3c-4269-95fa-0bfd9b99a469",24186359,PROD:APP,2025-11-16 21:05:43.651 +0530,2025-11-17 02:01:29.657,2025-11-17 02:01:30.043,"Billing, GPS, Home","348 SUMPTER ST APT 1C","",BROOKLYN,NY,"11233-2546",Kings,"",true,40.680921,-73.910087,"",true,"6cc68070-ebcc-44bf-a8b6-9476c030c9a9",56952,,,"17ac1103-2a00-4a9c-89ad-aacaadda8bc4",24518856,"{
+  ""object"": ""PATIENT_ADDRESS"",
+  ""payerState"": ""NY"",
+  ""providerState"": ""<NULL>""
+}",hha
+e77ded60-5c47-4daf-9cc6-6a02351a607a,24186631,PROD:APP,2025-11-17 03:17:48.692 +0530,2025-11-17 08:16:25.730,2025-11-17 08:16:26.247,"Billing, GPS","2121 CEDAR AVE APT 7A","",BRONX,NY,"10468",Bronx,"",true,40.860712,-73.913562,"",true,a511c981-6cc5-4e57-9692-9b473e314f02,2568,,,"1ca95d97-b55d-46ba-a724-c72ec045b7ec",24519128,"{
+  ""object"": ""PATIENT_ADDRESS"",
+  ""payerState"": ""NY"",
+  ""providerState"": ""<NULL>""
+}",hha
+"86c2f4c6-3ba6-474a-a4bc-b0d78f95134d",24186825,PROD:APP,2025-11-17 07:02:00.292 +0530,2025-11-17 12:00:50.557,2025-11-17 12:00:50.963,"Billing, GPS","974 ANDERSON AVE APT 3R","",BRONX,NY,"10452-5618",Bronx,"",true,40.831789,-73.92724,"",true,"62666b6e-0120-4e02-814e-cf867aead047",4815,,,"8629e817-e400-4e1f-918c-2219eeb83294",24519318,"{
+  ""object"": ""PATIENT_ADDRESS"",
+  ""payerState"": ""NY"",
+  ""providerState"": ""<NULL>""
+}",hha
+"6bfa87e4-2bf6-407e-bf87-d22737777035",24186411,PROD:APP,2025-11-16 23:17:49.202 +0530,2025-11-17 04:16:38.070,2025-11-17 04:16:38.513,"Billing, GPS","227 AUDUBON AVENUE BSMT","",NEW YORK,NY,"100338314","","",true,40.845845,-73.934102,"",true,a511c981-6cc5-4e57-9692-9b473e314f02,2568,,,"76aae896-e25f-4902-86e0-c53dd9b2aca2",24518908,"{
+  ""object"": ""PATIENT_ADDRESS"",
+  ""payerState"": ""NY"",
+  ""providerState"": ""<NULL>""
+}",hha
+"657c68c7-63aa-4606-86a5-23cae14d3b74",24186337,PROD:APP,2025-11-16 18:58:55.812 +0530,2025-11-16 23:57:14.547,2025-11-16 23:57:15.370,"Billing, GPS","530 E LINCOLN AVE","",MOUNT VERNON,NY,"10552-3720",Westchester,"",true,40.917633,-73.820012,"",true,"7f9f74fd-295f-4830-895b-f41043474fc1",69279,,,"9e7964cb-a0cc-43af-9ea4-52331c8b7f0f",24518834,"{
+  ""object"": ""PATIENT_ADDRESS"",
+  ""payerState"": ""NY"",
+  ""providerState"": ""<NULL>""
+}",hha
+dc682b6d-5536-4578-a7d7-757c57bc976f,24186442,PROD:APP,2025-11-17 00:17:43.584 +0530,2025-11-17 05:16:24.793,2025-11-17 05:16:25.330,"Billing, GPS","820 FRONT ST APT 205B","",HEMPSTEAD,NY,"11550",Nassau,"",true,40.708759,-73.60174,"",true,a511c981-6cc5-4e57-9692-9b473e314f02,2568,,,f6e03481-d31c-4b93-b080-e93664580ec7,24518939,"{
+  ""object"": ""PATIENT_ADDRESS"",
+  ""payerState"": ""NY"",
+  ""providerState"": ""<NULL>""
+}",hha
+"611ea76c-fdc5-42bb-9ef2-f2c802ef9cdf",24185946,PROD:APP,2025-11-16 14:32:21.657 +0530,2025-11-16 19:30:40.290,2025-11-16 19:30:41.380,"Billing,  GPS,  Home","148 HOLYOKE ST APT 8","",ROCHESTER,NY,"14615-1914",Monroe,"",true,43.207277,-77.653469,"",true,,,bea1c6fb-b43d-425a-b446-6ddac9996e0e,8048.00000,d8b2531c-a295-4060-afc8-61f2752fb67d,24518443,"{
+  ""object"": ""PATIENT_ADDRESS"",
+  ""payerState"": ""<NULL>"",
+  ""providerState"": ""NY""
+}",hha

@@ -1,0 +1,28 @@
+Column Name	#	Data Type	Length	Scale	Not Null	Auto Generated	Auto Increment	Default	Description
+Patient Address Id	1	VARCHAR	50	[NULL]	false	false	false	[NULL]	Patient Address Primary Key.
+Application Patient Address Id	2	NUMBER	38	[NULL]	false	false	false	[NULL]	Source system identifier for the patient address record.
+Environment	3	VARCHAR	50	[NULL]	false	false	false	[NULL]	Indicates the originating data environment, e.g., PROD-Sandata:EVV or HHA-Prod.
+Updated Timestamp	4	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	Timestamp of the most recent update to the patient address record from either HHA or EVV source.
+Application Created UTC Timestamp	5	TIMESTAMPLTZ	[NULL]	9	false	false	false	[NULL]	Timestamp when the patient address record was first created in its source application.
+Application Updated UTC Timestamp	6	TIMESTAMPLTZ	[NULL]	9	false	false	false	[NULL]	Timestamp when the patient address record was last updated in its source application.
+Address Type	7	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Type of address, such as HOME, WORK, or OTHER, as provided by the source system.
+Address Line 1	8	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	First line of the address (street number and name).
+Address Line 2	9	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Second line of the address, e.g., apartment, suite, or unit.
+City	10	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	City name of the patient address.
+Address State	11	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	State or region code of the patient address.
+Zip Code	12	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	ZIP or postal code associated with the patient address.
+County	13	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	County name associated with the address.
+Address Cross Street	14	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Cross street or intersection information, when available.
+Primary Address	15	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Boolean flag indicating whether this is the patient’s primary address on record.
+Latitude	16	DOUBLE	[NULL]	[NULL]	false	false	false	[NULL]	Latitude coordinate of the address.
+Longitude	17	DOUBLE	[NULL]	[NULL]	false	false	false	[NULL]	Longitude coordinate of the address.
+Address Notes	18	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Free-text notes or comments associated with the address record.
+Is Using Google API	19	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Indicates if the address coordinates were derived or validated using Google API services.
+Payer Id	20	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Payer identifier associated with the patient address.  Foreign Key to DimPayer.
+Application Payer Id	21	NUMBER	38	[NULL]	false	false	false	[NULL]	Original payer identifier from the source system.
+Provider Id	22	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Provider identifier associated with the patient address. Foreign key to DimProvider.
+Application Provider Id	23	NUMBER	38	5	false	false	false	[NULL]	Original provider identifier from the source application.
+Patient Id	24	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Patient Primary Key.  Foreign key to DimPatient.
+Application Patient Id	25	NUMBER	38	[NULL]	false	false	false	[NULL]	Original patient identifier from the source system.
+Usage Tags	26	VARIANT	[NULL]	[NULL]	false	false	false	[NULL]	Tags for system purposes
+Source System	27	VARCHAR	3	[NULL]	false	false	false	[NULL]	

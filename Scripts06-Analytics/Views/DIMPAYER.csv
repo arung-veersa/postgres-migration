@@ -1,0 +1,41 @@
+"Payer Id","Payer Name","Payer Initials","Is Active","Is Demo","Payer State","Unbilling Process","Initiative Names","Application Payer Id","Environment","Created Date Time","Unique Payer Id","Updated Datatimestamp","Usage Tags","Source System"
+a7dbc8e0-807b-47f0-9d9e-62fec4688943,CenterLight HealthCare (PACE),CLHC      ,true,false,NY,Update Export Flag,,"82604",PROD-APP2:AP2,2023-09-29 15:32:00.402 +0530,CenterLight HealthCare (PACE),2023-09-29 14:36:15.488 +0530,"{
+  ""object"": ""PAYER"",
+  ""payerState"": ""NY""
+}",hha
+"0268ae3a-7914-4c13-9eac-0284d6937c5f",Senior Whole Health,SWHA      ,true,true,NY,Update Export Flag,,"209972",PROD-AWS:CLO,2024-04-10 18:32:01.504 +0530,Senior Whole Health,2024-04-10 10:33:39.506 +0530,"{
+  ""object"": ""PAYER"",
+  ""payerState"": ""NY""
+}",hha
+a140f4bd-70fc-47a4-9962-131e10c081d7,UnitedHealthcare Community Plan of NY,UHHH      ,true,false,NY,Update Export Flag,,"73783",PROD-APP2:AP2,2023-05-15 11:15:23.420 +0530,UnitedHealthcare Community Plan of NY,2023-05-15 11:14:09.487 +0530,"{
+  ""object"": ""PAYER"",
+  ""payerState"": ""NY""
+}",hha
+"6130426d-bbc4-4e21-9e94-8b78b93ab2a9",HHAX QA APP Payer - II,HHQA      ,true,true,NY,Update Export Flag,,"42024",PROD-AWS:CLO,2023-01-23 11:30:20.092 +0530,HHAX QA APP Payer - II,2023-01-23 11:26:19.429 +0530,"{
+  ""object"": ""PAYER"",
+  ""payerState"": ""NY""
+}",hha
+"60127f2a-7d0c-4d76-9345-e71c60f68bac",VNS - Payer,VNSP      ,false,false,NY,,,"4088",PROD-AWS:CLO,2023-03-28 00:07:56.757 +0530,VNS - Payer,2025-05-30 23:19:22.120 +0530,"{
+  ""object"": ""PAYER"",
+  ""payerState"": ""NY""
+}",hha
+"70f3b62a-3795-42b6-8495-3917d7090899",Elderserve,Elde      ,false,false,NY,,,"2396",PROD-AWS:CLO,2023-03-28 00:07:56.757 +0530,Elderserve,2025-05-30 23:19:22.120 +0530,"{
+  ""object"": ""PAYER"",
+  ""payerState"": ""NY""
+}",hha
+"3996fe77-587b-4f19-b6bb-ca3ee3a80460",ROMA,"38BN      ",false,false,NY,Update Export Flag,"","66822",PROD:APP,2023-12-05 09:43:00.873 +0530,ROMA,2025-07-21 05:45:38.247 +0530,"{
+  ""object"": ""PAYER"",
+  ""payerState"": ""NY""
+}",hha
+"745e96b2-5bc1-427e-801e-ef786961d21d",GuildNet,GNET      ,false,false,NY,Update Export Flag,,"14911",PROD:APP,2023-03-28 00:07:23.281 +0530,GuildNet,2025-07-21 05:45:38.247 +0530,"{
+  ""object"": ""PAYER"",
+  ""payerState"": ""NY""
+}",hha
+"8d168360-2e63-49c2-a0a6-5ce7d66b0884",Do Not Use-MJH-FTC-Hourly,AB02      ,false,false,NY,,,"815",PROD:APP,2023-03-28 00:07:23.281 +0530,Do Not Use-MJH-FTC-Hourly,2025-07-21 05:45:38.247 +0530,"{
+  ""object"": ""PAYER"",
+  ""payerState"": ""NY""
+}",hha
+"8f43a1db-9323-4990-a3bd-9a75679db7be",Centers Plan MLTC,CPLN      ,false,false,NY,Update Export Flag,"","8496",PROD:APP,2023-03-28 00:07:23.281 +0530,Centers Plan MLTC,2025-07-21 05:45:38.247 +0530,"{
+  ""object"": ""PAYER"",
+  ""payerState"": ""NY""
+}",hha

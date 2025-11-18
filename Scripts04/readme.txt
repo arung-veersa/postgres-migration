@@ -1,0 +1,1 @@
+Conflict tables copy Python program from Snowflake to Postgres. Migration program driven by dynamic configuration.

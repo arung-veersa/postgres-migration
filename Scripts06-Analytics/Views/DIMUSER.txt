@@ -1,0 +1,16 @@
+Column Name	#	Data Type	Length	Scale	Not Null	Auto Generated	Auto Increment	Default	Description
+User Id	1	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	User Primary Key
+Username	2	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Derived name for User to make it unique. This is to enable external users access to Tableau dashboards and ultimately filter rows as part of the Tableau row-level security implementation
+User Fullname	3	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Full Name (calculated->"User Firstname"+"User Lastname")
+User Firstname	4	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	First Name
+User Lastname	5	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Last Name
+User Email Address	6	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Email Address
+Is Support User	7	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Is Support User
+Vendor Type	8	VARCHAR	50	[NULL]	false	false	false	[NULL]	Vendor Type - Payer or Provider
+Vendor Id	9	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Vendor Id. Payer Id or Provider Id depending on Vendor Type value. Foreign key (dimPayer."Payer Id" or dimProvider."Provider Id")
+Application Vendor Id	10	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Application User Id	11	VARCHAR	50	[NULL]	false	false	false	[NULL]	Primary Key in Source mssql DB. Note, due to loading data from multiple environments this field can't be used for filters and joins. Use "User Id" field to correctly identify the record
+Environment	12	VARCHAR	50	[NULL]	false	false	false	[NULL]	
+Aggregator Database Name	13	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	aggregator database name to which the aggregator usernames belong
+Usage Tags	14	VARIANT	[NULL]	[NULL]	false	false	false	[NULL]	Tags for system purposes
+Source System	15	VARCHAR	3	[NULL]	false	false	false	[NULL]	

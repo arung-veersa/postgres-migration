@@ -1,0 +1,41 @@
+"Caregiver Id","Application Caregiver Id","Environment","Caregiver Initials","Caregiver Fullname","Caregiver Firstname","Caregiver Middlename","Caregiver Lastname","Date of Birth","NPI","License Number","Caregiver Code","Alternate Code","SSN","Employment Type","Ethnicity","Hiring Status","Registry Checked Date","Registry Is Checked","Office Caregiver Code","State Registry Number","State Registered Date","Status","Primary Office Id","Primary Environment Office Id","Provider Id","Application Provider Id","Caregiver Team","Caregiver Branch","Caregiver Location","Created Date Time","Gender","Hire Date","Rehire Date","Terminated Date","Caregiver Name - ID","Unique Caregiver Id","Updated Datatimestamp","Usage Tags","Language 1","Language 2","Language 3","Language 4","Source System"
+"7f3c4104-7253-452d-82df-c36c07aa611d",193702,PROD:APP,SS,SONIA SOLANO,SONIA,"",SOLANO,1960-01-21 10:30:00.000 +0530,"","","16893","645065556","645-06-5556","HHA, HCSS",Hispanic,Employee,,,NYL-16893,,,Active,"38c8fdf9-b6f7-4ba6-a755-013d4d56758a","11876","1c2824ac-bb7c-4f7d-afa2-7bf25e04ca9f","337",,,"100 - MLTC - NYC",2025-02-14 05:49:16.965 +0530,Female,2007-07-20 09:30:00.000 +0530,,,SONIA SOLANO - 193702,SONIA/SOLANO/1960-01-21 00:00:00.000 -0500,2025-11-16 23:25:27.480 +0530,"{
+  ""object"": ""CAREGIVER"",
+  ""providerState"": ""NY""
+}",Spanish,,,,hha
+"8ca132d9-b290-42e2-81d9-4de4c3ca4eba",4269498,PROD:APP,PS,PATSY SEATON MURRAY,PATSY,DONNA,SEATON MURRAY,1973-01-22 10:30:00.000 +0530,"","","57925","","177-81-6136","HHA, HCSS",African American,Employee,,,NYL-57925,"1217284",,Active,"38c8fdf9-b6f7-4ba6-a755-013d4d56758a","11876","1c2824ac-bb7c-4f7d-afa2-7bf25e04ca9f","337",Manhattan Office,,"100 - MLTC - NYC",2025-02-14 05:49:16.965 +0530,Female,2024-12-20 10:30:00.000 +0530,,,PATSY SEATON MURRAY - 4269498,PATSY/SEATON MURRAY/1973-01-22 00:00:00.000 -0500,2025-11-16 23:25:28.587 +0530,"{
+  ""object"": ""CAREGIVER"",
+  ""providerState"": ""NY""
+}",English,,,,hha
+"5b9637bf-14a1-4fe5-a78a-b1661b2a32bc",4821153,PROD:APP,MB,Melvin Barnes,Melvin,"",Barnes,1991-11-02 10:30:00.000 +0530,"","","13296","","141-92-2891","PCA, HHA",African American,Employee,,,"007-13296",,,Active,"04f1b016-54f5-49c9-a31e-808f9635bae0","14606","72f6107e-a216-44bf-9aaf-6eae40442327","7684",,,,2025-09-23 06:02:27.236 +0530,Male,2025-09-29 09:30:00.000 +0530,,,Melvin Barnes - 4821153,Melvin/Barnes/1991-11-02 00:00:00.000 -0500,2025-11-16 07:22:26.287 +0530,"{
+  ""object"": ""CAREGIVER"",
+  ""providerState"": ""NY""
+}",English,,,,hha
+b226a82b-d353-43c4-b225-1439549d37f9,4038669,PROD:APP,LN,Lola Nurutdinova,Lola,"",Nurutdinova,1971-10-12 09:30:00.000 +0530,"","","10186","","758-41-4142",HHA,Caucasian,Employee,,,BNB-10186,"01012870",2024-06-07 09:30:00.000 +0530,Active,"94ec4c2f-a605-47c1-a77d-dd60d5fad794","304","70baffac-d232-4f84-8a2a-418fd8402797","304",Brooklyn Team,,,2025-02-14 05:49:16.965 +0530,Female,2024-06-25 09:30:00.000 +0530,,,Lola Nurutdinova - 4038669,Lola/Nurutdinova/1971-10-12 00:00:00.000 -0400,2025-11-16 06:36:22.113 +0530,"{
+  ""object"": ""CAREGIVER"",
+  ""providerState"": ""NY""
+}",Russian,,,,hha
+"94055099-f521-4b5e-b125-bc88ef58d615",4350748,PROD:APP,ZC,Zhou Chen,Zhou,"",Chen,1981-05-05 09:30:00.000 +0530,"","","1330","","337-43-2413","PCA, HHA",Asian,Employee,,,FMN-1330,"01184109",,Active,fc81f382-c19b-4845-ae89-012cf25f0e7c,"15312","7ecf2216-63a0-49e9-90af-e02f09829a65","8151",,LHCSA,,2025-02-26 06:04:38.514 +0530,Female,,,,Zhou Chen - 4350748,Zhou/Chen/1981-05-05 00:00:00.000 -0400,2025-11-16 07:16:10.097 +0530,"{
+  ""object"": ""CAREGIVER"",
+  ""providerState"": ""NY""
+}",,,,,hha
+"90c6a82b-81f2-4b22-a72c-a60250904f08",4350793,PROD:APP,YC,Ying Chen,Ying,"",Chen,1969-01-22 10:30:00.000 +0530,"","","1332","","793-18-0109","PCA, HHA",,Employee,,,FMN-1332,"790493",,Active,fc81f382-c19b-4845-ae89-012cf25f0e7c,"15312","7ecf2216-63a0-49e9-90af-e02f09829a65","8151",,,,2025-02-26 06:04:38.514 +0530,Female,,,,Ying Chen - 4350793,Ying/Chen/1969-01-22 00:00:00.000 -0500,2025-11-16 07:04:26.390 +0530,"{
+  ""object"": ""CAREGIVER"",
+  ""providerState"": ""NY""
+}",,,,,hha
+"25766084-1d46-468c-84aa-940099456d51",1527471,PROD:APP,FR,Francisca Ramirez,Francisca,"",Ramirez,1970-06-05 09:30:00.000 +0530,"","","16651","","852-89-9992","HHA, HCSS",Hispanic,Employee,,,AHS-16651,"731867",2019-02-20 10:30:00.000 +0530,Active,aac2c8df-5d30-4b18-8521-aa51597926ba,"296","7f3e50f5-fdb3-4720-aa41-544942c1c5e7","296",Katherine,Bronx,Bronx,2025-02-14 05:49:16.965 +0530,Female,2019-08-01 09:30:00.000 +0530,,,Francisca Ramirez - 1527471,Francisca/Ramirez/1970-06-05 00:00:00.000 -0400,2025-11-16 22:47:44.387 +0530,"{
+  ""object"": ""CAREGIVER"",
+  ""providerState"": ""NY""
+}",Spanish,,,,hha
+"9ace7f5c-30f1-494b-8f35-39c641c17b75",4435867,PROD:APP,MC,MARIA CARBALLO,MARIA,"",CARBALLO,1965-01-29 10:30:00.000 +0530,"","","11372","","114-90-2348","PCA, HHA",Hispanic,Employee,,,CPN-11372,"500744",,Active,"9e3f7cff-c003-4e4c-a7df-697c37e41fe9","1133",b5492758-352c-44ad-85d8-9801fc642f0e,"836",,CAREPRO OF NY- BROOKLYN,WOODSIDE,2025-04-11 06:03:53.588 +0530,Female,2021-10-26 09:30:00.000 +0530,,,MARIA CARBALLO - 4435867,MARIA/CARBALLO/1965-01-29 00:00:00.000 -0500,2025-11-16 22:25:31.350 +0530,"{
+  ""object"": ""CAREGIVER"",
+  ""providerState"": ""NY""
+}",Spanish,,,,hha
+ce2d1db2-521d-4af9-96c6-75703cf7d1b7,4372242,PROD:APP,SW,Suhong Wu,Suhong,"",Wu,1970-09-20 09:30:00.000 +0530,"","","56493","","807-41-1774",HHA,Asian,Employee,,,HSC-56493,"01268052",2025-03-12 09:30:00.000 +0530,Active,f052c5f5-896e-4b1e-b542-2a340cb168ac,"257",a2941f7f-ccbb-4391-8835-650972bc4649,"257",HHA / PCA,Sunset Park (Brooklyn),Melody A,2025-03-12 06:04:12.599 +0530,Female,2025-03-15 09:30:00.000 +0530,,,Suhong Wu - 4372242,Suhong/Wu/1970-09-20 00:00:00.000 -0400,2025-11-17 02:39:58.527 +0530,"{
+  ""object"": ""CAREGIVER"",
+  ""providerState"": ""NY""
+}",Cantonese,,,,hha
+"79100174-8967-4a1a-9417-6c924c6a901f",3992788,PROD:APP,NA,Nassim Fareeda Asrafalli Khan,Nassim Fareeda,"",Asrafalli Khan,1967-12-17 10:30:00.000 +0530,"","","4505","","117-90-9801","PCA, Other (Non Skilled)",African American,Employee,,,COT-4505,"1227796",2024-12-23 10:30:00.000 +0530,Active,fb2dc788-b399-4584-9ee0-66378b6f333a,"1754","19400650-fea5-46b7-a747-9cba00b97336","1031","100 Caregivers",LHCSA,,2025-02-14 05:49:16.965 +0530,Female,2024-04-24 09:30:00.000 +0530,,,Nassim Fareeda Asrafalli Khan - 3992788,Nassim Fareeda/Asrafalli Khan/1967-12-17 00:00:00.000 -0500,2025-11-17 02:08:37.390 +0530,"{
+  ""object"": ""CAREGIVER"",
+  ""providerState"": ""NY""
+}",English,,,,hha

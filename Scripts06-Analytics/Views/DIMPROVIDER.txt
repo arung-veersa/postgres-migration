@@ -1,0 +1,50 @@
+Column Name	#	Data Type	Length	Scale	Not Null	Auto Generated	Auto Increment	Default	Description
+Provider Id	1	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Provider Primary Key
+Application Provider Id	2	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Environment	3	VARCHAR	50	[NULL]	false	false	false	[NULL]	
+Environemnt	4	VARCHAR	50	[NULL]	false	false	false	[NULL]	
+Provider Name	5	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Name
+Provider Initial	6	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Initial
+Provider Code	7	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Code
+Live Date	8	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	Live Date
+NPI	9	VARCHAR	100	[NULL]	false	false	false	[NULL]	National Provider Identifier (NPI) **[Read more](https://www.cms.gov/Regulations-and-Guidance/Administrative-Simplification/NationalProvIdentStand)**
+Federal Tax Number	10	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Otherwise known as Employer Identification Number (EIN) **[Read more]( https://www.irs.gov/businesses/small-businesses-self-employed/employer-id-numbers/)**
+MPI Number	11	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	MPI Number
+Address Type	12	VARCHAR	20	[NULL]	false	false	false	[NULL]	Address Type
+Primary Address	13	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Is Primary Address
+Address Line 1	14	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address Line 1
+Address Line 2	15	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address Line 2
+Address County	16	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address County
+Address City	17	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address City
+Address State	18	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address State
+Address ZIP	19	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Address ZIP Code
+Address Latitude	20	DOUBLE	[NULL]	[NULL]	false	false	false	[NULL]	Address Latitude
+Address Longitude	21	DOUBLE	[NULL]	[NULL]	false	false	false	[NULL]	Address Longitude
+Phone Number 1	22	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Phone Number 1
+Phone Description 1	23	VARCHAR	20	[NULL]	false	false	false	[NULL]	Phone Description 1
+Phone Number 2	24	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Phone Number 2
+Phone Description 2	25	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Phone Description 2"
+Phone Number 3	26	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Phone Number 3
+Phone Description 3	27	VARCHAR	20	[NULL]	false	false	false	[NULL]	Phone Description 3
+Product Type	28	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Product Type
+Is Active	29	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Is Active
+Is Demo	30	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Is Demo
+Has Confirmed Visit	31	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Has Confirmed Visit
+Entry Type	32	VARCHAR	500	[NULL]	false	false	false	[NULL]	Entry Type
+Region Type	33	VARCHAR	500	[NULL]	false	false	false	[NULL]	
+General Type	34	VARCHAR	500	[NULL]	false	false	false	[NULL]	
+Platform Type	35	VARCHAR	500	[NULL]	false	false	false	[NULL]	
+HHAX Unique Id	36	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	HHAX Unique Id
+Provider Version	37	DOUBLE	[NULL]	[NULL]	false	false	false	[NULL]	Version
+Provider Minor Version	38	DOUBLE	[NULL]	[NULL]	false	false	false	[NULL]	Minor Version
+App Version Id	39	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	App Version Id
+Conflict Start Date	40	TIMESTAMPNTZ	[NULL]	9	false	false	false	[NULL]	
+Read Only	41	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	
+Using Conflict Report	42	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Using Conflict Report
+Display Time Format	43	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Provider Time Zone	44	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Is Third Party Provider	45	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Indicates whether this is a third party provider or not
+Unique Provider Id	46	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Updated Datatimestamp	47	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	
+Usage Tags	48	VARIANT	[NULL]	[NULL]	false	false	false	[NULL]	Tags for system purposes
+Source System	49	VARCHAR	3	[NULL]	false	false	false	[NULL]	

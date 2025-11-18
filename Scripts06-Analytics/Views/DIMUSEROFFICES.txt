@@ -1,0 +1,11 @@
+Column Name	#	Data Type	Length	Scale	Not Null	Auto Generated	Auto Increment	Default	Description
+User Id	1	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Application User Id	2	VARCHAR	50	[NULL]	false	false	false	[NULL]	
+Environment	3	VARCHAR	50	[NULL]	false	false	false	[NULL]	
+Vendor Type	4	VARCHAR	50	[NULL]	false	false	false	[NULL]	
+Vendor Id	5	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Application Vendor Id	6	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Office Id	7	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Application Office Id	8	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Usage Tags	9	VARIANT	[NULL]	[NULL]	false	false	false	[NULL]	
+Source System	10	VARCHAR	3	[NULL]	false	false	false	[NULL]	

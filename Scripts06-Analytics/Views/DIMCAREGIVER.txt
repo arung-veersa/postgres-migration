@@ -1,0 +1,45 @@
+Column Name	#	Data Type	Length	Scale	Not Null	Auto Generated	Auto Increment	Default	Description
+Caregiver Id	1	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Caregiver Primary Key
+Application Caregiver Id	2	NUMBER	38	[NULL]	false	false	false	[NULL]	
+Environment	3	VARCHAR	50	[NULL]	false	false	false	[NULL]	
+Caregiver Initials	4	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Initials
+Caregiver Fullname	5	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Full Name (calculated as "Caregiver Firstname"+"Caregiver Lastname")
+Caregiver Firstname	6	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	First Name
+Caregiver Middlename	7	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Middle Name
+Caregiver Lastname	8	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Last Name
+Date of Birth	9	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	Date of Birth
+NPI	10	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	National Provider Identifier (NPI) **[Read more](https://www.cms.gov/Regulations-and-Guidance/Administrative-Simplification/NationalProvIdentStand)**
+License Number	11	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	License Number
+Caregiver Code	12	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Caregiver Code
+Alternate Code	13	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Alternate Code
+SSN	14	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Social Security Number
+Employment Type	15	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Employment Type
+Ethnicity	16	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Ethnicity
+Hiring Status	17	VARCHAR	50	[NULL]	false	false	false	[NULL]	Hiring Status
+Registry Checked Date	18	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	Registry Checked Date
+Registry Is Checked	19	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Registry Is Checked
+Office Caregiver Code	20	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Office Caregiver Code
+State Registry Number	21	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	State Registry Number
+State Registered Date	22	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	State Registered Date
+Status	23	VARCHAR	500	[NULL]	false	false	false	[NULL]	Status
+Primary Office Id	24	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Primary Office Id. Foreign key (dimOffice."Office Id")
+Primary Environment Office Id	25	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Provider Id	26	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Provider Id. Foreign key (dimProvider."Provider Id")
+Application Provider Id	27	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Caregiver Team	28	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Caregiver Team
+Caregiver Branch	29	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Caregiver Branch
+Caregiver Location	30	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Caregiver Location
+Created Date Time	31	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	Created Date Time
+Gender	32	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Gender
+Hire Date	33	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	
+Rehire Date	34	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	
+Terminated Date	35	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	
+Caregiver Name - ID	36	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Caregiver Report Application Identifier for system purposes
+Unique Caregiver Id	37	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Updated Datatimestamp	38	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	
+Usage Tags	39	VARIANT	[NULL]	[NULL]	false	false	false	[NULL]	Tags for system purposes
+Language 1	40	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Language 2	41	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Language 3	42	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Language 4	43	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Source System	44	VARCHAR	3	[NULL]	false	false	false	[NULL]	

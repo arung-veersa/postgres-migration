@@ -1,0 +1,41 @@
+Column Name	#	Data Type	Length	Scale	Not Null	Auto Generated	Auto Increment	Default	Description
+Service Code Id	1	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Sevice Code Primary Key
+Application Service Code Id	2	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Environment	3	VARCHAR	50	[NULL]	false	false	false	[NULL]	
+Rate Type	4	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Rate Type
+Service Code	5	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Service Code
+Export Code	6	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Export Code
+Weekday Export Code	7	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Weekday Export Code
+Weekend Export Code	8	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Weekend Export Code
+Service Type	9	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Service Type
+Service Category	10	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Service Category
+Procedure Code	11	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Procedure Code
+Modifier 1	12	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Modifier 1
+Modifier 2	13	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Modifier 2
+Modifier 3	14	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Modifier 3
+Modifier 4	15	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Modifier 4
+Modifier Description	16	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Modifier Description
+Bypass Prebilling Validation	17	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Bypass Prebilling Validation
+Bypass Billing Review Validation	18	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	Bypass Billing Review Validation
+PA Mandated	19	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	PA Mandated
+Vendor Type	20	VARCHAR	20	[NULL]	false	false	false	[NULL]	Vendor Type - Payer or Provider
+Used Export Code	21	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Vendor Id	22	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	Vendor Id. Payer Id or Provider Id depending on Vendor Type value. Foreign key (dimPayer."Payer Id" or dimProvider."Provider Id")
+Application Vendor Id	23	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Provider Id	24	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Application Provider Id	25	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Payer Id	26	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Application Payer Id	27	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Office Id	28	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Application Office Id	29	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Contract Id	30	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Application Contract Id	31	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Discipline	32	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Discipline Id	33	NUMBER	38	[NULL]	false	false	false	[NULL]	
+Discipline Type	34	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+No Auth Required for Billing Flag	35	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	
+Unique Service Code Id	36	VARCHAR	16777216	[NULL]	false	false	false	[NULL]	
+Updated Datatimestamp	37	TIMESTAMPTZ	[NULL]	9	false	false	false	[NULL]	
+Is Active	38	BOOLEAN	[NULL]	[NULL]	false	false	false	[NULL]	
+Usage Tags	39	VARIANT	[NULL]	[NULL]	false	false	false	[NULL]	Tags for system purposes
+Source System	40	VARCHAR	3	[NULL]	false	false	false	[NULL]	

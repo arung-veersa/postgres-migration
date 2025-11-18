@@ -1,0 +1,172 @@
+{
+  "snowflake": {
+      "user": "${SNOWFLAKE_USER}",
+      "account": "${SNOWFLAKE_ACCOUNT}",
+      "warehouse": "${SNOWFLAKE_WAREHOUSE}",
+      "database": "${SNOWFLAKE_DATABASE}",
+      "schema": "${SNOWFLAKE_SCHEMA}",
+      "port": "${SNOWFLAKE_PORT}",
+      "authenticator": "${SNOWFLAKE_AUTHENTICATOR}",
+      "auth_method": "${SNOWFLAKE_AUTH_METHOD}",
+      "rsa_key": "${SNOWFLAKE_RSA_KEY}"
+    },
+    "postgres": {
+      "host": "${POSTGRES_HOST}",
+      "port": "${POSTGRES_PORT}",
+      "database": "${POSTGRES_DB}",
+      "user": "${POSTGRES_USER}",
+      "password": "${POSTGRES_PASSWORD}",
+      "schema": "${POSTGRES_SCHEMA}"
+    },
+  "max_parallel_jobs": 2,
+  "tables": [
+    {
+      "source_view": "DIMPAYER",
+      "target_table": "dimpayer",
+      "load_type": "incremental",
+      "watermark_column": "Updated Datatimestamp",
+      "incremental_days_back": 30,
+      "source_where_clause": "\"Is Active\" = TRUE AND \"Is Demo\" = FALSE AND \"Source System\" = 'hha'",
+      "perform_deletes": false,
+      "batch_size": 10000
+    },
+    {
+      "source_view": "DIMUSER",
+      "target_table": "dimuser",
+      "load_type": "full",
+      "source_where_clause": "\"Source System\" = 'hha' AND \"Is Support User\" = FALSE AND \"Vendor Type\" = 'Payer' AND \"Username\" IS NOT NULL",
+      "perform_deletes": false,
+      "batch_size": 10000
+    },
+    {
+      "source_view": "DIMPATIENTADDRESS",
+      "target_table": "dimpatientaddress",
+      "load_type": "incremental",
+      "source_watermark_column": "Updated Timestamp",
+      "target_watermark_column": "Updated Datatimestamp",
+      "incremental_days_back": 1000,
+      "source_where_clause": "\"Source System\" = 'hha' AND \"Is Using Google API\" = TRUE AND \"County\" = 'ROCKLAND'",
+      "perform_deletes": false,
+      "batch_size": 10000
+    },
+    {
+      "source_view": "DIMPATIENT",
+      "target_table": "dimpatient",
+      "load_type": "incremental",
+      "watermark_column": "Updated Datatimestamp",
+      "incremental_days_back": 30,
+      "source_where_clause": "\"Has Visit\" = TRUE AND \"Status\" = 'Active' AND \"Source System\" = 'hha' AND \"Is Authorized\" = TRUE AND \"Is Payer Created Patient\" = TRUE",
+      "perform_deletes": false,
+      "batch_size": 10000
+    },
+    {
+      "source_view": "DIMCAREGIVER",
+      "target_table": "dimcaregiver",
+      "load_type": "incremental",
+      "watermark_column": "Updated Datatimestamp",
+      "incremental_days_back": 30,
+      "source_where_clause": "\"Registry Is Checked\" = TRUE AND \"Source System\" = 'hha'",
+      "perform_deletes": false,
+      "batch_size": 10000
+    },
+    {
+      "source_view": "DIMCONTRACT",
+      "target_table": "dimcontract",
+      "load_type": "incremental",
+      "watermark_column": "Updated Datatimestamp",
+      "incremental_days_back": 30,
+      "source_where_clause": "\"Source System\" = 'hha'",
+      "perform_deletes": false,
+      "batch_size": 10000
+    },
+    {
+      "source_view": "DIMOFFICE",
+      "target_table": "dimoffice",
+      "load_type": "incremental",
+      "watermark_column": "Updated Datatimestamp",
+      "incremental_days_back": 30,
+      "source_where_clause": "\"Source System\" = 'hha'",
+      "perform_deletes": false,
+      "batch_size": 10000
+    },
+    {
+      "source_view": "DIMPAYERPROVIDER",
+      "target_table": "dimpayerprovider",
+      "load_type": "full",
+      "source_where_clause": "",
+      "perform_deletes": false,
+      "batch_size": 10000
+    },
+    {
+      "source_view": "DIMPROVIDER",
+      "target_table": "dimprovider",
+      "load_type": "incremental",
+      "watermark_column": "Updated Datatimestamp",
+      "incremental_days_back": 30,
+      "source_where_clause": "\"Source System\" = 'hha'",
+      "perform_deletes": false,
+      "batch_size": 10000
+    },
+    {
+      "source_view": "DIMSERVICECODE",
+      "target_table": "dimservicecode",
+      "load_type": "incremental",
+      "watermark_column": "Updated Datatimestamp",
+      "incremental_days_back": 30,
+      "source_where_clause": "\"Source System\" = 'hha'",
+      "perform_deletes": false,
+      "batch_size": 10000
+    },
+    {
+      "source_view": "DIMUSEROFFICES",
+      "target_table": "dimuseroffices",
+      "load_type": "full",
+      "source_where_clause": "\"Source System\" = 'hha' AND \"Office Id\" IS NOT NULL",
+      "perform_deletes": false,
+      "batch_size": 10000
+    },
+    {
+      "source_view": "FACTCAREGIVERABSENCE",
+      "target_table": "factcaregiverabsence",
+      "load_type": "incremental",
+      "source_watermark_column": "Updated Date",
+      "target_watermark_column": "Updated Datatimestamp",
+      "incremental_days_back": 30,
+      "source_where_clause": "\"Active\" = TRUE AND \"Source System\" = 'hha'",
+      "perform_deletes": false,
+      "batch_size": 10000
+    },
+    {
+      "source_view": "FACTCAREGIVERINSERVICE",
+      "target_table": "factcaregiverinservice",
+      "load_type": "incremental",
+      "source_watermark_column": "Updated Date",
+      "target_watermark_column": "Updated Datatimestamp",
+      "incremental_days_back": 30,
+      "source_where_clause": "\"Source System\" = 'hha'",
+      "perform_deletes": false,
+      "batch_size": 10000
+    },
+    {
+      "source_view": "FACTVISITCALLPERFORMANCE_CR",
+      "target_table": "factvisitcallperformance_cr",
+      "load_type": "incremental",
+      "watermark_column": "Visit Updated Timestamp",
+      "incremental_days_back": 30,
+      "source_where_clause": "\"Payer Id\" = '042cb099-168b-4717-9bd0-936848b4fab1'",
+      "perform_deletes": false,
+      "batch_size": 10000
+    },
+    {
+      "source_view": "FACTVISITCALLPERFORMANCE_DELETED_CR",
+      "target_table": "factvisitcallperformance_deleted_cr",
+      "load_type": "incremental",
+      "watermark_column": "Visit Updated Timestamp",
+      "incremental_days_back": 30,
+      "source_where_clause": "\"Payer Id\" = '042cb099-168b-4717-9bd0-936848b4fab1'",
+      "perform_deletes": false,
+      "batch_size": 10000
+    }
+  ]
+}
+
