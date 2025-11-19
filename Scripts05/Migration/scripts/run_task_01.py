@@ -6,8 +6,8 @@ Usage:
 
 This script:
 1. Validates configuration
-2. Tests database connections
-3. Executes TASK_01
+2. Tests Postgres connection
+3. Executes TASK_01 (SQL-based)
 4. Reports results
 """
 
@@ -18,8 +18,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from config.settings import SNOWFLAKE_CONFIG, POSTGRES_CONFIG, validate_config
-from src.connectors.snowflake_connector import SnowflakeConnector
+from config.settings import POSTGRES_CONFIG, validate_config
 from src.connectors.postgres_connector import PostgresConnector
 from src.tasks.task_01_copy_to_temp import Task01CopyToTemp
 from src.utils.logger import get_logger
@@ -42,44 +41,38 @@ def main():
         logger.error(f"Configuration error: {e}")
         return 1
     
-    # Step 2: Initialize connectors
-    logger.info("Step 2: Initializing database connectors...")
+    # Step 2: Initialize Postgres connector
+    logger.info("Step 2: Initializing Postgres connector...")
     try:
-        sf_connector = SnowflakeConnector(**SNOWFLAKE_CONFIG)
         pg_connector = PostgresConnector(**POSTGRES_CONFIG)
-        logger.info("Connectors initialized")
+        logger.info(f"Connected to Postgres: {POSTGRES_CONFIG['database']}")
     except Exception as e:
-        logger.error(f"Failed to initialize connectors: {e}")
+        logger.error(f"Failed to initialize connector: {e}")
         return 1
     
-    # Step 3: Test connections
-    logger.info("Step 3: Testing database connections...")
+    # Step 3: Test Postgres connection
+    logger.info("Step 3: Testing Postgres connection...")
     
-    sf_ok = sf_connector.test_connection()
     pg_ok = pg_connector.test_connection()
     
-    if not sf_ok or not pg_ok:
-        logger.error("Connection tests failed")
+    if not pg_ok:
+        logger.error("Postgres connection test failed")
         return 1
     
-    logger.info("All connections successful")
+    logger.info("Postgres connection successful")
     
     # Step 4: Execute TASK_01
     logger.info("Step 4: Executing TASK_01...")
     try:
-        task = Task01CopyToTemp(sf_connector, pg_connector)
+        task = Task01CopyToTemp(pg_connector)
         result = task.run()
         
         if result['status'] == 'success':
             logger.info("=" * 60)
             logger.info(f"TASK_01 completed successfully")
             logger.info(f"Duration: {result['duration_seconds']:.2f} seconds")
+            logger.info(f"Total rows affected: {result['result']['affected_rows']}")
             logger.info("=" * 60)
-            
-            # Log results
-            logger.info(f"  Payer-provider reminders inserted: {result['result']['payer_provider_reminders']['inserted']}")
-            logger.info(f"  Payer-provider reminders updated: {result['result']['payer_provider_reminders']['updated']}")
-            logger.info(f"  Temp table rows: {result['result']['temp_table_rows']}")
             
             return 0
         else:

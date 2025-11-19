@@ -4,12 +4,8 @@ pandas
 numpy
 
 # Database Connectors
-snowflake-connector-python
 psycopg2-binary
 sqlalchemy
-
-# Data Processing
-pyarrow
 
 # Utilities
 python-dateutil==2.8.2

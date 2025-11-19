@@ -65,6 +65,7 @@ DROP TABLE IF EXISTS dimpatientaddress;
 CREATE TABLE dimpatientaddress (
     "Patient Address Id" VARCHAR(50) PRIMARY KEY,
     "Application Patient Address Id" NUMERIC(38,0),
+    "Patient Id" VARCHAR(50),
     "Application Patient Id" NUMERIC(38,0),
     "Address Type" VARCHAR(50),
     "Address Line 1" VARCHAR(500),

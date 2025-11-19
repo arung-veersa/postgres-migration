@@ -16,13 +16,10 @@ logger = get_logger(__name__)
 
 
 class PostgresConnector:
-    """
-    Manages Postgres connections with transaction support.
-    Read/Write access to ConflictReport database.
-    """
+    """Manages connection to the Postgres database."""
     
-    def __init__(self, host: str, port: int, database: str,
-                 user: str, password: str, schema: str):
+    def __init__(self, host: str, port: int, database: str, 
+                 user: str, password: str, schema: Optional[str] = None):
         """
         Initialize Postgres connector.
         
@@ -34,53 +31,54 @@ class PostgresConnector:
             password: Password
             schema: Database schema
         """
+        self.logger = get_logger(__name__)
         self.config = {
             'host': host,
             'port': port,
-            'database': database,
+            'dbname': database,
             'user': user,
-            'password': password,
-            'options': f'-c search_path={schema}'
+            'password': password
         }
         self.schema = schema
+        self.conn = None
         
-        logger.info(
-            f"Postgres connector initialized: "
-            f"{database} @ {host}:{port} (Schema: {schema})"
+        self.logger.info(
+            f"Postgres connector initialized for db '{database}'"
         )
+        if self.schema:
+            self.logger.info(f"Default schema: '{self.schema}'")
     
     @contextmanager
-    def get_connection(self, autocommit: bool = False):
+    def get_connection(self):
         """
         Context manager for Postgres connection.
         
         Args:
             autocommit: If True, enable autocommit mode
         """
-        conn = None
         try:
-            logger.debug("Opening Postgres connection")
-            conn = psycopg2.connect(**self.config)
-            
-            if autocommit:
-                conn.autocommit = True
-            
-            yield conn
-            
-            if not autocommit:
-                conn.commit()
-                logger.debug("Transaction committed")
-                
+            self.logger.debug("Opening Postgres connection")
+            self.conn = psycopg2.connect(**self.config)
+
+            # If a default schema is set, apply it for the session
+            if self.schema:
+                with self.conn.cursor() as cur:
+                    cur.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(self.schema)))
+
+            yield self.conn
+            self.conn.commit()
+            self.logger.debug("Transaction committed")
+
         except Exception as e:
-            if conn and not autocommit:
-                conn.rollback()
-                logger.warning("Transaction rolled back")
-            logger.error(f"Postgres error: {str(e)}")
+            if self.conn:
+                self.conn.rollback()
+                self.logger.warning("Transaction rolled back due to error.")
+            self.logger.error(f"Postgres error: {str(e)}")
             raise
         finally:
-            if conn:
-                conn.close()
-                logger.debug("Postgres connection closed")
+            if self.conn:
+                self.conn.close()
+                self.logger.debug("Postgres connection closed")
     
     def execute(self, query: str, 
                 params: Optional[Dict[str, Any]] = None) -> int:
@@ -96,15 +94,18 @@ class PostgresConnector:
         """
         # Avoid converting composed SQL using a live connection just for logging
         if isinstance(query, sql.Composed):
-            logger.debug("Executing composed SQL (logging omitted)")
+            self.logger.debug("Executing composed SQL (logging omitted)")
         else:
-            logger.debug(f"Executing: {str(query)[:100]}...")
+            self.logger.debug(f"Executing: {str(query)[:100]}...")
         
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
-                cursor.execute(query, params or {})
+                if params:
+                    cursor.execute(query, params)
+                else:
+                    cursor.execute(query)
                 rowcount = cursor.rowcount
-                logger.info(f"Query affected {rowcount} rows")
+                self.logger.info(f"Query affected {rowcount} rows")
                 return rowcount
     
     def fetch_dataframe(self, query: Any,
@@ -120,9 +121,9 @@ class PostgresConnector:
             DataFrame with results
         """
         if isinstance(query, sql.Composed):
-            logger.debug("Fetching DataFrame for composed SQL (logging omitted)")
+            self.logger.debug("Fetching DataFrame for composed SQL (logging omitted)")
         else:
-            logger.debug(f"Fetching DataFrame: {str(query)[:150]}...")
+            self.logger.debug(f"Fetching DataFrame: {str(query)[:150]}...")
         
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
@@ -145,10 +146,10 @@ class PostgresConnector:
             Number of rows inserted
         """
         if df.empty:
-            logger.warning(f"Empty DataFrame for {self.schema}.{table_name}")
+            self.logger.warning(f"Empty DataFrame for {self.schema}.{table_name}")
             return 0
         
-        logger.info(
+        self.logger.info(
             f"Bulk inserting {len(df)} rows to {self.schema}.{table_name}"
         )
         
@@ -169,7 +170,7 @@ class PostgresConnector:
                 chunksize=5000
             )
             
-            logger.info(f"Inserted {len(df)} rows")
+            self.logger.info(f"Inserted {len(df)} rows")
             return len(df)
     
     def truncate_table(self, table_name: str) -> None:
@@ -179,7 +180,7 @@ class PostgresConnector:
         Args:
             table_name: Table to truncate
         """
-        logger.info(f"Truncating {self.schema}.{table_name}")
+        self.logger.info(f"Truncating {self.schema}.{table_name}")
         
         query = sql.SQL('TRUNCATE TABLE {}.{}').format(
             sql.Identifier(self.schema),
@@ -239,9 +240,9 @@ class PostgresConnector:
                 cursor.execute("SELECT 1")
                 cursor.fetchone()
                 cursor.close()
-                logger.info("Postgres connection successful")
+                self.logger.info("Postgres connection successful")
                 return True
         except Exception as e:
-            logger.error(f"Postgres connection failed: {str(e)}")
+            self.logger.error(f"Postgres connection failed: {str(e)}")
             return False
 
