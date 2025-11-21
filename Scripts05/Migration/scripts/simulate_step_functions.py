@@ -74,7 +74,7 @@ class StepFunctionsSimulator:
     def _print_state_result(self, state_name: str, success: bool, duration: float, 
                            details: Dict[str, Any] = None):
         """Print state execution result."""
-        status_icon = "✅" if success else "❌"
+        status_icon = "[OK]" if success else "[FAIL]"
         status_text = "SUCCEEDED" if success else "FAILED"
         
         print(f"{status_icon} {status_text} in {duration:.2f}s")
@@ -246,16 +246,16 @@ class StepFunctionsSimulator:
         print()
         print("=" * 70)
         if failed:
-            print("❌ PIPELINE EXECUTION FAILED")
+            print("[FAIL] PIPELINE EXECUTION FAILED")
         else:
-            print("✅ PIPELINE EXECUTION COMPLETED SUCCESSFULLY")
+            print("[SUCCESS] PIPELINE EXECUTION COMPLETED SUCCESSFULLY")
         print("=" * 70)
         
         # State-by-state summary
         print("\nState Summary:")
         print("-" * 70)
         for i, state in enumerate(self.results, 1):
-            status_icon = "✅" if state['status'] == 'SUCCEEDED' else "❌"
+            status_icon = "[OK]" if state['status'] == 'SUCCEEDED' else "[FAIL]"
             duration_min = state['duration'] / 60
             print(f"{i}. {state['state']:<20} {status_icon} {state['status']:<12} "
                   f"{state['duration']:>7.2f}s ({duration_min:>5.2f} min)")
@@ -268,24 +268,24 @@ class StepFunctionsSimulator:
         
         # Lambda timeout analysis
         if not failed:
-            print("\n🔍 Lambda Timeout Analysis:")
+            print("\n[TIMEOUT ANALYSIS] Lambda Timeout Analysis:")
             print("-" * 70)
             
             lambda_timeout = 900  # 15 minutes
             lambda_safe_zone = 720  # 12 minutes
             
             if total_duration > lambda_timeout:
-                print("⚠️  CRITICAL: Duration EXCEEDS Lambda 15-minute timeout!")
+                print("[CRITICAL] Duration EXCEEDS Lambda 15-minute timeout!")
                 print("   Action Required: Implement chunking for Task 02")
                 print(f"   Exceeded by: {(total_duration - lambda_timeout):.0f}s "
                       f"({(total_duration - lambda_timeout)/60:.1f} min)")
             elif total_duration > lambda_safe_zone:
-                print("⚠️  WARNING: Duration is close to Lambda timeout")
+                print("[WARNING] Duration is close to Lambda timeout")
                 print("   Recommendation: Monitor production executions closely")
                 print(f"   Buffer remaining: {(lambda_timeout - total_duration):.0f}s "
                       f"({(lambda_timeout - total_duration)/60:.1f} min)")
             else:
-                print("✅ Duration is safely within Lambda 15-minute timeout")
+                print("[OK] Duration is safely within Lambda 15-minute timeout")
                 print(f"   Buffer remaining: {(lambda_timeout - total_duration):.0f}s "
                       f"({(lambda_timeout - total_duration)/60:.1f} min)")
             
