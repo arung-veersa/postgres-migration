@@ -2,17 +2,28 @@
 __pycache__/
 *.py[cod]
 *.pyo
+*$py.class
+*.so
+.Python
 
 # Virtual environments
 venv/
+env/
+ENV/
+.venv
+
+# Environment files
 .env
 .env.*
+.env.local
 
 # Coverage and test artifacts
 .coverage
 coverage.xml
 coverage.json
 htmlcov/
+*.cover
+.hypothesis/
 .pytest_cache/
 
 # Logs
@@ -26,51 +37,26 @@ dist/
 .mypy_cache/
 .cache/
 
+# Deployment artifacts
+deploy/package/
+deploy/package_*/
+deploy/psycopg2_layer/
+deploy/*.zip
+deploy/requirements_*.txt
+
 # OS/editor
 .DS_Store
 Thumbs.db
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-venv/
-env/
-ENV/
-.venv
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-*.cover
-.hypothesis/
-
-# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# Environment
-.env
-.env.local
-
-# Logs
-logs/
-*.log
-
 # Data
 data/
 *.csv
 *.parquet
-
-# OS
-.DS_Store
-Thumbs.db
 
 # Temporary
 temp/

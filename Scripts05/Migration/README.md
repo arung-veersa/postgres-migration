@@ -1,102 +1,72 @@
 # Conflict Report Pipeline Migration
 
 ## Overview
-Python-based migration of Snowflake SQL procedures to a modern, maintainable ETL pipeline.
-
-## Project Structure
-```
-Migration/
-├── config/                     # Configuration files
-├── src/                        # Source code
-│   ├── connectors/            # Database connections
-│   ├── tasks/                 # Task implementations
-│   ├── loaders/               # Data loaders
-│   └── utils/                 # Utilities
-├── tests/                     # Test suite
-├── scripts/                   # Standalone scripts
-└── docs/                      # Documentation
-```
+Production-ready AWS Lambda-based ETL pipeline for migrating Snowflake SQL procedures to PostgreSQL with connection testing.
 
 ## Quick Start
 
-### 🪟 **Windows Users** → See [`WINDOWS_SETUP.md`](WINDOWS_SETUP.md) for detailed setup!
-
 ### 1. Setup Environment
-
-**Windows (PowerShell):**
 ```powershell
 cd Scripts05\Migration
-py -3 -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-**Linux/Mac:**
-```bash
-cd Scripts05/Migration
-python3 -m venv venv
-source venv/bin/activate
+python -m venv venv
+.\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
 ### 2. Configure Credentials
-```bash
-cp .env.example .env
-# Edit .env with your database credentials
+Create `.env` file with database credentials:
+```env
+# Postgres
+POSTGRES_HOST=your-rds-endpoint
+POSTGRES_PORT=5432
+POSTGRES_DATABASE=your_database
+POSTGRES_USER=your_user
+POSTGRES_PASSWORD=your_password
+
+# Snowflake (optional)
+SNOWFLAKE_ACCOUNT=your_account
+SNOWFLAKE_USER=your_user
+SNOWFLAKE_PASSWORD=your_password
+# ... see DEPLOYMENT_SUMMARY.md for complete list
 ```
 
-### 3. Run Tests
-```bash
-pytest tests/ -v
+### 3. Test Locally
+```powershell
+# Test Postgres connection
+python scripts/lambda_handler.py test_postgres
+
+# Test Snowflake connection
+python scripts/lambda_handler.py test_snowflake
 ```
 
-### 4. Create Postgres View (First Time Only)
+## AWS Deployment
 
-```bash
-psql -h localhost -U your_user -d conflictreport -f sql/views/vw_conflictvisitmaps_base.sql
+### Build Package:
+```powershell
+.\deploy\build_lambda.ps1
 ```
 
-### 5. Run Tasks
+### Deploy:
+1. Upload `deploy/lambda_deployment.zip` to Lambda
+2. Set handler: `lambda_handler.lambda_handler`
+3. Attach psycopg2 Lambda Layer
+4. Configure environment variables
+5. Test: `{"action": "test_postgres"}`
 
-**TASK_01:**
-```bash
-# Windows
-py scripts\run_task_01.py
+## Actions Supported
 
-# Linux/Mac
-python scripts/run_task_01.py
-```
-
-**TASK_02:**
-```bash
-# Windows
-py scripts\run_task_02.py
-
-# Linux/Mac
-python scripts/run_task_02.py
-```
-
-**Performance Configuration:**
-- Default: 4 parallel workers (~20-30 minutes for full run)
-- Adjust in `.env`: `MAX_WORKERS=6` for faster processing
-- See `docs/task_02_phase1_optimizations_implemented.md` for details
-
-### 6. Validate Results
-
-**Windows:** `py scripts\validate_task_01.py`  
-**Linux/Mac:** `python scripts/validate_task_01.py`
-
-## Migration Status
-
-| Task | Status | Description | Documentation |
-|------|--------|-------------|---------------|
-| TASK_01 | ✅ Complete | Copy to Temp | [Phase 1 Guide](docs/phase1_guide.md) |
-| TASK_02 | ✅ Complete | Update Conflicts | [Task 02 Guide](docs/task_02_implementation.md) |
-| TASK_03 | ⏳ Pending | Insert from Main | - |
+| Action | Description | Status |
+|--------|-------------|--------|
+| `validate_config` | Validate environment variables | ✅ Working |
+| `test_postgres` | Test Postgres connectivity | ✅ Working |
+| `test_snowflake` | Test Snowflake connectivity | ✅ Working |
+| `task_01` | Copy to temp table | 🔄 Future |
+| `task_02` | Update conflicts | 🔄 Future |
 
 ## Documentation
-- [Phase 1 Guide](docs/phase1_guide.md) - TASK_01 implementation
-- [Task 02 Implementation](docs/task_02_implementation.md) - TASK_02 implementation
-- [Testing Strategy](docs/testing_strategy.md)
-- [Deployment Guide](docs/deployment.md)
+
+- **[deploy/LAMBDA_DEPLOYMENT.md](deploy/LAMBDA_DEPLOYMENT.md)** - AWS Lambda deployment guide
+- **[deploy/DEPLOYMENT_SUMMARY.md](deploy/DEPLOYMENT_SUMMARY.md)** - Implementation fixes & notes
+- **[COMPLETE_DOCUMENTATION.md](COMPLETE_DOCUMENTATION.md)** - Full project documentation (legacy)
+
 

@@ -3,14 +3,25 @@ Postgres database connector.
 Handles connections and data operations for ConflictReport database.
 """
 
-import pandas as pd
+from __future__ import annotations
 from contextlib import contextmanager
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING
 import psycopg2
 from psycopg2 import sql
 from psycopg2.extras import execute_batch
-from sqlalchemy import create_engine
 from src.utils.logger import get_logger
+
+# Optional imports for data operations
+if TYPE_CHECKING:
+    import pandas as pd
+    from sqlalchemy import create_engine
+
+try:
+    import pandas as pd
+    from sqlalchemy import create_engine
+    PANDAS_AVAILABLE = True
+except ImportError:
+    PANDAS_AVAILABLE = False
 
 logger = get_logger(__name__)
 
@@ -109,7 +120,7 @@ class PostgresConnector:
                 return rowcount
     
     def fetch_dataframe(self, query: Any,
-                       params: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
+                       params: Optional[Dict[str, Any]] = None) -> 'pd.DataFrame':
         """
         Fetch query results as DataFrame.
         
@@ -120,6 +131,11 @@ class PostgresConnector:
         Returns:
             DataFrame with results
         """
+        if not PANDAS_AVAILABLE:
+            raise ImportError("pandas is required for fetch_dataframe but is not installed")
+        
+        import pandas as pd
+        
         if isinstance(query, sql.Composed):
             self.logger.debug("Fetching DataFrame for composed SQL (logging omitted)")
         else:
@@ -133,7 +149,7 @@ class PostgresConnector:
                     return pd.DataFrame(cursor.fetchall(), columns=columns)
                 return pd.DataFrame()
     
-    def bulk_insert_dataframe(self, df: pd.DataFrame, 
+    def bulk_insert_dataframe(self, df: 'pd.DataFrame', 
                              table_name: str) -> int:
         """
         Bulk insert DataFrame using COPY command for speed.
@@ -145,6 +161,12 @@ class PostgresConnector:
         Returns:
             Number of rows inserted
         """
+        if not PANDAS_AVAILABLE:
+            raise ImportError("pandas is required for bulk_insert_dataframe but is not installed")
+        
+        import pandas as pd
+        from sqlalchemy import create_engine
+        
         if df.empty:
             self.logger.warning(f"Empty DataFrame for {self.schema}.{table_name}")
             return 0
@@ -157,7 +179,7 @@ class PostgresConnector:
         with self.get_connection() as conn:
             engine = create_engine(
                 f"postgresql://{self.config['user']}:{self.config['password']}"
-                f"@{self.config['host']}:{self.config['port']}/{self.config['database']}"
+                f"@{self.config['host']}:{self.config['port']}/{self.config['dbname']}"
             )
             
             df.to_sql(

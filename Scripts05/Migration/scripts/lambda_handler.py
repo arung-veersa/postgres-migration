@@ -19,8 +19,9 @@ from typing import Dict, Any, Optional
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from config.settings import POSTGRES_CONFIG, validate_config
+from config.settings import POSTGRES_CONFIG, SNOWFLAKE_CONFIG, get_snowflake_config, validate_config, validate_snowflake_config
 from src.connectors.postgres_connector import PostgresConnector
+from src.connectors.snowflake_connector import SnowflakeConnector
 from src.tasks.task_01_copy_to_temp import Task01CopyToTemp
 from src.tasks.task_02_update_conflicts import Task02UpdateConflictVisitMaps
 from src.utils.logger import get_logger
@@ -35,7 +36,7 @@ def lambda_handler(event: Dict[str, Any], context: Optional[Any]) -> Dict[str, A
     Args:
         event: Lambda event containing action to perform
             {
-                "action": "validate_config" | "task_01" | "task_02",
+                "action": "validate_config" | "test_postgres" | "test_snowflake" | "task_01" | "task_02",
                 "use_mock": false  # Optional: for testing
             }
         context: Lambda context (unused in local testing)
@@ -60,9 +61,151 @@ def lambda_handler(event: Dict[str, Any], context: Optional[Any]) -> Dict[str, A
                 'body': {
                     'status': 'success',
                     'message': 'Configuration validated successfully',
-                    'action': action
+                    'action': action,
+                    'config': {
+                        'host': POSTGRES_CONFIG.get('host'),
+                        'port': POSTGRES_CONFIG.get('port'),
+                        'database': POSTGRES_CONFIG.get('database'),
+                        'user': POSTGRES_CONFIG.get('user')
+                    }
                 }
             }
+        
+        # Action: Test Postgres Connection
+        elif action == 'test_postgres':
+            logger.info("Testing Postgres connection...")
+            
+            try:
+                connector = PostgresConnector(**POSTGRES_CONFIG)
+                connection_successful = connector.test_connection()
+                
+                if connection_successful:
+                    # Get additional info
+                    with connector.get_connection() as conn:
+                        with conn.cursor() as cursor:
+                            cursor.execute("SELECT version()")
+                            db_version = cursor.fetchone()[0]
+                            
+                            cursor.execute("SELECT current_database()")
+                            current_db = cursor.fetchone()[0]
+                            
+                            cursor.execute("SELECT current_user")
+                            current_user = cursor.fetchone()[0]
+                    
+                    logger.info("Postgres connection test successful")
+                    return {
+                        'statusCode': 200,
+                        'body': {
+                            'status': 'success',
+                            'message': 'Postgres connection successful',
+                            'action': action,
+                            'details': {
+                                'host': POSTGRES_CONFIG['host'],
+                                'port': POSTGRES_CONFIG['port'],
+                                'database': current_db,
+                                'user': current_user,
+                                'version': db_version[:100]  # Truncate long version string
+                            }
+                        }
+                    }
+                else:
+                    logger.error("Postgres connection test failed")
+                    return {
+                        'statusCode': 500,
+                        'body': {
+                            'status': 'error',
+                            'message': 'Postgres connection failed',
+                            'action': action
+                        }
+                    }
+            
+            except Exception as e:
+                logger.error(f"Postgres connection test failed: {str(e)}", exc_info=True)
+                return {
+                    'statusCode': 500,
+                    'body': {
+                        'status': 'error',
+                        'message': f'Postgres connection failed: {str(e)}',
+                        'action': action,
+                        'error_type': type(e).__name__
+                    }
+                }
+        
+        # Action: Test Snowflake Connection
+        elif action == 'test_snowflake':
+            logger.info("Testing Snowflake connection...")
+            
+            try:
+                # Validate Snowflake config first
+                validate_snowflake_config()
+                
+                # Get Snowflake config with lazy initialization (includes private_key if needed)
+                sf_config = get_snowflake_config()
+                
+                # Build connector config (remove None values)
+                sf_config = {k: v for k, v in sf_config.items() if v is not None}
+                connector = SnowflakeConnector(**sf_config)
+                connection_successful = connector.test_connection()
+                
+                if connection_successful:
+                    # Get additional info
+                    with connector.get_connection() as conn:
+                        with conn.cursor() as cursor:
+                            cursor.execute("SELECT CURRENT_VERSION()")
+                            sf_version = cursor.fetchone()[0]
+                            
+                            cursor.execute("SELECT CURRENT_DATABASE()")
+                            current_db = cursor.fetchone()[0]
+                            
+                            cursor.execute("SELECT CURRENT_USER()")
+                            current_user = cursor.fetchone()[0]
+                            
+                            cursor.execute("SELECT CURRENT_WAREHOUSE()")
+                            current_warehouse = cursor.fetchone()[0]
+                            
+                            cursor.execute("SELECT CURRENT_ROLE()")
+                            current_role = cursor.fetchone()[0]
+                    
+                    logger.info("Snowflake connection test successful")
+                    return {
+                        'statusCode': 200,
+                        'body': {
+                            'status': 'success',
+                            'message': 'Snowflake connection successful',
+                            'action': action,
+                            'details': {
+                                'account': SNOWFLAKE_CONFIG['account'],
+                                'warehouse': current_warehouse,
+                                'database': current_db,
+                                'schema': SNOWFLAKE_CONFIG['schema'],
+                                'user': current_user,
+                                'role': current_role,
+                                'version': sf_version
+                            }
+                        }
+                    }
+                else:
+                    logger.error("Snowflake connection test failed")
+                    return {
+                        'statusCode': 500,
+                        'body': {
+                            'status': 'error',
+                            'message': 'Snowflake connection failed',
+                            'action': action
+                        }
+                    }
+            
+            except Exception as e:
+                logger.error(f"Snowflake connection test failed: {str(e)}", exc_info=True)
+                return {
+                    'statusCode': 500,
+                    'body': {
+                        'status': 'error',
+                        'message': f'Snowflake connection failed: {str(e)}',
+                        'action': action,
+                        'error_type': type(e).__name__
+                    }
+                }
         
         # Action: Execute Task 01
         elif action == 'task_01':
@@ -135,7 +278,7 @@ def lambda_handler(event: Dict[str, Any], context: Optional[Any]) -> Dict[str, A
                 'body': {
                     'status': 'error',
                     'error': error_msg,
-                    'message': 'Valid actions: validate_config, task_01, task_02'
+                    'message': 'Valid actions: validate_config, test_postgres, test_snowflake, task_01, task_02'
                 }
             }
     
@@ -161,7 +304,7 @@ def main():
         action = sys.argv[1]
     else:
         print("Usage: python scripts/lambda_handler.py <action>")
-        print("Actions: validate_config, task_01, task_02")
+        print("Actions: validate_config, test_postgres, test_snowflake, task_01, task_02")
         sys.exit(1)
     
     # Check for mock flag
