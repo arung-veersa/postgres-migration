@@ -1,0 +1,136 @@
+{
+  "Comment": "ETL Pipeline State Machine - cm-etl-pipeline-state-machine (Ready for Console Deployment)",
+  "StartAt": "ValidateConfig",
+  "States": {
+    "ValidateConfig": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-task-ag-test01",
+      "Parameters": {
+        "action": "validate_config"
+      },
+      "ResultPath": "$.validateResult",
+      "TimeoutSeconds": 60,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "ConfigValidationFailed"
+        }
+      ],
+      "Next": "ExecuteTask01"
+    },
+    "ConfigValidationFailed": {
+      "Type": "Fail",
+      "Error": "ConfigValidationError",
+      "Cause": "Configuration validation failed. Check environment variables and database connectivity."
+    },
+    "ExecuteTask01": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-task-ag-test01",
+      "Parameters": {
+        "action": "task_01"
+      },
+      "ResultPath": "$.task01Result",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.Timeout"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task01Timeout"
+        },
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task01Failed"
+        }
+      ],
+      "Next": "ExecuteTask02"
+    },
+    "Task01Timeout": {
+      "Type": "Fail",
+      "Error": "Task01TimeoutError",
+      "Cause": "Task 01 exceeded 15-minute Lambda timeout. Consider implementing chunking."
+    },
+    "Task01Failed": {
+      "Type": "Fail",
+      "Error": "Task01ExecutionError",
+      "Cause": "Task 01 execution failed. Check CloudWatch logs for details."
+    },
+    "ExecuteTask02": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-task-ag-test01",
+      "Parameters": {
+        "action": "task_02"
+      },
+      "ResultPath": "$.task02Result",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.Timeout"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task02Timeout"
+        },
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task02Failed"
+        }
+      ],
+      "Next": "PipelineSuccess"
+    },
+    "Task02Timeout": {
+      "Type": "Fail",
+      "Error": "Task02TimeoutError",
+      "Cause": "Task 02 exceeded 15-minute Lambda timeout. Consider implementing chunking."
+    },
+    "Task02Failed": {
+      "Type": "Fail",
+      "Error": "Task02ExecutionError",
+      "Cause": "Task 02 execution failed. Check CloudWatch logs for details."
+    },
+    "PipelineSuccess": {
+      "Type": "Succeed"
+    }
+  }
+}
+

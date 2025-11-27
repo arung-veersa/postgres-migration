@@ -1,24 +1,66 @@
-# AWS Step Functions (Future)
+# AWS Step Functions - ETL Pipeline Orchestration
 
 ## Current Status
-Lambda function deployed with connection testing actions.
+✅ Step Functions definition ready  
+✅ Lambda function deployed with connection testing  
+✅ Deployment scripts created  
 
-## Future: Step Functions Integration
+---
 
-When ready to orchestrate full pipeline:
+## Quick Deployment
 
-### State Machine Definition
-See `step_functions/etl_pipeline.json` for state machine template.
+### Prerequisites:
+- Lambda function deployed and tested
+- AWS CLI configured
+- IAM role for Step Functions
 
-### Steps to Deploy:
-1. Update Lambda ARN in state machine definition
-2. Create state machine in AWS Step Functions console
-3. Configure IAM role for state machine
-4. Test execution with sample input
+### Deploy:
 
-### Pipeline Flow:
+**PowerShell:**
+```powershell
+.\deploy_step_functions.ps1 `
+  -LambdaFunctionArn "arn:aws:lambda:us-east-1:354073143602:function:cm-task-ag-test01" `
+  -RoleArn "arn:aws:iam::354073143602:role/cm-step-function-lambda-role"
 ```
-ValidateConfig → ExecuteTask01 → ExecuteTask02
+
+**Bash:**
+```bash
+./deploy_step_functions.sh \
+  --lambda-arn "arn:aws:lambda:us-east-1:354073143602:function:cm-task-ag-test01" \
+  --role-arn "arn:aws:iam::354073143602:role/cm-step-function-lambda-role"
 ```
 
-For current Lambda deployment, see `../deploy/LAMBDA_DEPLOYMENT.md`.
+---
+
+## Pipeline Flow
+
+```
+ValidateConfig → ExecuteTask01 → ExecuteTask02 → Success
+   (60s)            (15 min)         (15 min)
+   
+Each step has:
+- Automatic retry (2x)
+- Error handling
+- Timeout protection
+```
+
+---
+
+## Documentation
+
+See **[STEP_FUNCTIONS_DEPLOYMENT.md](STEP_FUNCTIONS_DEPLOYMENT.md)** for:
+- Complete deployment guide
+- IAM role creation
+- Testing instructions
+- Monitoring setup
+- Troubleshooting
+
+---
+
+## State Machine Definition
+
+See `step_functions/etl_pipeline.json` for the complete state machine definition.
+
+---
+
+For Lambda deployment, see `../deploy/LAMBDA_DEPLOYMENT.md`.
