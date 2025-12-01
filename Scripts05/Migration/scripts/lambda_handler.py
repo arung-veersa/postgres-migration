@@ -24,6 +24,8 @@ from src.connectors.postgres_connector import PostgresConnector
 from src.connectors.snowflake_connector import SnowflakeConnector
 from src.tasks.task_01_copy_to_temp import Task01CopyToTemp
 from src.tasks.task_02_update_conflicts import Task02UpdateConflictVisitMaps
+from src.tasks.task_02_get_chunks import Task02GetChunks
+from src.tasks.task_02_process_chunk import Task02ProcessChunk
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -269,6 +271,47 @@ def lambda_handler(event: Dict[str, Any], context: Optional[Any]) -> Dict[str, A
                     'body': result
                 }
         
+        # Action: Get Task 02 Chunks (Phase 2)
+        elif action == 'get_task02_chunks':
+            logger.info("Getting chunks for Task 02")
+            
+            connector = PostgresConnector(**POSTGRES_CONFIG)
+            task = Task02GetChunks(connector)
+            result = task.run()
+            
+            if result['status'] == 'success':
+                chunk_data = result['result']
+                logger.info(f"Generated {chunk_data['num_chunks']} chunks for {chunk_data['total_rows']} rows")
+                # Return data directly for Step Functions (not wrapped in statusCode/body)
+                return chunk_data
+            else:
+                logger.error(f"Failed to get chunks: {result.get('error')}")
+                raise Exception(f"Chunk generation failed: {result.get('error')}")
+        
+        # Action: Process Task 02 Chunk (Phase 2)
+        elif action == 'process_task02_chunk':
+            chunk_id = event.get('chunk_id')
+            
+            if chunk_id is None:
+                error_msg = "Missing required parameter: chunk_id"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+            
+            logger.info(f"Processing Task 02 chunk {chunk_id}")
+            
+            connector = PostgresConnector(**POSTGRES_CONFIG)
+            task = Task02ProcessChunk(connector)
+            # Keys will be loaded from /tmp/task02_chunks.json automatically
+            result = task.execute(chunk_id=chunk_id)
+            
+            if result['status'] == 'success':
+                logger.info(f"Chunk {chunk_id} completed: {result['rows_updated']} rows in {result['duration_seconds']:.2f}s")
+                # Return data directly for Step Functions
+                return result
+            else:
+                logger.error(f"Chunk {chunk_id} failed: {result.get('error')}")
+                raise Exception(f"Chunk {chunk_id} processing failed: {result.get('error')}")
+        
         # Unknown action
         else:
             error_msg = f"Unknown action: {action}"
@@ -278,7 +321,7 @@ def lambda_handler(event: Dict[str, Any], context: Optional[Any]) -> Dict[str, A
                 'body': {
                     'status': 'error',
                     'error': error_msg,
-                    'message': 'Valid actions: validate_config, test_postgres, test_snowflake, task_01, task_02'
+                    'message': 'Valid actions: validate_config, test_postgres, test_snowflake, task_01, task_02, get_task02_chunks, process_task02_chunk'
                 }
             }
     
@@ -304,7 +347,8 @@ def main():
         action = sys.argv[1]
     else:
         print("Usage: python scripts/lambda_handler.py <action>")
-        print("Actions: validate_config, test_postgres, test_snowflake, task_01, task_02")
+        print("Actions: validate_config, test_postgres, test_snowflake, task_01, task_02, get_task02_chunks")
+        print("Note: process_task02_chunk requires additional parameters (use JSON event)")
         sys.exit(1)
     
     # Check for mock flag

@@ -1,0 +1,225 @@
+{
+  "Comment": "ETL Pipeline State Machine - Phase 2: Chunked Parallel Execution",
+  "StartAt": "ValidateConfig",
+  "States": {
+    "ValidateConfig": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:REGION:ACCOUNT_ID:function:cm-task-ag-test01",
+      "Parameters": {
+        "action": "validate_config"
+      },
+      "ResultPath": "$.validateResult",
+      "TimeoutSeconds": 60,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "ConfigValidationFailed"
+        }
+      ],
+      "Next": "ExecuteTask01"
+    },
+    "ConfigValidationFailed": {
+      "Type": "Fail",
+      "Error": "ConfigValidationError",
+      "Cause": "Configuration validation failed. Check environment variables and database connectivity."
+    },
+    "ExecuteTask01": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:REGION:ACCOUNT_ID:function:cm-task-ag-test01",
+      "Parameters": {
+        "action": "task_01"
+      },
+      "ResultPath": "$.task01Result",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.Timeout"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task01Timeout"
+        },
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task01Failed"
+        }
+      ],
+      "Next": "GetTask02Chunks"
+    },
+    "Task01Timeout": {
+      "Type": "Fail",
+      "Error": "Task01TimeoutError",
+      "Cause": "Task 01 exceeded 15-minute Lambda timeout."
+    },
+    "Task01Failed": {
+      "Type": "Fail",
+      "Error": "Task01ExecutionError",
+      "Cause": "Task 01 execution failed. Check CloudWatch logs for details."
+    },
+    "GetTask02Chunks": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:REGION:ACCOUNT_ID:function:cm-task-ag-test01",
+      "Comment": "Query database and create balanced chunks for parallel processing",
+      "Parameters": {
+        "action": "get_task02_chunks"
+      },
+      "ResultPath": "$.task02_chunks",
+      "TimeoutSeconds": 120,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "GetChunksFailed"
+        }
+      ],
+      "Next": "CheckIfChunksExist"
+    },
+    "GetChunksFailed": {
+      "Type": "Fail",
+      "Error": "GetChunksError",
+      "Cause": "Failed to generate chunks for Task 02. Check CloudWatch logs."
+    },
+    "CheckIfChunksExist": {
+      "Type": "Choice",
+      "Comment": "Check if there are any chunks to process",
+      "Choices": [
+        {
+          "Variable": "$.task02_chunks.num_chunks",
+          "NumericGreaterThan": 0,
+          "Next": "ProcessTask02Chunks"
+        }
+      ],
+      "Default": "NoChunksToProcess"
+    },
+    "NoChunksToProcess": {
+      "Type": "Succeed",
+      "Comment": "No data to process - all rows already completed"
+    },
+    "ProcessTask02Chunks": {
+      "Type": "Map",
+      "Comment": "Process chunks in parallel with configurable concurrency",
+      "ItemsPath": "$.task02_chunks.chunk_ids",
+      "MaxConcurrency": 5,
+      "ResultPath": "$.chunk_results",
+      "Iterator": {
+        "StartAt": "ProcessSingleChunk",
+        "States": {
+          "ProcessSingleChunk": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:REGION:ACCOUNT_ID:function:cm-task-ag-test01",
+            "Comment": "Process individual chunk by ID - loads keys from /tmp/task02_chunks.json",
+            "Parameters": {
+              "action": "process_task02_chunk",
+              "chunk_id.$": "$"
+            },
+            "TimeoutSeconds": 900,
+            "Retry": [
+              {
+                "ErrorEquals": [
+                  "States.TaskFailed",
+                  "Lambda.ServiceException",
+                  "Lambda.AWSLambdaException",
+                  "Lambda.SdkClientException"
+                ],
+                "IntervalSeconds": 10,
+                "MaxAttempts": 2,
+                "BackoffRate": 2.0
+              }
+            ],
+            "Catch": [
+              {
+                "ErrorEquals": [
+                  "States.Timeout"
+                ],
+                "ResultPath": "$.error",
+                "Next": "ChunkTimeout"
+              },
+              {
+                "ErrorEquals": [
+                  "States.ALL"
+                ],
+                "ResultPath": "$.error",
+                "Next": "ChunkFailed"
+              }
+            ],
+            "End": true
+          },
+          "ChunkTimeout": {
+            "Type": "Fail",
+            "Error": "ChunkTimeoutError",
+            "Cause": "Individual chunk processing exceeded 15-minute timeout. Consider reducing chunk size."
+          },
+          "ChunkFailed": {
+            "Type": "Fail",
+            "Error": "ChunkProcessingFailed",
+            "Cause": "Individual chunk processing failed. Check CloudWatch logs for specific chunk_id."
+          }
+        }
+      },
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.map_error",
+          "Next": "ChunkedProcessingFailed"
+        }
+      ],
+      "Next": "VerifyAllChunks"
+    },
+    "ChunkedProcessingFailed": {
+      "Type": "Fail",
+      "Error": "ChunkedProcessingError",
+      "Cause": "One or more chunks failed processing. Pipeline can be safely re-run (idempotent)."
+    },
+    "VerifyAllChunks": {
+      "Type": "Pass",
+      "Comment": "All chunks processed successfully",
+      "ResultPath": "$.verification",
+      "Next": "PipelineSuccess"
+    },
+    "PipelineSuccess": {
+      "Type": "Succeed",
+      "Comment": "ETL Pipeline completed successfully with chunked parallel processing"
+    }
+  }
+}
+

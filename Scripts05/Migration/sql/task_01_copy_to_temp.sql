@@ -9,6 +9,12 @@
 --   3. Copy filtered data from CONFLICTVISITMAPS to CONFLICTVISITMAPS_TEMP
 --   4. Update SETTINGS.InProgressFlag to 1 (in progress)
 --
+-- Why TEMP table exists:
+--   TEMP table creates a "before" snapshot of CONFLICTVISITMAPS.
+--   Used by TASK_09 (not yet migrated) to track changes between ETL runs.
+--   TASK_09 compares TEMP (before) vs MAIN (after) to generate audit logs.
+--   DO NOT REMOVE until TASK_09 is evaluated for migration.
+--
 -- Schema Placeholders:
 --   {conflict_schema}  - Conflict data schema (e.g., conflict_dev)
 --   {analytics_schema} - Analytics data schema (e.g., analytics_dev)
