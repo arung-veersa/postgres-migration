@@ -11,7 +11,7 @@
     "password": "${POSTGRES_PASSWORD}"
   },
   "parallel_threads": 4,
-  "batch_size": 10000,
+  "batch_size": 50000,
   "max_retry_attempts": 3,
   "lambda_timeout_buffer_seconds": 120,
   "sources": [
@@ -24,7 +24,7 @@
       "target_pg_schema": "analytics_dev",
       "tables": [
         {
-          "enabled": true,
+          "enabled": false,
           "source": "DIMPAYER",
           "target": "dimpayer",
           "source_filter": "\"Is Active\" = TRUE AND \"Is Demo\" = FALSE AND \"Source System\" = 'hha'",
@@ -48,11 +48,11 @@
           "sort_columns": null,
           "source_watermark": null,
           "target_watermark": null,
-          "truncate_onstart": false,
+          "truncate_onstart": true,
           "disable_index": false
         },
         {
-          "enabled": false,
+          "enabled": true,
           "source": "DIMPATIENTADDRESS",
           "target": "dimpatientaddress",
           "source_filter": "\"Source System\" = 'hha' AND \"Is Using Google API\" = TRUE AND \"County\" = 'ROCKLAND'",
@@ -244,7 +244,7 @@
       "target_pg_schema": "analytics_dev",
       "tables": [
         {
-          "enabled": true,
+          "enabled": false,
           "source": "\"multipayer_payer\"",
           "target": "aggnyprod",
           "source_filter": null,
@@ -268,7 +268,7 @@
       "target_pg_schema": "conflict_dev",
       "tables": [
         {
-          "enabled": true,
+          "enabled": false,
           "source": "MPH",
           "target": "mph",
           "source_filter": "",
