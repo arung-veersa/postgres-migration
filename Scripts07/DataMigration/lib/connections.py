@@ -259,6 +259,33 @@ class PostgresConnectionManager:
             self.logger.warning(f"Could not get max watermark for {schema}.{table}: {e}")
             return None
     
+    def get_max_watermark_for_chunk(self, database: str, schema: str, table: str, 
+                                     watermark_column: str, chunk_filter: str):
+        """
+        Get maximum watermark value for a specific chunk
+        
+        Args:
+            database: Target database name
+            schema: Target schema name
+            table: Target table name
+            watermark_column: Watermark column name
+            chunk_filter: WHERE clause filter for the chunk (without 'WHERE' keyword)
+        
+        Returns:
+            Maximum watermark value for the chunk, or None if no data
+        """
+        query = f"""
+            SELECT MAX({quote_identifier(watermark_column)})
+            FROM {schema}.{table}
+            WHERE {chunk_filter}
+        """
+        try:
+            result = self.execute_query(database, query)
+            return result[0][0] if result and result[0][0] is not None else None
+        except Exception as e:
+            self.logger.warning(f"Could not get max watermark for {schema}.{table} with filter: {e}")
+            return None
+    
     def initialize_status_schema(self, database: str, schema_file: str = "schema.sql"):
         """Initialize migration status tracking tables"""
         try:

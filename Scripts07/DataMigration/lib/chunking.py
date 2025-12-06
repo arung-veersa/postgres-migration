@@ -256,6 +256,19 @@ class GroupedValuesStrategy(ChunkingStrategy):
 class DateRangeStrategy(ChunkingStrategy):
     """Strategy for date/timestamp columns"""
     
+    def __init__(
+        self,
+        sf_manager: SnowflakeConnectionManager,
+        source_db: str,
+        source_schema: str,
+        source_table: str,
+        table_config: Dict[str, Any],
+        batch_size: int,
+        max_target_watermark: Optional[str] = None
+    ):
+        super().__init__(sf_manager, source_db, source_schema, source_table, table_config, batch_size)
+        self.max_target_watermark = max_target_watermark
+    
     def create_chunks(self) -> List[ChunkInfo]:
         if not self.chunking_columns or len(self.chunking_columns) == 0:
             return SingleChunkStrategy(
@@ -266,19 +279,33 @@ class DateRangeStrategy(ChunkingStrategy):
         date_column = self.chunking_columns[0]
         quoted_col = quote_identifier(date_column)
         
+        # Build filter with watermark optimization for incremental loads
+        where_clause = self.source_filter
+        
+        # OPTIMIZATION: Only chunk data newer than target's max watermark
+        if self.max_target_watermark:
+            watermark_filter = f"{quoted_col} > '{self.max_target_watermark}'"
+            where_clause = f"({self.source_filter}) AND ({watermark_filter})"
+            self.logger.info(
+                f"[{self.source_table}] Incremental chunking: Only processing data after {self.max_target_watermark}"
+            )
+        
         # Get date range and row distribution
         query = f"""
             SELECT 
                 {quoted_col}::DATE as date_val,
                 COUNT(*) as row_count
             FROM {self.source_db}.{self.source_schema}.{self.source_table}
-            WHERE {self.source_filter}
+            WHERE {where_clause}
             GROUP BY {quoted_col}::DATE
             ORDER BY date_val
         """
         
         results = self.sf_manager.execute_query(query)
         if not results:
+            self.logger.info(
+                f"[{self.source_table}] No new data found for incremental load"
+            )
             return []
         
         total_rows = sum(r[1] for r in results)
@@ -294,8 +321,13 @@ class DateRangeStrategy(ChunkingStrategy):
         chunk_id = 0
         
         for date_val, row_count in results:
-            # If a single date has too many rows, it needs sub-chunking
-            if row_count > self.batch_size * 1.5:
+            # If single date has more rows than batch_size, use LIMIT/OFFSET sub-chunking
+            if row_count > self.batch_size:
+                self.logger.info(
+                    f"[{self.source_table}] Date {date_val.strftime('%Y-%m-%d')} has "
+                    f"{format_number(row_count)} rows - creating {math.ceil(row_count / self.batch_size)} sub-chunks"
+                )
+                
                 # If we have accumulated dates, create chunk first
                 if current_dates:
                     chunks.append(self._create_date_chunk(
@@ -305,11 +337,35 @@ class DateRangeStrategy(ChunkingStrategy):
                     current_dates = []
                     current_row_count = 0
                 
-                # Create separate chunk for this date (may need further sub-chunking in worker)
-                chunks.append(self._create_date_chunk(
-                    chunk_id, date_column, [date_val], row_count
-                ))
-                chunk_id += 1
+                # Create multiple sub-chunks using LIMIT/OFFSET for this large date
+                # Use deterministic ordering: date_column + uniqueness_columns
+                num_sub_chunks = math.ceil(row_count / self.batch_size)
+                for i in range(num_sub_chunks):
+                    offset = i * self.batch_size
+                    limit = min(self.batch_size, row_count - offset)
+                    
+                    date_str = date_val.strftime('%Y-%m-%d')
+                    filter_sql = f"({self.source_filter}) AND {quoted_col}::DATE = '{date_str}'"
+                    
+                    # Get uniqueness columns for deterministic ordering
+                    uniqueness_columns = self.table_config.get('uniqueness_columns', [])
+                    
+                    chunks.append(ChunkInfo(
+                        chunk_id=chunk_id,
+                        filter_sql=filter_sql,
+                        estimated_rows=limit,
+                        metadata={
+                            'strategy': 'date_range_offset',
+                            'date_column': date_column,
+                            'date_value': date_str,
+                            'offset': offset,
+                            'limit': limit,
+                            'sub_chunk_index': i,
+                            'total_sub_chunks': num_sub_chunks,
+                            'uniqueness_columns': uniqueness_columns
+                        }
+                    ))
+                    chunk_id += 1
             else:
                 # Check if adding this date would exceed batch size
                 if current_row_count > 0 and (current_row_count + row_count) > self.batch_size:
@@ -325,9 +381,25 @@ class DateRangeStrategy(ChunkingStrategy):
         
         # Add remaining dates
         if current_dates:
-            chunks.append(self._create_date_chunk(
-                chunk_id, date_column, current_dates, current_row_count
-            ))
+            # CHECK: If remaining dates exceed batch_size, split them
+            if current_row_count > self.batch_size:
+                self.logger.warning(
+                    f"[{self.source_table}] Remaining chunk has {format_number(current_row_count)} rows "
+                    f"across {len(current_dates)} dates - splitting into individual date chunks"
+                )
+                # Create separate chunk for EACH remaining date
+                for date_val in current_dates:
+                    # Get row count for this specific date from results
+                    date_row_count = next((r[1] for r in results if r[0] == date_val), 0)
+                    chunks.append(self._create_date_chunk(
+                        chunk_id, date_column, [date_val], date_row_count
+                    ))
+                    chunk_id += 1
+            else:
+                # Safe to group these dates together
+                chunks.append(self._create_date_chunk(
+                    chunk_id, date_column, current_dates, current_row_count
+                ))
         
         self.logger.info(f"Created {len(chunks)} chunks for {self.source_table}")
         return chunks
@@ -356,6 +428,71 @@ class DateRangeStrategy(ChunkingStrategy):
         )
 
 
+class OffsetBasedStrategy(ChunkingStrategy):
+    """
+    Strategy using LIMIT/OFFSET with ORDER BY
+    More efficient than IN clause for high-cardinality columns (UUIDs, etc.)
+    """
+    
+    def create_chunks(self) -> List[ChunkInfo]:
+        if not self.chunking_columns or len(self.chunking_columns) == 0:
+            return SingleChunkStrategy(
+                self.sf_manager, self.source_db, self.source_schema,
+                self.source_table, self.table_config, self.batch_size
+            ).create_chunks()
+        
+        sort_column = self.chunking_columns[0]
+        quoted_col = quote_identifier(sort_column)
+        
+        # Get total row count
+        query = f"""
+            SELECT COUNT(*) as total_rows
+            FROM {self.source_db}.{self.source_schema}.{self.source_table}
+            WHERE {self.source_filter}
+        """
+        
+        result = self.sf_manager.execute_query(query)
+        if not result or result[0][0] == 0:
+            self.logger.warning(f"No data found for {self.source_table}")
+            return []
+        
+        total_rows = result[0][0]
+        num_chunks = math.ceil(total_rows / self.batch_size)
+        
+        self.logger.info(
+            f"Offset-based strategy for {self.source_table}: "
+            f"{format_number(total_rows)} total rows, {num_chunks} chunks of {format_number(self.batch_size)}"
+        )
+        
+        # Create chunks using LIMIT/OFFSET
+        chunks = []
+        for chunk_id in range(num_chunks):
+            offset = chunk_id * self.batch_size
+            limit = self.batch_size
+            
+            # Calculate estimated rows for this chunk (last chunk might be smaller)
+            estimated_rows = min(limit, total_rows - offset)
+            
+            # Build filter with ORDER BY, LIMIT, OFFSET
+            # Note: We'll handle ORDER BY, LIMIT, OFFSET in the worker
+            filter_sql = f"({self.source_filter}) ORDER BY {quoted_col} LIMIT {limit} OFFSET {offset}"
+            
+            chunks.append(ChunkInfo(
+                chunk_id=chunk_id,
+                filter_sql=filter_sql,
+                estimated_rows=estimated_rows,
+                metadata={
+                    'strategy': 'offset_based',
+                    'sort_column': sort_column,
+                    'offset': offset,
+                    'limit': limit
+                }
+            ))
+        
+        self.logger.info(f"Created {len(chunks)} chunks for {self.source_table}")
+        return chunks
+
+
 class ChunkingStrategyFactory:
     """Factory to create appropriate chunking strategy based on configuration"""
     
@@ -366,7 +503,8 @@ class ChunkingStrategyFactory:
         source_schema: str,
         source_table: str,
         table_config: Dict[str, Any],
-        batch_size: int
+        batch_size: int,
+        max_target_watermark: Optional[str] = None
     ) -> ChunkingStrategy:
         """
         Create appropriate chunking strategy based on table configuration
@@ -378,12 +516,16 @@ class ChunkingStrategyFactory:
             source_table: Source table name
             table_config: Table configuration from config.json
             batch_size: Batch size for chunking
+            max_target_watermark: Maximum watermark value from target table (for incremental optimization)
         
         Returns:
             Appropriate ChunkingStrategy instance
         """
         chunking_columns = table_config.get('chunking_columns')
         chunking_column_types = table_config.get('chunking_column_types')
+        source_watermark = table_config.get('source_watermark')
+        target_watermark = table_config.get('target_watermark')
+        truncate_onstart = table_config.get('truncate_onstart', False)
         
         # No chunking columns - use single chunk
         if not chunking_columns or chunking_columns == [None] or chunking_columns == []:
@@ -401,15 +543,36 @@ class ChunkingStrategyFactory:
                 )
             elif first_type in ['date', 'timestamp', 'timestamp_ntz', 'timestamp_ltz', 'timestamp_tz']:
                 return DateRangeStrategy(
-                    sf_manager, source_db, source_schema, source_table, table_config, batch_size
+                    sf_manager, source_db, source_schema, source_table, table_config, batch_size,
+                    max_target_watermark
                 )
             elif first_type in ['uuid', 'varchar', 'string', 'text']:
-                return GroupedValuesStrategy(
-                    sf_manager, source_db, source_schema, source_table, table_config, batch_size
-                )
+                # Smart strategy selection for high-cardinality columns:
+                # - If incremental mode (watermark set) and there's a timestamp column available:
+                #   Use DateRangeStrategy on watermark column (more efficient for filtering)
+                # - Otherwise: Use OffsetBasedStrategy on the UUID/VARCHAR column
+                if source_watermark and target_watermark and not truncate_onstart:
+                    # Incremental mode: Use timestamp-based chunking if available
+                    logger.info(
+                        f"Incremental mode detected: Using date-based chunking on "
+                        f"{source_watermark} instead of {chunking_columns[0]}"
+                    )
+                    # Override chunking to use watermark column
+                    modified_config = table_config.copy()
+                    modified_config['chunking_columns'] = [source_watermark]
+                    modified_config['chunking_column_types'] = ['timestamp']
+                    return DateRangeStrategy(
+                        sf_manager, source_db, source_schema, source_table, modified_config, batch_size,
+                        max_target_watermark
+                    )
+                else:
+                    # Full load: Use offset-based strategy (efficient)
+                    return OffsetBasedStrategy(
+                        sf_manager, source_db, source_schema, source_table, table_config, batch_size
+                    )
         
-        # Default to grouped values strategy
-        return GroupedValuesStrategy(
+        # Default to offset-based strategy (most universal)
+        return OffsetBasedStrategy(
             sf_manager, source_db, source_schema, source_table, table_config, batch_size
         )
 

@@ -67,7 +67,7 @@ CREATE TABLE dimpatientaddress (
     "Application Patient Address Id" NUMERIC(38,0),
     "Patient Id" VARCHAR(50),
     "Application Patient Id" NUMERIC(38,0),
-    "Address Type" VARCHAR(50),
+    "Address Type" VARCHAR(100),
     "Address Line 1" VARCHAR(500),
     "Address Line 2" VARCHAR(100),
     "City" VARCHAR(255),

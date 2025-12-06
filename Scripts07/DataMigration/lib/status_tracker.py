@@ -199,7 +199,11 @@ class StatusTracker:
             DO NOTHING
         """
         
-        chunk_range_json = json.dumps(chunk_range)
+        # Handle both dict and string inputs
+        if isinstance(chunk_range, str):
+            chunk_range_json = chunk_range
+        else:
+            chunk_range_json = json.dumps(chunk_range)
         
         conn = self.pg_manager.get_connection(self.target_database)
         cursor = conn.cursor()
@@ -273,7 +277,7 @@ class StatusTracker:
             FROM migration_status.migration_chunk_status
             WHERE run_id = %s AND source_database = %s 
               AND source_schema = %s AND source_table = %s
-              AND status IN ('pending', 'failed')
+              AND status IN ('pending', 'failed', 'in_progress')
             ORDER BY chunk_id
         """
         
@@ -286,11 +290,60 @@ class StatusTracker:
             return [
                 {
                     'chunk_id': row[0],
-                    'chunk_range': json.loads(row[1]) if row[1] else {},
+                    'chunk_range': json.loads(row[1]) if isinstance(row[1], str) else row[1],
                     'retry_count': row[2]
                 }
                 for row in results
             ]
+        finally:
+            cursor.close()
+            self.pg_manager.return_connection(conn)
+    
+    def find_resumable_run(self, config_hash: str, max_age_hours: int = 12) -> Optional[Dict]:
+        """
+        Find the most recent incomplete run with same config hash within age limit.
+        
+        Args:
+            config_hash: MD5 hash of configuration
+            max_age_hours: Maximum age in hours for resumable runs (default: 12)
+        
+        Returns:
+            Dict with run details or None if no resumable run found
+        """
+        query = """
+            SELECT 
+                run_id, 
+                status, 
+                started_at,
+                total_tables,
+                completed_tables,
+                failed_tables,
+                total_rows_copied
+            FROM migration_status.migration_runs
+            WHERE config_hash = %s
+              AND status IN ('running', 'partial', 'failed')
+              AND started_at > CURRENT_TIMESTAMP - INTERVAL '%s hours'
+            ORDER BY started_at DESC
+            LIMIT 1
+        """
+        
+        conn = self.pg_manager.get_connection(self.target_database)
+        cursor = conn.cursor()
+        try:
+            cursor.execute(query, (config_hash, max_age_hours))
+            result = cursor.fetchone()
+            
+            if result:
+                return {
+                    'run_id': result[0],
+                    'status': result[1],
+                    'started_at': result[2],
+                    'total_tables': result[3],
+                    'completed_tables': result[4],
+                    'failed_tables': result[5],
+                    'total_rows_copied': result[6]
+                }
+            return None
         finally:
             cursor.close()
             self.pg_manager.return_connection(conn)
@@ -333,6 +386,44 @@ class StatusTracker:
                 }
                 for row in results
             ]
+        finally:
+            cursor.close()
+            self.pg_manager.return_connection(conn)
+    
+    def get_table_status(self, run_id: uuid.UUID, source_database: str,
+                        source_schema: str, source_table: str) -> Optional[Dict]:
+        """Get status for a specific table"""
+        query = """
+            SELECT 
+                status,
+                total_chunks,
+                completed_chunks,
+                failed_chunks,
+                total_rows_copied,
+                started_at,
+                completed_at
+            FROM migration_status.migration_table_status
+            WHERE run_id = %s AND source_database = %s 
+              AND source_schema = %s AND source_table = %s
+        """
+        
+        conn = self.pg_manager.get_connection(self.target_database)
+        cursor = conn.cursor()
+        try:
+            cursor.execute(query, (str(run_id), source_database, source_schema, source_table))
+            result = cursor.fetchone()
+            
+            if result:
+                return {
+                    'status': result[0],
+                    'total_chunks': result[1],
+                    'completed_chunks': result[2],
+                    'failed_chunks': result[3],
+                    'total_rows_copied': result[4],
+                    'started_at': result[5],
+                    'completed_at': result[6]
+                }
+            return None
         finally:
             cursor.close()
             self.pg_manager.return_connection(conn)

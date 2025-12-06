@@ -30,9 +30,10 @@ from lib.utils import setup_logging, Timer, format_number, format_duration, logg
 class MigrationOrchestrator:
     """Orchestrates the entire migration process"""
     
-    def __init__(self, config_path: str, log_level: str = "INFO"):
+    def __init__(self, config_path: str, log_level: str = "INFO", args=None):
         self.config_path = config_path
         self.logger = setup_logging(log_level)
+        self.args = args  # Store CLI arguments
         
         # Load configuration
         self.config_loader = ConfigLoader(config_path)
@@ -54,6 +55,7 @@ class MigrationOrchestrator:
         self.status_tracker: StatusTracker = None
         self.run_id = None
         self.start_time = None
+        self.resuming = False  # Track if this is a resume operation
     
     def run(self):
         """Execute the migration"""
@@ -90,14 +92,33 @@ class MigrationOrchestrator:
             self.logger.info("Initializing migration status schema...")
             self.pg_manager.initialize_status_schema(first_target_db, "schema.sql")
             
-            # Create migration run
+            # Check for resumable run (unless --no-resume specified)
             config_hash = self.config_loader.get_config_hash()
-            self.run_id = self.status_tracker.create_migration_run(
-                config_hash=config_hash,
-                total_sources=len(sources),
-                total_tables=total_tables,
-                metadata={'config_path': self.config_path}
-            )
+            resumable_run = None
+            
+            if self.args and self.args.resume_run_id:
+                # User specified run ID to resume
+                self.run_id = uuid.UUID(self.args.resume_run_id)
+                self.resuming = True
+                self.logger.info(f"Resuming specified run: {self.run_id}")
+            elif not (self.args and self.args.no_resume):
+                # Auto-detect resumable run
+                max_age = self.args.resume_max_age if self.args else 12
+                resumable_run = self.status_tracker.find_resumable_run(config_hash, max_age)
+                
+                if resumable_run:
+                    self._display_resume_warning(resumable_run)
+                    self.run_id = resumable_run['run_id']
+                    self.resuming = True
+            
+            # Create new run if not resuming
+            if not self.resuming:
+                self.run_id = self.status_tracker.create_migration_run(
+                    config_hash=config_hash,
+                    total_sources=len(sources),
+                    total_tables=total_tables,
+                    metadata={'config_path': self.config_path}
+                )
             
             self.logger.info(f"Migration Run ID: {self.run_id}")
             self.logger.info("=" * 80)
@@ -147,15 +168,181 @@ class MigrationOrchestrator:
             # Close connections
             self.conn_factory.close_all()
     
+    def _display_resume_warning(self, resumable_run: Dict):
+        """Display warning message before resuming with pause for user cancellation"""
+        import time
+        
+        age_hours = (time.time() - resumable_run['started_at'].timestamp()) / 3600
+        
+        self.logger.warning("=" * 80)
+        self.logger.warning("⚠️  RESUMING INCOMPLETE MIGRATION")
+        self.logger.warning("=" * 80)
+        self.logger.warning(f"  Run ID: {resumable_run['run_id']}")
+        self.logger.warning(f"  Status: {resumable_run['status']}")
+        self.logger.warning(f"  Started: {resumable_run['started_at']} ({age_hours:.1f} hours ago)")
+        self.logger.warning(f"  Progress:")
+        self.logger.warning(f"    - Total tables: {resumable_run['total_tables']}")
+        self.logger.warning(f"    - Completed: {resumable_run['completed_tables']}")
+        self.logger.warning(f"    - Failed: {resumable_run['failed_tables']}")
+        self.logger.warning(f"    - Rows copied: {format_number(resumable_run['total_rows_copied'])}")
+        self.logger.warning("")
+        self.logger.warning("  The migration will resume from where it left off.")
+        self.logger.warning("  - Completed tables will be skipped")
+        self.logger.warning("  - Partial tables will continue from pending chunks")
+        self.logger.warning("")
+        self.logger.warning("  Press Ctrl+C to cancel")
+        self.logger.warning("  Use --no-resume flag to force fresh start")
+        self.logger.warning("")
+        self.logger.warning("  Continuing in 5 seconds...")
+        self.logger.warning("=" * 80)
+        
+        try:
+            time.sleep(5)
+        except KeyboardInterrupt:
+            self.logger.info("\n\n⚠️  Resume cancelled by user")
+            raise
+    
+    def _reconstruct_chunks_from_status(self, pending_chunk_data: List[Dict]) -> List:
+        """Reconstruct ChunkInfo objects from stored chunk status data"""
+        from lib.chunking import ChunkInfo
+        
+        chunks = []
+        for chunk_data in pending_chunk_data:
+            metadata = chunk_data['chunk_range']
+            
+            # Get filter_sql from metadata or reconstruct it
+            if 'filter_sql' in metadata:
+                filter_sql = metadata['filter_sql']
+            else:
+                # Fallback: reconstruct based on strategy (for old data)
+                strategy = metadata.get('strategy', '')
+                if strategy == 'grouped_values':
+                    # Reconstruct from values array
+                    values = metadata.get('values', [])
+                    id_column = metadata.get('id_column', '')
+                    if values and id_column:
+                        values_str = ", ".join([f"'{v}'" for v in values])
+                        filter_sql = f"{id_column} IN ({values_str})"
+                    else:
+                        filter_sql = "1=1"  # Fallback
+                else:
+                    # For other strategies, use generic filter
+                    filter_sql = "1=1"
+            
+            chunks.append(ChunkInfo(
+                chunk_id=chunk_data['chunk_id'],
+                filter_sql=filter_sql,
+                estimated_rows=metadata.get('estimated_rows', 0),
+                metadata=metadata
+            ))
+        
+        return chunks
+    
+    def _create_fresh_chunks(self, source: Dict[str, Any], table: Dict[str, Any], 
+                             source_table: str) -> List:
+        """Create fresh chunks using chunking strategy"""
+        from lib.chunking import ChunkingStrategyFactory
+        
+        # OPTIMIZATION: Get max watermark from target for incremental loads
+        max_target_watermark = None
+        source_watermark = table.get('source_watermark')
+        target_watermark = table.get('target_watermark')
+        truncate_onstart = table.get('truncate_onstart', False)
+        
+        if source_watermark and target_watermark and not truncate_onstart:
+            # This is an incremental load - get max watermark to pre-filter chunking
+            try:
+                self.logger.debug(
+                    f"[{source_table}] Querying max watermark from "
+                    f"{source['target_pg_database']}.{source['target_pg_schema']}.{table['target']}"
+                )
+                max_target_watermark = self.pg_manager.get_max_watermark(
+                    source['target_pg_database'],
+                    source['target_pg_schema'],
+                    table['target'],
+                    target_watermark
+                )
+                self.logger.debug(f"[{source_table}] Max target watermark: {max_target_watermark}")
+                
+                if max_target_watermark:
+                    self.logger.info(
+                        f"[{source_table}] Incremental load optimization: "
+                        f"Will only chunk data after {max_target_watermark}"
+                    )
+                else:
+                    self.logger.info(
+                        f"[{source_table}] No existing watermark found - performing full load"
+                    )
+            except Exception as e:
+                self.logger.warning(
+                    f"[{source_table}] Could not get max watermark for optimization: {e}"
+                )
+        
+        self.logger.info(f"[{source_table}] Determining chunking strategy...")
+        chunking_strategy = ChunkingStrategyFactory.create_strategy(
+            self.sf_manager,
+            source['source_sf_database'],
+            source['source_sf_schema'],
+            source_table,
+            table,
+            self.global_config['batch_size'],
+            max_target_watermark
+        )
+        
+        chunks = chunking_strategy.create_chunks()
+        
+        if not chunks:
+            self.logger.warning(f"[{source_table}] No chunks created (no data?)")
+            return []
+        
+        # Create chunk statuses
+        for chunk in chunks:
+            # Enhance metadata with filter_sql (smart conditional storage)
+            strategy = chunk.metadata.get('strategy', '')
+            if strategy == 'grouped_values':
+                # Don't store filter_sql for grouped_values (already has 'values' array)
+                enhanced_metadata = chunk.metadata
+            else:
+                # Store filter_sql for efficient reconstruction on resume
+                enhanced_metadata = {
+                    **chunk.metadata,
+                    'filter_sql': chunk.filter_sql,
+                    'estimated_rows': chunk.estimated_rows
+                }
+            
+            self.status_tracker.create_chunk_status(
+                self.run_id,
+                source['source_sf_database'],
+                source['source_sf_schema'],
+                source_table,
+                chunk.chunk_id,
+                enhanced_metadata
+            )
+        
+        return chunks
+    
     def _process_table(self, source: Dict[str, Any], table: Dict[str, Any]) -> int:
         """Process a single table"""
         source_table = table['source']
         target_table = table['target']
         
+        # Check if resuming and table already completed
+        if self.resuming:
+            table_progress = self.status_tracker.get_table_status(
+                self.run_id,
+                source['source_sf_database'],
+                source['source_sf_schema'],
+                source_table
+            )
+            
+            if table_progress and table_progress['status'] == 'completed':
+                self.logger.info(f"\n[{source_table}] ✓ Already completed, skipping...")
+                return table_progress['total_rows_copied']
+        
         self.logger.info(f"\n[{source_table}] Starting migration...")
         
         with Timer(f"Table migration: {source_table}", self.logger):
-            # Create table status
+            # Create or update table status
             self.status_tracker.create_table_status(
                 run_id=self.run_id,
                 source_name=source.get('source_name', 'unnamed'),
@@ -177,13 +364,15 @@ class MigrationOrchestrator:
                 'in_progress'
             )
             
-            # Handle truncate
-            if table.get('truncate_onstart', False):
+            # Handle truncate (skip on resume to preserve existing data)
+            if table.get('truncate_onstart', False) and not self.resuming:
                 worker = MigrationWorker(
                     self.sf_manager, self.pg_manager, self.status_tracker,
                     source, table, self.global_config['max_retry_attempts']
                 )
                 worker.truncate_table()
+            elif table.get('truncate_onstart', False) and self.resuming:
+                self.logger.info(f"[{source_table}] Skipping truncate on resume (preserving existing data)")
             
             # Handle index disabling
             indexes = []
@@ -201,18 +390,28 @@ class MigrationOrchestrator:
                 )
             
             try:
-                # Determine chunking strategy
-                self.logger.info(f"[{source_table}] Determining chunking strategy...")
-                chunking_strategy = ChunkingStrategyFactory.create_strategy(
-                    self.sf_manager,
-                    source['source_sf_database'],
-                    source['source_sf_schema'],
-                    source_table,
-                    table,
-                    self.global_config['batch_size']
-                )
-                
-                chunks = chunking_strategy.create_chunks()
+                # Check if we're resuming this table
+                if self.resuming:
+                    pending_chunk_data = self.status_tracker.get_pending_chunks(
+                        self.run_id,
+                        source['source_sf_database'],
+                        source['source_sf_schema'],
+                        source_table
+                    )
+                    
+                    if pending_chunk_data:
+                        # Resume with pending chunks
+                        self.logger.info(
+                            f"[{source_table}] Resuming with {len(pending_chunk_data)} pending chunks..."
+                        )
+                        chunks = self._reconstruct_chunks_from_status(pending_chunk_data)
+                    else:
+                        # No pending chunks, table might be complete or needs fresh start
+                        self.logger.info(f"[{source_table}] No pending chunks, starting fresh chunking...")
+                        chunks = self._create_fresh_chunks(source, table, source_table)
+                else:
+                    # Fresh start: create chunks normally
+                    chunks = self._create_fresh_chunks(source, table, source_table)
                 
                 if not chunks:
                     self.logger.warning(f"[{source_table}] No chunks created (no data?)")
@@ -236,17 +435,6 @@ class MigrationOrchestrator:
                     'in_progress'
                 )
                 
-                # Create chunk statuses
-                for chunk in chunks:
-                    self.status_tracker.create_chunk_status(
-                        self.run_id,
-                        source['source_sf_database'],
-                        source['source_sf_schema'],
-                        source_table,
-                        chunk.chunk_id,
-                        chunk.metadata
-                    )
-                
                 # Update total chunks
                 conn = self.pg_manager.get_connection(source['target_pg_database'])
                 cursor = conn.cursor()
@@ -265,8 +453,8 @@ class MigrationOrchestrator:
                     self.pg_manager.return_connection(conn)
                 
                 self.logger.info(
-                    f"[{source_table}] Created {len(chunks)} chunks, "
-                    f"processing with {self.global_config['parallel_threads']} threads..."
+                    f"[{source_table}] Processing {len(chunks)} chunks with "
+                    f"{self.global_config['parallel_threads']} threads..."
                 )
                 
                 # Process chunks in parallel
@@ -323,7 +511,8 @@ class MigrationOrchestrator:
                     worker.process_chunk,
                     str(self.run_id),
                     chunk.chunk_id,
-                    chunk.filter_sql
+                    chunk.filter_sql,
+                    chunk.metadata  # Pass chunk metadata for chunk-scoped watermark
                 ): chunk
                 for chunk in chunks
             }
@@ -454,6 +643,22 @@ def main():
         action='store_true',
         help='Validate configuration and show what would be migrated without actually migrating'
     )
+    parser.add_argument(
+        '--no-resume',
+        action='store_true',
+        help='Force fresh start, ignore existing incomplete runs'
+    )
+    parser.add_argument(
+        '--resume-max-age',
+        type=int,
+        default=12,
+        help='Maximum age (hours) of run to resume (default: 12)'
+    )
+    parser.add_argument(
+        '--resume-run-id',
+        type=str,
+        help='Resume specific run ID (overrides auto-detection)'
+    )
     
     args = parser.parse_args()
     
@@ -465,7 +670,7 @@ def main():
         print(f"ℹ No .env file found at {args.env_file}, using system environment")
     
     # Run migration
-    orchestrator = MigrationOrchestrator(args.config, args.log_level)
+    orchestrator = MigrationOrchestrator(args.config, args.log_level, args)
     
     if args.dry_run:
         orchestrator.dry_run()

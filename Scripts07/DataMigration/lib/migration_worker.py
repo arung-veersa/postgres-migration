@@ -44,13 +44,60 @@ class MigrationWorker:
         
         self.source_table = table_config['source']
         self.target_table = table_config['target']
-        self.source_watermark = table_config.get('source_watermark')
-        self.target_watermark = table_config.get('target_watermark')
-        self.uniqueness_columns = table_config.get('uniqueness_columns') or []
         self.truncate_onstart = table_config.get('truncate_onstart', False)
+        
+        # Smart configuration: If truncate_onstart is True, ignore incremental settings
+        if self.truncate_onstart:
+            # Full table copy mode - ignore incremental settings
+            self.source_watermark = None
+            self.target_watermark = None
+            self.uniqueness_columns = []
+            
+            # Log if we're overriding settings
+            overridden = []
+            if table_config.get('source_watermark'):
+                overridden.append('source_watermark')
+            if table_config.get('target_watermark'):
+                overridden.append('target_watermark')
+            if table_config.get('uniqueness_columns'):
+                overridden.append('uniqueness_columns')
+            
+            if overridden:
+                self.logger.info(
+                    f"[{self.source_table}] truncate_onstart=true: "
+                    f"Ignoring incremental settings ({', '.join(overridden)})"
+                )
+        else:
+            # Incremental mode - use configured settings
+            self.source_watermark = table_config.get('source_watermark')
+            self.target_watermark = table_config.get('target_watermark')
+            self.uniqueness_columns = table_config.get('uniqueness_columns') or []
         
         # Cache target columns to avoid repeated queries
         self._target_columns_cache = None
+        self._target_is_empty_cache = None  # Cache empty table check
+    
+    def _is_target_table_empty(self) -> bool:
+        """
+        Check if target table is empty (for optimization)
+        Cached after first call to avoid repeated queries
+        """
+        if self._target_is_empty_cache is not None:
+            return self._target_is_empty_cache
+        
+        conn = self.pg_manager.get_connection(self.target_db)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute(
+                f"SELECT COUNT(*) = 0 FROM {self.target_schema}.{self.target_table}"
+            )
+            is_empty = cursor.fetchone()[0]
+            self._target_is_empty_cache = is_empty
+            return is_empty
+        finally:
+            cursor.close()
+            self.pg_manager.return_connection(conn)
     
     def _get_target_columns(self) -> List[str]:
         """Get target table columns (cached)"""
@@ -75,7 +122,7 @@ class MigrationWorker:
             cursor.close()
             self.pg_manager.return_connection(conn)
     
-    def process_chunk(self, run_id: str, chunk_id: int, chunk_filter: str) -> int:
+    def process_chunk(self, run_id: str, chunk_id: int, chunk_filter: str, chunk_metadata: Dict[str, Any] = None) -> int:
         """
         Process a single data chunk
         
@@ -83,6 +130,7 @@ class MigrationWorker:
             run_id: Migration run ID
             chunk_id: Chunk identifier
             chunk_filter: SQL WHERE clause for this chunk
+            chunk_metadata: Metadata about the chunk (strategy, column info, etc.)
         
         Returns:
             Number of rows processed
@@ -94,7 +142,7 @@ class MigrationWorker:
         )
         
         try:
-            rows_processed = self._process_chunk_with_retry(chunk_filter)
+            rows_processed = self._process_chunk_with_retry(chunk_filter, chunk_metadata or {})
             
             # Update chunk status to completed
             self.status_tracker.update_chunk_status(
@@ -119,61 +167,274 @@ class MigrationWorker:
         retry=retry_if_exception_type((psycopg2.OperationalError, Exception)),
         reraise=True
     )
-    def _process_chunk_with_retry(self, chunk_filter: str) -> int:
+    def _process_chunk_with_retry(self, chunk_filter: str, chunk_metadata: Dict[str, Any]) -> int:
         """Process chunk with retry logic"""
         # Build query to fetch data from Snowflake
-        fetch_query = self._build_fetch_query(chunk_filter)
+        fetch_query = self._build_fetch_query(chunk_filter, chunk_metadata)
         
         self.logger.debug(f"Fetching data: {fetch_query[:200]}...")
         
         with Timer(f"Fetch from Snowflake: {self.source_table}", self.logger):
             df = self.sf_manager.fetch_dataframe(fetch_query)
         
+        # OPTIMIZATION 2: Skip empty chunks early
         if df.empty:
-            self.logger.debug(f"No rows fetched for chunk")
+            self.logger.info(
+                f"[{self.source_table}] Chunk has no new data, skipping load"
+            )
             return 0
         
         rows_count = len(df)
         self.logger.info(f"Fetched {format_number(rows_count)} rows from Snowflake")
         
-        # Load data to PostgreSQL
+        # Load data to PostgreSQL (pass chunk_metadata for smart COPY/UPSERT decision)
         with Timer(f"Load to PostgreSQL: {self.target_table}", self.logger):
-            self._load_to_postgres(df)
+            self._load_to_postgres(df, chunk_metadata)
         
         return rows_count
     
-    def _build_fetch_query(self, chunk_filter: str) -> str:
+    def _build_fetch_query(self, chunk_filter: str, chunk_metadata: Dict[str, Any]) -> str:
         """Build SELECT query for Snowflake"""
+        strategy = chunk_metadata.get('strategy', '')
+        
         # Get watermark filter if applicable
         watermark_filter = None
         if self.source_watermark and self.target_watermark and not self.truncate_onstart:
-            max_watermark = self.pg_manager.get_max_watermark(
-                self.target_db, self.target_schema, self.target_table, self.target_watermark
-            )
+            # Determine if we should use chunk-scoped or global watermark
+            
+            if strategy in ['date_range', 'numeric_range', 'grouped_values', 'date_range_offset']:
+                # Use chunk-scoped watermark for strategies with filterable chunks
+                max_watermark = self._get_chunk_scoped_watermark(chunk_filter, chunk_metadata)
+                if max_watermark:
+                    self.logger.debug(f"Chunk-scoped watermark: {max_watermark}")
+            else:
+                # Use global watermark for offset-based and other strategies
+                max_watermark = self.pg_manager.get_max_watermark(
+                    self.target_db, self.target_schema, self.target_table, self.target_watermark
+                )
+                if max_watermark:
+                    self.logger.debug(f"Global watermark: {max_watermark}")
+            
             if max_watermark:
                 watermark_filter = f'{quote_identifier(self.source_watermark)} > \'{max_watermark}\''
         
-        # Combine filters
-        filters = [chunk_filter]
-        if watermark_filter:
-            filters.append(watermark_filter)
+        # Handle date_range_offset strategy (LIMIT/OFFSET for large single dates)
+        if strategy == 'date_range_offset':
+            filters = [chunk_filter]
+            if watermark_filter:
+                filters.append(watermark_filter)
+            
+            where_clause = " AND ".join(f"({f})" for f in filters if f and f.strip() and f != "1=1")
+            if where_clause:
+                where_clause = f"WHERE {where_clause}"
+            else:
+                where_clause = ""
+            
+            # Build deterministic ORDER BY clause
+            # CRITICAL: Include primary key columns to ensure stable pagination
+            # This prevents the same row from appearing in multiple chunks
+            date_column = quote_identifier(chunk_metadata['date_column'])
+            limit = chunk_metadata['limit']
+            offset = chunk_metadata['offset']
+            
+            # Get uniqueness columns (primary key) for deterministic ordering
+            uniqueness_columns = chunk_metadata.get('uniqueness_columns', [])
+            order_by_clause = date_column
+            
+            if uniqueness_columns:
+                # Add uniqueness columns to ORDER BY for deterministic pagination
+                uniqueness_cols_quoted = [quote_identifier(col) for col in uniqueness_columns]
+                order_by_clause = f"{date_column}, {', '.join(uniqueness_cols_quoted)}"
+                self.logger.debug(
+                    f"Using deterministic ORDER BY: {order_by_clause}"
+                )
+            
+            query = f"""
+                SELECT *
+                FROM {self.source_db}.{self.source_schema}.{self.source_table}
+                {where_clause}
+                ORDER BY {order_by_clause}
+                LIMIT {limit} OFFSET {offset}
+            """
+            return query
         
-        where_clause = " AND ".join(f"({f})" for f in filters if f and f.strip() and f != "1=1")
-        if where_clause:
-            where_clause = f"WHERE {where_clause}"
+        # Check if chunk_filter contains ORDER BY (offset-based strategy)
+        # Format: "(filter) ORDER BY col LIMIT x OFFSET y"
+        if 'ORDER BY' in chunk_filter:
+            # Offset-based strategy: chunk_filter already contains complete clause
+            # Extract the WHERE part and ORDER BY/LIMIT/OFFSET parts
+            parts = chunk_filter.split(' ORDER BY ', 1)
+            where_part = parts[0]  # "(source_filter)"
+            order_limit_part = parts[1]  # "col LIMIT x OFFSET y"
+            
+            # Add watermark filter if exists
+            if watermark_filter:
+                where_part = f"{where_part} AND ({watermark_filter})"
+            
+            # Remove outer parentheses from where_part if present
+            where_part = where_part.strip()
+            if where_part.startswith('(') and where_part.endswith(')'):
+                where_part = where_part[1:-1]
+            
+            # Build query with ORDER BY at the end
+            query = f"""
+                SELECT *
+                FROM {self.source_db}.{self.source_schema}.{self.source_table}
+                WHERE {where_part}
+                ORDER BY {order_limit_part}
+            """
         else:
-            where_clause = ""
-        
-        # Build query
-        query = f"""
-            SELECT *
-            FROM {self.source_db}.{self.source_schema}.{self.source_table}
-            {where_clause}
-        """
+            # Traditional chunking (range, grouped values, etc.)
+            filters = [chunk_filter]
+            if watermark_filter:
+                filters.append(watermark_filter)
+            
+            where_clause = " AND ".join(f"({f})" for f in filters if f and f.strip() and f != "1=1")
+            if where_clause:
+                where_clause = f"WHERE {where_clause}"
+            else:
+                where_clause = ""
+            
+            # Build query
+            query = f"""
+                SELECT *
+                FROM {self.source_db}.{self.source_schema}.{self.source_table}
+                {where_clause}
+            """
         
         return query
     
-    def _load_to_postgres(self, df: pd.DataFrame):
+    def _get_chunk_scoped_watermark(self, chunk_filter: str, chunk_metadata: Dict[str, Any]) -> Optional[str]:
+        """
+        Get maximum watermark value scoped to this specific chunk.
+        
+        Args:
+            chunk_filter: Snowflake filter SQL for the chunk
+            chunk_metadata: Metadata about the chunk
+        
+        Returns:
+            Maximum watermark value for this chunk, or None
+        """
+        try:
+            # Translate Snowflake chunk filter to PostgreSQL
+            pg_filter = self._translate_chunk_filter_to_postgres(chunk_filter, chunk_metadata)
+            
+            if not pg_filter or pg_filter.strip() == "1=1":
+                # If no meaningful filter, fall back to global watermark
+                return self.pg_manager.get_max_watermark(
+                    self.target_db, self.target_schema, self.target_table, self.target_watermark
+                )
+            
+            # Query PostgreSQL with chunk-scoped filter
+            max_watermark = self.pg_manager.get_max_watermark_for_chunk(
+                self.target_db, self.target_schema, self.target_table,
+                self.target_watermark, pg_filter
+            )
+            
+            return max_watermark
+            
+        except Exception as e:
+            self.logger.warning(
+                f"Could not get chunk-scoped watermark, falling back to global: {e}"
+            )
+            # Fall back to global watermark on error
+            return self.pg_manager.get_max_watermark(
+                self.target_db, self.target_schema, self.target_table, self.target_watermark
+            )
+    
+    def _translate_chunk_filter_to_postgres(self, chunk_filter: str, chunk_metadata: Dict[str, Any]) -> str:
+        """
+        Translate Snowflake chunk filter syntax to PostgreSQL WHERE clause.
+        
+        Args:
+            chunk_filter: Snowflake filter SQL
+            chunk_metadata: Metadata about the chunk (strategy, columns, etc.)
+        
+        Returns:
+            PostgreSQL-compatible WHERE clause (without 'WHERE' keyword)
+        """
+        # Remove outer parentheses if present
+        pg_filter = chunk_filter.strip()
+        if pg_filter.startswith('(') and pg_filter.endswith(')'):
+            pg_filter = pg_filter[1:-1]
+        
+        # Get source_filter from table config
+        source_filter = self.table_config.get('source_filter', '')
+        
+        # Remove source_filter part completely - it may reference source-only columns
+        if source_filter:
+            # Try multiple patterns to remove source_filter
+            patterns_to_remove = [
+                f"({source_filter}) AND ",
+                f" AND ({source_filter})",
+                f"({source_filter})",
+                f"{source_filter} AND ",
+                f" AND {source_filter}",
+                source_filter
+            ]
+            
+            for pattern in patterns_to_remove:
+                if pattern in pg_filter:
+                    pg_filter = pg_filter.replace(pattern, "", 1)
+                    break
+        
+        # Clean up orphaned parentheses
+        # Remove leading ) or (
+        pg_filter = pg_filter.lstrip(') ')
+        pg_filter = pg_filter.rstrip('( ')
+        
+        # Remove leading/trailing AND
+        pg_filter = pg_filter.strip()
+        if pg_filter.startswith('AND '):
+            pg_filter = pg_filter[4:]
+        if pg_filter.endswith(' AND'):
+            pg_filter = pg_filter[:-4]
+        
+        pg_filter = pg_filter.strip()
+        
+        strategy = chunk_metadata.get('strategy', '')
+        
+        # Strategy-specific translations
+        if strategy in ['date_range', 'date_range_offset']:
+            # Replace source watermark column with target watermark column
+            # e.g., "Updated Timestamp"::DATE = '2024-12-05'
+            #   --> "Updated Datatimestamp"::DATE = '2024-12-05'
+            source_watermark = self.table_config.get('source_watermark')
+            target_watermark = self.table_config.get('target_watermark')
+            
+            if source_watermark and target_watermark and source_watermark != target_watermark:
+                # Replace the source column name with target column name
+                pg_filter = pg_filter.replace(
+                    quote_identifier(source_watermark),
+                    quote_identifier(target_watermark)
+                )
+                self.logger.debug(
+                    f"Translated watermark column in filter: {source_watermark} -> {target_watermark}"
+                )
+        
+        elif strategy == 'numeric_range':
+            # Numeric ranges typically use the same column name in both databases
+            # e.g., ID BETWEEN 1 AND 10000
+            # Usually no translation needed, but handle potential differences
+            pass
+        
+        elif strategy == 'grouped_values':
+            # Grouped values use IN clauses
+            # e.g., "Patient Address Id" IN ('uuid1', 'uuid2', ...)
+            # Column names are typically the same
+            pass
+        
+        # Final cleanup - remove any remaining double spaces
+        pg_filter = ' '.join(pg_filter.split())
+        pg_filter = pg_filter.strip()
+        
+        # If empty after cleanup, use "1=1" as a safe default
+        if not pg_filter:
+            pg_filter = "1=1"
+        
+        return pg_filter
+    
+    def _load_to_postgres(self, df: pd.DataFrame, chunk_metadata: Dict[str, Any] = None):
         """Load DataFrame to PostgreSQL using COPY or UPSERT"""
         # Filter DataFrame to only include columns that exist in PostgreSQL target table
         # (Snowflake sources may have more columns than PostgreSQL targets)
@@ -183,7 +444,45 @@ class MigrationWorker:
             self.logger.warning(f"No matching columns found between source and target")
             return
         
-        if not self.uniqueness_columns or self.truncate_onstart:
+        # Replace NaT (Not-a-Time) with None for PostgreSQL compatibility
+        df_filtered = df_filtered.replace({pd.NaT: None})
+        
+        # Smart decision: Use COPY (fast) if:
+        # 1. truncate_onstart is True, OR
+        # 2. No uniqueness_columns defined, OR
+        # 3. Target table is empty AND NOT using date-based chunking
+        #
+        # CRITICAL: For date-based chunking (date_range, date_range_offset),
+        # the same record can appear in multiple chunks if updated on different dates.
+        # We MUST use UPSERT to handle duplicates correctly.
+        
+        chunk_metadata = chunk_metadata or {}
+        strategy = chunk_metadata.get('strategy', '')
+        
+        # Check if we can safely use COPY
+        can_use_copy = (
+            self.truncate_onstart or 
+            not self.uniqueness_columns
+        )
+        
+        # For empty table optimization, only use COPY if NOT date-based chunking
+        if not can_use_copy and self._is_target_table_empty():
+            # Check if using date-based strategy
+            if strategy in ['date_range', 'date_range_offset']:
+                self.logger.info(
+                    f"[{self.source_table}] Target table empty but using date-based chunking - "
+                    f"using UPSERT to handle potential duplicates across date chunks"
+                )
+                can_use_copy = False
+            else:
+                # Safe to use COPY for non-date strategies
+                self.logger.info(
+                    f"[{self.source_table}] Target table is empty: "
+                    f"Using fast COPY mode (bypassing UPSERT)"
+                )
+                can_use_copy = True
+        
+        if can_use_copy:
             # Use fast COPY for inserts
             self._copy_to_postgres(df_filtered)
         else:
@@ -193,9 +492,33 @@ class MigrationWorker:
     def _filter_columns_for_target(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Filter DataFrame columns to only those that exist in target PostgreSQL table.
-        Column names have the same casing in both Snowflake and PostgreSQL.
+        Applies column mapping if configured to handle name differences between source and target.
+        Also auto-infers mapping from watermark columns if they differ.
         Uses cached column list for performance.
         """
+        # Build column mapping
+        column_mapping = self.table_config.get('column_mapping', {}).copy() or {}
+        
+        # Auto-infer watermark column mapping if source != target
+        source_watermark = self.table_config.get('source_watermark')
+        target_watermark = self.table_config.get('target_watermark')
+        
+        if source_watermark and target_watermark and source_watermark != target_watermark:
+            # Only add if not already in explicit mapping
+            if source_watermark not in column_mapping:
+                column_mapping[source_watermark] = target_watermark
+                self.logger.debug(
+                    f"Auto-inferred watermark column mapping: "
+                    f"{source_watermark} -> {target_watermark}"
+                )
+        
+        # Apply column mapping (explicit + auto-inferred)
+        if column_mapping:
+            df = df.rename(columns=column_mapping)
+            self.logger.debug(
+                f"Applied column mapping: {len(column_mapping)} columns renamed"
+            )
+        
         # Get target columns (cached after first call)
         target_columns = self._get_target_columns()
         
