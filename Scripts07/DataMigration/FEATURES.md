@@ -100,7 +100,53 @@ python migrate.py --resume-run-id <UUID>
 
 ## Performance Optimizations
 
-### 4. Incremental Load Pre-Filtering
+### 4. Initial Full Load Detection (Race Condition Fix)
+
+**Purpose:** Automatically use fast COPY mode for initial full loads on empty tables.
+
+**Problem Solved:**
+- Race condition: Each thread checked if table was empty
+- After first thread loaded data, subsequent threads switched to slow UPSERT mode
+- Result: Inconsistent performance (some chunks fast, others slow)
+
+**Solution:**
+- Check if table is empty ONCE, before any threads start
+- Determination happens in orchestrator (`migrate.py`)
+- Result passed to all worker threads via `is_initial_full_load` parameter
+- All threads use the same decision (COPY or UPSERT)
+
+**Performance Impact:**
+```
+Before Fix:  32 minutes (inconsistent COPY/UPSERT mix)
+After Fix:   29 minutes (consistent COPY mode) - 62% faster than original!
+```
+
+**Detection Logic:**
+```python
+# In migrate.py._check_is_initial_full_load()
+is_initial_full_load = (
+    table_is_empty AND
+    no_watermark_exists AND
+    has_uniqueness_columns AND
+    not_truncate_mode
+)
+```
+
+**Log Message:**
+```
+[DIMPATIENTADDRESS] Initial full load detected (empty table, no watermark) - 
+will use fast COPY mode for all chunks
+```
+
+**Code Locations:**
+- `migrate.py._check_is_initial_full_load()` - Detection logic
+- `migrate.py._process_chunks_parallel()` - Pass decision to workers
+- `lib/migration_worker.py.__init__()` - Accept `is_initial_full_load` parameter
+- `lib/migration_worker.py._load_to_postgres()` - Use cached decision
+
+---
+
+### 5. Incremental Load Pre-Filtering
 
 **Purpose:** Dramatically reduce chunking time for incremental loads.
 
@@ -122,7 +168,29 @@ AFTER:  1 chunk, < 1 second (99% faster for up-to-date tables)
 
 ---
 
-### 5. Early Skip for Empty Chunks
+### 5. Incremental Load Pre-Filtering
+
+**Purpose:** Dramatically reduce chunking time for incremental loads.
+
+**How it works:**
+- Queries `MAX(target_watermark)` before chunking
+- Only creates chunks for data AFTER the max watermark
+- Skips unchanged historical data entirely
+
+**Performance:**
+```
+BEFORE: 695 chunks, 10 seconds
+AFTER:  1 chunk, < 1 second (99% faster for up-to-date tables)
+```
+
+**Implementation:**
+- `migrate.py._create_fresh_chunks()` gets max watermark
+- `DateRangeStrategy.create_chunks()` accepts watermark filter
+- Snowflake query includes `WHERE watermark_column > max_target_watermark`
+
+---
+
+### 6. Early Skip for Empty Chunks
 
 **Purpose:** Avoid unnecessary PostgreSQL operations for empty result sets.
 
@@ -136,7 +204,7 @@ AFTER:  1 chunk, < 1 second (99% faster for up-to-date tables)
 
 ---
 
-### 6. LIMIT/OFFSET Sub-Chunking
+### 7. LIMIT/OFFSET Sub-Chunking
 
 **Purpose:** Handle massive single-date datasets without memory errors.
 
@@ -171,7 +239,7 @@ Date 2024-01-10: 1,399,950 rows
 
 ## Data Integrity Features
 
-### 7. Deterministic ORDER BY
+### 8. Deterministic ORDER BY
 
 **Purpose:** Prevent duplicate keys and data gaps in LIMIT/OFFSET pagination.
 
@@ -197,7 +265,7 @@ ORDER BY "Updated Timestamp", "Patient Address Id"
 
 ---
 
-### 8. Force UPSERT for Date-Based Strategies
+### 9. Force UPSERT for Date-Based Strategies
 
 **Purpose:** Safely handle overlapping data in date-based chunking.
 
@@ -222,7 +290,7 @@ if strategy in ['date_range', 'date_range_offset']:
 
 ---
 
-### 9. Column Name Translation in Filters
+### 10. Column Name Translation in Filters
 
 **Purpose:** Correctly translate Snowflake column names to PostgreSQL in chunk filters.
 
@@ -247,7 +315,7 @@ if strategy in ['date_range', 'date_range_offset']:
 
 ## Bug Fixes
 
-### 10. NaT Timestamp Handling
+### 11. NaT Timestamp Handling
 
 **Problem:**
 ```
@@ -263,7 +331,7 @@ Converts Pandas' `NaT` (Not-a-Time) to SQL `NULL`.
 
 ---
 
-### 11. Source Filter Cleanup
+### 12. Source Filter Cleanup
 
 **Problem:**
 - Source filter left orphaned parentheses in translated queries
@@ -276,7 +344,7 @@ Converts Pandas' `NaT` (Not-a-Time) to SQL `NULL`.
 
 ---
 
-### 12. Batch Size Check for Remaining Dates
+### 13. Batch Size Check for Remaining Dates
 
 **Problem:**
 - Final chunk of accumulated dates could exceed `batch_size`

@@ -26,7 +26,8 @@ class MigrationWorker:
         status_tracker: StatusTracker,
         source_config: Dict[str, Any],
         table_config: Dict[str, Any],
-        max_retries: int = 3
+        max_retries: int = 3,
+        is_initial_full_load: bool = False  # NEW: Pre-determined by orchestrator
     ):
         self.sf_manager = sf_manager
         self.pg_manager = pg_manager
@@ -35,6 +36,10 @@ class MigrationWorker:
         self.table_config = table_config
         self.max_retries = max_retries
         self.logger = logger
+        
+        # CRITICAL: Store the pre-determined initial load status
+        # This is set by orchestrator BEFORE any threads start to avoid race conditions
+        self._is_initial_full_load = is_initial_full_load
         
         # Extract configuration
         self.source_db = source_config['source_sf_database']
@@ -75,29 +80,6 @@ class MigrationWorker:
         
         # Cache target columns to avoid repeated queries
         self._target_columns_cache = None
-        self._target_is_empty_cache = None  # Cache empty table check
-    
-    def _is_target_table_empty(self) -> bool:
-        """
-        Check if target table is empty (for optimization)
-        Cached after first call to avoid repeated queries
-        """
-        if self._target_is_empty_cache is not None:
-            return self._target_is_empty_cache
-        
-        conn = self.pg_manager.get_connection(self.target_db)
-        cursor = conn.cursor()
-        
-        try:
-            cursor.execute(
-                f"SELECT COUNT(*) = 0 FROM {self.target_schema}.{self.target_table}"
-            )
-            is_empty = cursor.fetchone()[0]
-            self._target_is_empty_cache = is_empty
-            return is_empty
-        finally:
-            cursor.close()
-            self.pg_manager.return_connection(conn)
     
     def _get_target_columns(self) -> List[str]:
         """Get target table columns (cached)"""
@@ -315,12 +297,31 @@ class MigrationWorker:
         Returns:
             Maximum watermark value for this chunk, or None
         """
+        # Skip chunk-scoped watermark if this is an initial full load - optimization
+        if self._is_initial_full_load:
+            self.logger.debug(
+                f"[{self.source_table}] Initial full load - skipping chunk-scoped watermark query"
+            )
+            return None
+        
+        # Skip if no watermark configured
+        if not self.target_watermark:
+            return None
+        
         try:
             # Translate Snowflake chunk filter to PostgreSQL
             pg_filter = self._translate_chunk_filter_to_postgres(chunk_filter, chunk_metadata)
             
-            if not pg_filter or pg_filter.strip() == "1=1":
+            if not pg_filter or pg_filter.strip() in ("1=1", ""):
                 # If no meaningful filter, fall back to global watermark
+                return self.pg_manager.get_max_watermark(
+                    self.target_db, self.target_schema, self.target_table, self.target_watermark
+                )
+            
+            # Validate the filter doesn't result in syntax errors
+            # Simple check: ensure it has some actual content beyond whitespace
+            if len(pg_filter.replace(' ', '')) < 3:
+                self.logger.debug(f"[{self.source_table}] Filter too short after translation, using global watermark")
                 return self.pg_manager.get_max_watermark(
                     self.target_db, self.target_schema, self.target_table, self.target_watermark
                 )
@@ -334,13 +335,17 @@ class MigrationWorker:
             return max_watermark
             
         except Exception as e:
-            self.logger.warning(
-                f"Could not get chunk-scoped watermark, falling back to global: {e}"
+            self.logger.debug(
+                f"Could not get chunk-scoped watermark, falling back to global: {str(e)[:100]}"
             )
             # Fall back to global watermark on error
-            return self.pg_manager.get_max_watermark(
-                self.target_db, self.target_schema, self.target_table, self.target_watermark
-            )
+            try:
+                return self.pg_manager.get_max_watermark(
+                    self.target_db, self.target_schema, self.target_table, self.target_watermark
+                )
+            except Exception:
+                # If even global fails, return None
+                return None
     
     def _translate_chunk_filter_to_postgres(self, chunk_filter: str, chunk_metadata: Dict[str, Any]) -> str:
         """
@@ -450,39 +455,26 @@ class MigrationWorker:
         # Smart decision: Use COPY (fast) if:
         # 1. truncate_onstart is True, OR
         # 2. No uniqueness_columns defined, OR
-        # 3. Target table is empty AND NOT using date-based chunking
-        #
-        # CRITICAL: For date-based chunking (date_range, date_range_offset),
-        # the same record can appear in multiple chunks if updated on different dates.
-        # We MUST use UPSERT to handle duplicates correctly.
+        # 3. Initial full load (pre-determined by orchestrator before threads started)
         
         chunk_metadata = chunk_metadata or {}
-        strategy = chunk_metadata.get('strategy', '')
         
         # Check if we can safely use COPY
-        can_use_copy = (
+        use_copy = (
             self.truncate_onstart or 
-            not self.uniqueness_columns
+            not self.uniqueness_columns or
+            self._is_initial_full_load  # Use the pre-determined value
         )
         
-        # For empty table optimization, only use COPY if NOT date-based chunking
-        if not can_use_copy and self._is_target_table_empty():
-            # Check if using date-based strategy
-            if strategy in ['date_range', 'date_range_offset']:
-                self.logger.info(
-                    f"[{self.source_table}] Target table empty but using date-based chunking - "
-                    f"using UPSERT to handle potential duplicates across date chunks"
-                )
-                can_use_copy = False
-            else:
-                # Safe to use COPY for non-date strategies
-                self.logger.info(
-                    f"[{self.source_table}] Target table is empty: "
-                    f"Using fast COPY mode (bypassing UPSERT)"
-                )
-                can_use_copy = True
+        # Log the decision once (first chunk only)
+        if use_copy and self._is_initial_full_load and not hasattr(self, '_logged_initial_load'):
+            self._logged_initial_load = True
+            self.logger.info(
+                f"[{self.source_table}] Initial full load detected "
+                f"(empty table, no watermark) - will use fast COPY mode for all chunks"
+            )
         
-        if can_use_copy:
+        if use_copy:
             # Use fast COPY for inserts
             self._copy_to_postgres(df_filtered)
         else:

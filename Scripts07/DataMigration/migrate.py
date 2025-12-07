@@ -202,6 +202,62 @@ class MigrationOrchestrator:
             self.logger.info("\n\n⚠️  Resume cancelled by user")
             raise
     
+    def _check_is_initial_full_load(self, source: Dict[str, Any], table: Dict[str, Any]) -> bool:
+        """
+        Check if this is an initial full load (empty table + no watermark).
+        CRITICAL: Must be called ONCE before any threads start to avoid race conditions.
+        
+        Returns:
+            bool: True if table is empty AND no watermark exists (initial full load)
+        """
+        # If truncate_onstart, it's not a "natural" initial load
+        if table.get('truncate_onstart', False):
+            return False
+        
+        # If no uniqueness columns, can't use UPSERT anyway
+        if not table.get('uniqueness_columns'):
+            return False
+        
+        target_database = source['target_pg_database']
+        target_schema = source['target_pg_schema']
+        target_table = table['target']
+        target_watermark = table.get('target_watermark')
+        
+        try:
+            # Check if table is empty
+            conn = self.pg_manager.get_connection(target_database)
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    f"SELECT COUNT(*) = 0 FROM {target_schema}.{target_table}"
+                )
+                is_empty = cursor.fetchone()[0]
+            finally:
+                cursor.close()
+                self.pg_manager.return_connection(conn)
+            
+            if not is_empty:
+                # Table has data - not an initial load
+                return False
+            
+            # Table is empty - check if watermark exists
+            if target_watermark:
+                max_watermark = self.pg_manager.get_max_watermark(
+                    target_database, target_schema, target_table, target_watermark
+                )
+                if max_watermark:
+                    # Has watermark but empty table - unusual, play it safe with UPSERT
+                    return False
+            
+            # Table is empty AND no watermark - initial full load!
+            return True
+            
+        except Exception as e:
+            self.logger.warning(
+                f"Could not determine initial load status: {e}. Defaulting to UPSERT mode."
+            )
+            return False
+    
     def _reconstruct_chunks_from_status(self, pending_chunk_data: List[Dict]) -> List:
         """Reconstruct ChunkInfo objects from stored chunk status data"""
         from lib.chunking import ChunkInfo
@@ -279,13 +335,27 @@ class MigrationOrchestrator:
                 )
         
         self.logger.info(f"[{source_table}] Determining chunking strategy...")
+        
+        # Determine batch size: Use larger batch for full loads when COPY mode will be used
+        # For initial full loads (no watermark), use batch_size_copy_mode if configured
+        batch_size = self.global_config['batch_size']
+        if not max_target_watermark and not truncate_onstart:
+            # This is a full load on empty table - will use COPY mode
+            batch_size_copy = self.global_config.get('batch_size_copy_mode')
+            if batch_size_copy and batch_size_copy > batch_size:
+                self.logger.info(
+                    f"[{source_table}] Initial full load detected - using larger batch size "
+                    f"({format_number(batch_size_copy)} vs {format_number(batch_size)}) for faster COPY"
+                )
+                batch_size = batch_size_copy
+        
         chunking_strategy = ChunkingStrategyFactory.create_strategy(
             self.sf_manager,
             source['source_sf_database'],
             source['source_sf_schema'],
             source_table,
             table,
-            self.global_config['batch_size'],
+            batch_size,
             max_target_watermark
         )
         
@@ -499,9 +569,14 @@ class MigrationOrchestrator:
         completed = 0
         failed = 0
         
+        # CRITICAL: Determine if this is an initial full load BEFORE any threads start
+        # This must happen ONCE to avoid race conditions between threads
+        is_initial_full_load = self._check_is_initial_full_load(source, table)
+        
         worker = MigrationWorker(
             self.sf_manager, self.pg_manager, self.status_tracker,
-            source, table, self.global_config['max_retry_attempts']
+            source, table, self.global_config['max_retry_attempts'],
+            is_initial_full_load=is_initial_full_load  # Pass the decision to worker
         )
         
         with ThreadPoolExecutor(max_workers=self.global_config['parallel_threads']) as executor:

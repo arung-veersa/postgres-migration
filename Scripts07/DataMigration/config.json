@@ -12,6 +12,7 @@
   },
   "parallel_threads": 6,
   "batch_size": 50000,
+  "batch_size_copy_mode": 100000,
   "max_retry_attempts": 3,
   "lambda_timeout_buffer_seconds": 120,
   "sources": [
