@@ -157,17 +157,25 @@ class MigrationWorker:
         self.logger.debug(f"Fetching data: {fetch_query[:200]}...")
         
         with Timer(f"Fetch from Snowflake: {self.source_table}", self.logger):
-            df = self.sf_manager.fetch_dataframe(fetch_query)
+            result = self.sf_manager.fetch_dataframe(fetch_query)
+        
+        # Handle result from fetch_dataframe (dict with 'data' and 'columns')
+        rows = result['data']
+        columns = result['columns']
         
         # OPTIMIZATION 2: Skip empty chunks early
-        if df.empty:
+        if not rows or len(rows) == 0:
             self.logger.info(
                 f"[{self.source_table}] Chunk has no new data, skipping load"
             )
             return 0
         
-        rows_count = len(df)
+        rows_count = len(rows)
         self.logger.info(f"Fetched {format_number(rows_count)} rows from Snowflake")
+        
+        # Convert to pandas DataFrame for loading
+        import pandas as pd
+        df = pd.DataFrame(rows, columns=columns)
         
         # Load data to PostgreSQL (pass chunk_metadata for smart COPY/UPSERT decision)
         with Timer(f"Load to PostgreSQL: {self.target_table}", self.logger):

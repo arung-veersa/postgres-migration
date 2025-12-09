@@ -51,6 +51,35 @@ def setup_logging(log_level: str = "INFO", log_file: Optional[str] = None) -> lo
     return logger
 
 
+def get_logger(name: str = "migration") -> logging.Logger:
+    """
+    Get or create a logger instance
+    
+    Args:
+        name: Logger name (default: "migration")
+    
+    Returns:
+        Logger instance
+    """
+    logger = logging.getLogger(name)
+    
+    # If logger doesn't have handlers, set it up
+    if not logger.handlers:
+        logger.setLevel(logging.INFO)
+        
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setLevel(logging.INFO)
+        
+        formatter = logging.Formatter(
+            '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    
+    return logger
+
+
 def format_number(num: int) -> str:
     """Format number with thousand separators"""
     return f"{num:,}"

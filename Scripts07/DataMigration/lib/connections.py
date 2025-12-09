@@ -72,8 +72,14 @@ class SnowflakeConnectionManager:
                 user=self.user,
                 private_key=self.get_private_key(self.rsa_key),
                 warehouse=self.warehouse,
+                # Disable OCSP checks to avoid SSL certificate validation issues in Lambda
+                # When Lambda is in a VPC, OCSP checks to external CRL servers may fail
+                insecure_mode=True,  # Disable SSL certificate verification completely
                 session_parameters={
                     'QUERY_TAG': 'postgres-migration',
+                    # Force client-side result handling instead of S3 staging
+                    'CLIENT_RESULT_PREFETCH_SLOTS': 0,
+                    'CLIENT_RESULT_PREFETCH_THREADS': 1,
                 }
             )
             
@@ -89,6 +95,10 @@ class SnowflakeConnectionManager:
         if self.connection is None or self.connection.is_closed():
             return self.connect()
         return self.connection
+    
+    def get_connection_info(self) -> str:
+        """Get connection information for logging/display"""
+        return f"{self.account}"
     
     def close(self):
         """Close Snowflake connection"""
@@ -107,13 +117,17 @@ class SnowflakeConnectionManager:
             cursor.close()
     
     def fetch_dataframe(self, query: str):
-        """Execute query and return pandas DataFrame"""
-        import pandas as pd
+        """Execute query and return results as list of tuples (no pandas needed)"""
         conn = self.get_connection()
         cursor = conn.cursor()
         try:
             cursor.execute(query)
-            return cursor.fetch_pandas_all()
+            # Use fetchall() instead of fetch_pandas_all() to avoid pandas dependency
+            rows = cursor.fetchall()
+            # Get column names
+            columns = [desc[0] for desc in cursor.description]
+            # Return as dict with data and columns for DataFrame-like usage
+            return {'data': rows, 'columns': columns}
         finally:
             cursor.close()
     

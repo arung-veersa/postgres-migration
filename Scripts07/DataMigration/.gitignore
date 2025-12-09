@@ -39,3 +39,9 @@ Thumbs.db
 .coverage
 htmlcov/
 
+# Lambda Deployment Artifacts
+deploy/*.zip
+deploy/package/
+deploy/dependencies_layer/
+deploy/psycopg2_layer/
+

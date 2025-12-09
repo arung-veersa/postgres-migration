@@ -8,6 +8,7 @@ import sys
 import os
 import argparse
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, Any, List
@@ -15,7 +16,12 @@ from typing import Dict, Any, List
 # Add lib to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    # Lambda environment doesn't need dotenv
+    def load_dotenv():
+        pass
 
 from lib.config_loader import ConfigLoader
 from lib.config_validator import validate_config
@@ -30,32 +36,69 @@ from lib.utils import setup_logging, Timer, format_number, format_duration, logg
 class MigrationOrchestrator:
     """Orchestrates the entire migration process"""
     
-    def __init__(self, config_path: str, log_level: str = "INFO", args=None):
-        self.config_path = config_path
+    def __init__(self, config_path: str = None, log_level: str = "INFO", args=None, 
+                 config=None, sf_manager=None, pg_manager=None, status_tracker=None, lambda_context=None):
+        """
+        Initialize orchestrator. Can be used for CLI or Lambda.
+        
+        For CLI: Pass config_path, it will initialize everything
+        For Lambda: Pass config (dict), sf_manager, pg_manager, status_tracker (pre-initialized)
+        """
         self.logger = setup_logging(log_level)
-        self.args = args  # Store CLI arguments
+        self.args = args  # Store CLI/Lambda arguments
+        self.lambda_context = lambda_context  # Lambda context for timeout detection
+        self.timed_out = False  # Track if we stopped due to Lambda timeout
         
-        # Load configuration
-        self.config_loader = ConfigLoader(config_path)
-        self.config = self.config_loader.load()
-        self.global_config = self.config_loader.get_global_config()
-        
-        # Validate configuration
-        self.logger.info("Validating configuration...")
-        if not validate_config(self.config):
-            raise ValueError("Configuration validation failed. Please fix errors and try again.")
-        self.logger.info("✓ Configuration validation passed")
-        
-        # Initialize connection factory
-        self.conn_factory = ConnectionFactory(self.config)
-        self.sf_manager = self.conn_factory.get_snowflake_manager()
-        self.pg_manager = self.conn_factory.get_postgres_manager()
+        # CLI mode: Load from config_path
+        if config_path:
+            self.config_path = config_path
+            self.config_loader = ConfigLoader(config_path)
+            self.config = self.config_loader.load()
+            self.global_config = self.config_loader.get_global_config()
+            
+            # Validate configuration
+            self.logger.info("Validating configuration...")
+            if not validate_config(self.config):
+                raise ValueError("Configuration validation failed. Please fix errors and try again.")
+            self.logger.info("✓ Configuration validation passed")
+            
+            # Initialize connection factory
+            self.conn_factory = ConnectionFactory(self.config)
+            self.sf_manager = self.conn_factory.get_snowflake_manager()
+            self.pg_manager = self.conn_factory.get_postgres_manager()
+        # Lambda mode: Use pre-initialized objects
+        else:
+            self.config_path = None
+            # config can be either dict or ConfigLoader
+            if hasattr(config, 'load'):
+                # It's a ConfigLoader
+                self.config_loader = config
+                self.config = config.load()
+                self.global_config = config.get_global_config()
+            else:
+                # It's a dict
+                self.config_loader = None
+                self.config = config
+                # Extract global config from config dict (same as ConfigLoader.get_global_config())
+                self.global_config = {
+                    'parallel_threads': config.get('parallel_threads', 4),
+                    'batch_size': config.get('batch_size', 10000),
+                    'max_retry_attempts': config.get('max_retry_attempts', 3),
+                    'lambda_timeout_buffer_seconds': config.get('lambda_timeout_buffer_seconds', 120),
+                }
+            self.conn_factory = None
+            self.sf_manager = sf_manager
+            self.pg_manager = pg_manager
         
         # Will be initialized during run
-        self.status_tracker: StatusTracker = None
+        self.status_tracker = status_tracker
         self.run_id = None
         self.start_time = None
         self.resuming = False  # Track if this is a resume operation
+        
+        # Track statistics (for Lambda response)
+        self.table_stats = {}  # {table_name: {status, rows, error}}
+        self.total_rows_migrated = 0
     
     def run(self):
         """Execute the migration"""
@@ -136,16 +179,35 @@ class MigrationOrchestrator:
                 tables = self.config_loader.get_enabled_tables(source)
                 
                 for table in tables:
+                    # Check Lambda timeout before processing each table
+                    if self._check_lambda_timeout():
+                        self.logger.warning("Approaching Lambda timeout, gracefully stopping...")
+                        self.timed_out = True
+                        break
+                    
                     try:
                         rows = self._process_table(source, table)
                         total_rows += rows
                         completed_tables += 1
+                        self.table_stats[table['source']] = {
+                            'status': 'completed',
+                            'rows': rows
+                        }
                     except Exception as e:
                         self.logger.error(f"Failed to process table {table['source']}: {e}")
                         failed_tables += 1
+                        self.table_stats[table['source']] = {
+                            'status': 'failed',
+                            'error': str(e)
+                        }
+                
+                # Break outer loop if timed out
+                if self.timed_out:
+                    break
             
             # Update final status
-            final_status = 'completed' if failed_tables == 0 else 'partial'
+            self.total_rows_migrated = total_rows
+            final_status = 'completed' if failed_tables == 0 and not self.timed_out else 'partial'
             self.status_tracker.update_run_status(
                 self.run_id,
                 status=final_status,
@@ -336,18 +398,27 @@ class MigrationOrchestrator:
         
         self.logger.info(f"[{source_table}] Determining chunking strategy...")
         
-        # Determine batch size: Use larger batch for full loads when COPY mode will be used
+        # Determine batch size: Check for per-table override first, then use global
+        # Per-table configuration takes precedence for memory optimization
+        batch_size = table.get('batch_size', self.global_config['batch_size'])
+        
         # For initial full loads (no watermark), use batch_size_copy_mode if configured
-        batch_size = self.global_config['batch_size']
         if not max_target_watermark and not truncate_onstart:
             # This is a full load on empty table - will use COPY mode
-            batch_size_copy = self.global_config.get('batch_size_copy_mode')
+            # Check per-table override first, then global
+            batch_size_copy = table.get('batch_size_copy_mode') or self.global_config.get('batch_size_copy_mode')
             if batch_size_copy and batch_size_copy > batch_size:
                 self.logger.info(
                     f"[{source_table}] Initial full load detected - using larger batch size "
                     f"({format_number(batch_size_copy)} vs {format_number(batch_size)}) for faster COPY"
                 )
                 batch_size = batch_size_copy
+        
+        # Log if table has custom batch size
+        if 'batch_size' in table:
+            self.logger.info(
+                f"[{source_table}] Using table-specific batch size: {format_number(batch_size)}"
+            )
         
         chunking_strategy = ChunkingStrategyFactory.create_strategy(
             self.sf_manager,
@@ -522,13 +593,22 @@ class MigrationOrchestrator:
                     cursor.close()
                     self.pg_manager.return_connection(conn)
                 
+                # Determine parallel threads: Check for per-table override first
+                parallel_threads = table.get('parallel_threads', self.global_config['parallel_threads'])
+                
+                # Log if table has custom thread count
+                if 'parallel_threads' in table:
+                    self.logger.info(
+                        f"[{source_table}] Using table-specific thread count: {parallel_threads}"
+                    )
+                
                 self.logger.info(
                     f"[{source_table}] Processing {len(chunks)} chunks with "
-                    f"{self.global_config['parallel_threads']} threads..."
+                    f"{parallel_threads} threads..."
                 )
                 
                 # Process chunks in parallel
-                total_rows = self._process_chunks_parallel(source, table, chunks)
+                total_rows = self._process_chunks_parallel(source, table, chunks, parallel_threads)
                 
                 # Mark table as completed
                 self.status_tracker.update_table_status(
@@ -563,11 +643,22 @@ class MigrationOrchestrator:
                     )
     
     def _process_chunks_parallel(self, source: Dict[str, Any], 
-                                table: Dict[str, Any], chunks: List) -> int:
-        """Process chunks in parallel using thread pool"""
+                                table: Dict[str, Any], chunks: List, parallel_threads: int = None) -> int:
+        """Process chunks in parallel using thread pool
+        
+        Args:
+            source: Source configuration
+            table: Table configuration
+            chunks: List of chunks to process
+            parallel_threads: Number of parallel threads (overrides global config if provided)
+        """
         total_rows = 0
         completed = 0
         failed = 0
+        
+        # Use provided parallel_threads or fall back to global config
+        if parallel_threads is None:
+            parallel_threads = self.global_config['parallel_threads']
         
         # CRITICAL: Determine if this is an initial full load BEFORE any threads start
         # This must happen ONCE to avoid race conditions between threads
@@ -579,7 +670,7 @@ class MigrationOrchestrator:
             is_initial_full_load=is_initial_full_load  # Pass the decision to worker
         )
         
-        with ThreadPoolExecutor(max_workers=self.global_config['parallel_threads']) as executor:
+        with ThreadPoolExecutor(max_workers=parallel_threads) as executor:
             # Submit all chunks
             future_to_chunk = {
                 executor.submit(
@@ -692,6 +783,77 @@ class MigrationOrchestrator:
             self.logger.warning("⚠️  No tables are enabled for migration!")
         else:
             self.logger.info(f"\n✓ Ready to migrate! Run without --dry-run to start migration.")
+    
+    def run_single_source(self, source: Dict[str, Any]):
+        """
+        Run migration for a single source (for Lambda execution).
+        
+        Args:
+            source: Source configuration dictionary
+        """
+        self.total_rows_migrated = 0
+        source_name = source.get('source_name', 'unnamed')
+        
+        self.logger.info(f"Processing source: {source_name}")
+        self.logger.info("-" * 80)
+        
+        # Get enabled tables from this source
+        if self.config_loader:
+            tables = self.config_loader.get_enabled_tables(source)
+        else:
+            # Lambda mode: manually filter enabled tables
+            tables = [t for t in source.get('tables', []) if t.get('enabled', True)]
+        
+        if not tables:
+            self.logger.warning(f"No enabled tables in source: {source_name}")
+            return
+        
+        for table in tables:
+            # Check Lambda timeout before processing each table
+            if self._check_lambda_timeout():
+                self.logger.warning("Approaching Lambda timeout, gracefully stopping...")
+                self.timed_out = True
+                break
+            
+            table_name = table['source']
+            try:
+                self.logger.info(f"\n[{table_name}] Starting migration...")
+                rows = self._process_table(source, table)
+                self.total_rows_migrated += rows
+                self.table_stats[table_name] = {
+                    'status': 'completed',
+                    'rows': rows
+                }
+                self.logger.info(f"✓ [{table_name}] Completed: {format_number(rows)} rows migrated")
+            except Exception as e:
+                self.logger.error(f"✗ [{table_name}] Failed: {e}", exc_info=True)
+                self.table_stats[table_name] = {
+                    'status': 'failed',
+                    'error': str(e)
+                }
+    
+    def _check_lambda_timeout(self) -> bool:
+        """
+        Check if Lambda is approaching timeout.
+        
+        Returns:
+            True if should stop gracefully, False otherwise
+        """
+        if not self.lambda_context:
+            return False  # Not running in Lambda
+        
+        try:
+            remaining_ms = self.lambda_context.get_remaining_time_in_millis()
+            buffer_ms = self.global_config.get('lambda_timeout_buffer_seconds', 120) * 1000
+            
+            # Stop if less than buffer time remaining (for graceful shutdown)
+            if remaining_ms < buffer_ms:
+                self.logger.warning(f"Lambda timeout approaching: {remaining_ms / 1000:.1f}s remaining (buffer: {buffer_ms / 1000:.0f}s)")
+                return True
+            return False
+        except Exception as e:
+            self.logger.warning(f"Could not check Lambda timeout: {e}")
+            return False
 
 
 def main():

@@ -309,6 +309,10 @@ class StatusTracker:
         
         Returns:
             Dict with run details or None if no resumable run found
+            
+        Note:
+            Resumes runs with status IN ('running', 'partial', 'failed')
+            i.e., any status that is NOT 'completed'
         """
         query = """
             SELECT 
@@ -321,7 +325,7 @@ class StatusTracker:
                 total_rows_copied
             FROM migration_status.migration_runs
             WHERE config_hash = %s
-              AND status IN ('running', 'partial', 'failed')
+              AND status != 'completed'
               AND started_at > CURRENT_TIMESTAMP - INTERVAL '%s hours'
             ORDER BY started_at DESC
             LIMIT 1

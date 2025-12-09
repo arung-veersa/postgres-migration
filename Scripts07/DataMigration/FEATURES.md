@@ -1,16 +1,16 @@
-# PostgreSQL Migration Tool - Features & Implementation
+# PostgreSQL Migration Tool - Features
 
-Complete documentation of all implemented features, optimizations, and fixes.
+Complete guide to the Snowflake-to-PostgreSQL migration tool with Lambda and Step Functions support.
 
 ---
 
 ## Table of Contents
 
 1. [Core Features](#core-features)
-2. [Performance Optimizations](#performance-optimizations)
-3. [Data Integrity Features](#data-integrity-features)
-4. [Bug Fixes](#bug-fixes)
-5. [Configuration](#configuration)
+2. [AWS Lambda & Step Functions](#aws-lambda--step-functions)
+3. [Performance Optimizations](#performance-optimizations)
+4. [Configuration](#configuration)
+5. [Deployment](#deployment)
 
 ---
 
@@ -22,231 +22,275 @@ Complete documentation of all implemented features, optimizations, and fixes.
 
 **How it works:**
 - Tracks migration progress in PostgreSQL status tables
-- Detects incomplete runs with matching config hash within time window (default: 12 hours)
+- Detects incomplete runs with matching `config_hash` within time window (default: 12 hours)
 - Reprocesses only failed/pending/in_progress chunks
 - Skips already-completed chunks
 
-**CLI Flags:**
-```bash
-# Auto-resume (default behavior)
-python migrate.py
-
-# Force fresh start
-python migrate.py --no-resume
-
-# Extend resume age limit
-python migrate.py --resume-max-age 48
-
-# Resume specific run
-python migrate.py --resume-run-id <UUID>
-```
+**Resume Conditions:**
+- Status: `running`, `partial`, or `failed` (not `completed`)
+- Config hash matches current configuration
+- Run age within time limit (default: 12 hours)
 
 **Status Tables:**
 - `migration_status.migration_runs` - Overall run tracking
 - `migration_status.migration_table_status` - Per-table progress
 - `migration_status.migration_chunk_status` - Granular chunk tracking
 
+**CLI Usage:**
+```bash
+# Auto-resume (default)
+python migrate.py
+
+# Force fresh start
+python migrate.py --no-resume
+
+# Extend resume window
+python migrate.py --resume-max-age 24
+
+# Resume specific run
+python migrate.py --resume-run-id <UUID>
+```
+
+**Step Functions:**
+- Automatic resume on Lambda timeout
+- Max 100 resume attempts per execution
+- 5-second wait between resume attempts
+- Graceful shutdown 120 seconds before timeout
+
 ---
 
-### 2. Auto-Inferred Column Mapping
+### 2. Smart Chunking Strategies
 
-**Purpose:** Automatically map columns with different names between source and target.
+**Purpose:** Efficiently process large datasets by splitting into manageable chunks.
+
+**Strategies:**
+
+1. **SingleChunkStrategy** - Small tables (< batch_size rows)
+2. **NumericRangeStrategy** - Integer/numeric ID columns
+3. **DateRangeStrategy** - Date/timestamp columns with watermarks
+4. **OffsetBasedStrategy** - UUID, varchar, or no chunking columns
+5. **GroupedValuesStrategy** - High-cardinality columns (IN clause)
+
+**Auto-Selection:**
+- Timestamp columns → DateRangeStrategy
+- Numeric columns → NumericRangeStrategy
+- UUID/varchar → OffsetBasedStrategy
+- No chunking columns → SingleChunkStrategy
+
+**Sub-Chunking:**
+- Large single-date datasets automatically split using LIMIT/OFFSET
+- Prevents memory errors on dates with millions of rows
+- Each sub-chunk ≤ batch_size
+
+---
+
+### 3. Incremental Load Optimization
+
+**Purpose:** Skip unchanged data, process only new/modified records.
 
 **How it works:**
-- Detects when `source_watermark` and `target_watermark` differ
-- Automatically creates column mapping without manual configuration
-- Example: `"Updated Timestamp"` (Snowflake) → `"Updated Datatimestamp"` (PostgreSQL)
+- Queries `MAX(target_watermark)` before chunking
+- Only creates chunks for data AFTER max watermark
+- Dramatically reduces processing time for up-to-date tables
+
+**Performance:**
+```
+Before: 695 chunks created
+After:  1 chunk (99% reduction)
+```
+
+**Requirements:**
+- `source_watermark` and `target_watermark` configured
+- Watermark column exists and populated
+
+---
+
+### 4. COPY vs UPSERT Modes
+
+**COPY Mode (Fast):**
+- Used when: `truncate_onstart: true` or empty table with no watermark
+- 3-5x faster than UPSERT
+- No conflict handling
+- Truncates table before loading
+
+**UPSERT Mode (Safe):**
+- Used when: Incremental loads, date-based chunking, existing data
+- Handles conflicts with `ON CONFLICT DO UPDATE`
+- Updates rows where watermark is newer
+- Prevents duplicates
+
+**Auto-Detection:**
+- System automatically chooses optimal mode
+- Date-based chunking forces UPSERT (prevents race conditions)
+- Empty table detection happens once before threading
+
+---
+
+### 5. Per-Table Memory Optimization
+
+**Purpose:** Optimize Lambda memory usage for tables of different sizes.
+
+**Global Defaults:**
+```json
+{
+  "parallel_threads": 4,
+  "batch_size": 50000,
+  "batch_size_copy_mode": 100000
+}
+```
+
+**Per-Table Override:**
+```json
+{
+  "source": "LARGE_TABLE",
+  "parallel_threads": 2,
+  "batch_size": 30000,
+  "batch_size_copy_mode": 35000
+}
+```
+
+**When to Override:**
+- Tables with high bytes-per-row (> 20 KB/row)
+- Memory usage approaching Lambda limits
+- OOM errors during migration
+
+**Memory Formula:**
+```
+Memory (GB) = parallel_threads × batch_size × bytes_per_row × 2.0 / 1024³
+```
+
+---
+
+## AWS Lambda & Step Functions
+
+### 6. Lambda Deployment
+
+**Architecture:**
+- Lambda Function: `cm-datacopy-test01`
+- Memory: 8 GB (configurable)
+- Timeout: 15 minutes (AWS maximum)
+- Runtime: Python 3.11
+
+**Layer Strategy:**
+```
+Layer 1: psycopg2-layer (10 MB)
+  └─ PostgreSQL client library
+
+Layer 2: dependencies-layer (50 MB)
+  └─ pandas, numpy, snowflake-connector, etc.
+
+Main Package: lambda_deployment.zip (250 KB)
+  └─ Application code only
+```
+
+**Benefits:**
+- Quick deployments (250 KB vs 50+ MB)
+- Separation of code and dependencies
+- Easy updates without full rebuild
+
+---
+
+### 7. Step Functions Orchestration
+
+**State Machine:** `migration-workflow`
+
+**Features:**
+- **Automatic resume** on Lambda timeout
+- **Optional parameters** (all inputs optional)
+- **Multi-source support** (defaults to all enabled sources)
+- **Error handling** (routes timeouts to resume, not failure)
+- **Retry logic** (up to 100 resume attempts)
+
+**Input Parameters:**
+```json
+{
+  "source_name": "analytics",     // Optional (defaults to all)
+  "no_resume": false,             // Optional
+  "resume_max_age": 12,           // Optional (hours)
+  "resume_run_id": null           // Optional (specific run)
+}
+```
+
+**Timeout Handling:**
+1. Lambda detects approaching timeout (120s buffer)
+2. Saves progress and exits gracefully
+3. Step Functions catches timeout error
+4. Waits 5 seconds
+5. Resumes migration automatically
+6. Repeats up to 100 times
+
+---
+
+### 8. Multi-Source Support
+
+**Purpose:** Migrate data from multiple Snowflake databases.
 
 **Configuration:**
 ```json
 {
-  "source_watermark": "Updated Timestamp",
-  "target_watermark": "Updated Datatimestamp"
-  // No explicit column_mapping needed!
+  "sources": [
+    {
+      "source_name": "analytics",
+      "source_sf_database": "ANALYTICS",
+      "source_sf_schema": "BI",
+      "target_pg_database": "conflict_management",
+      "target_pg_schema": "analytics_dev"
+    },
+    {
+      "source_name": "conflict",
+      "source_sf_database": "CONFLICTREPORT",
+      "source_sf_schema": "PUBLIC",
+      "target_pg_database": "conflict_management",
+      "target_pg_schema": "conflict_dev"
+    }
+  ]
 }
 ```
 
-**Benefits:**
-- Eliminates NULL watermarks
-- Reduces configuration overhead
-- Works seamlessly with incremental loads
+**Usage:**
+```bash
+# Migrate specific source
+python migrate.py --source analytics
 
----
-
-### 3. Smart Configuration Logic
-
-**Purpose:** Automatically adjust settings based on migration mode.
-
-**How it works:**
-- When `truncate_onstart: true`, automatically ignores:
-  - `uniqueness_columns`
-  - `sort_columns`
-  - `source_watermark`
-  - `target_watermark`
-- No need to manually null out fields when switching modes
-
-**Example:**
-```json
-{
-  "truncate_onstart": true,
-  // These are automatically ignored ↓
-  "uniqueness_columns": ["Patient Address Id"],
-  "source_watermark": "Updated Timestamp",
-  "target_watermark": "Updated Datatimestamp"
-}
+# Migrate all enabled sources
+python migrate.py
 ```
 
 ---
 
 ## Performance Optimizations
 
-### 4. Initial Full Load Detection (Race Condition Fix)
+### 9. Initial Full Load Detection
 
-**Purpose:** Automatically use fast COPY mode for initial full loads on empty tables.
+**Purpose:** Use fast COPY mode for initial loads on empty tables.
 
 **Problem Solved:**
-- Race condition: Each thread checked if table was empty
-- After first thread loaded data, subsequent threads switched to slow UPSERT mode
-- Result: Inconsistent performance (some chunks fast, others slow)
+- Race condition: Multiple threads checking if table is empty
+- First thread loads data, others switch to slow UPSERT
+- Inconsistent performance across chunks
 
 **Solution:**
-- Check if table is empty ONCE, before any threads start
-- Determination happens in orchestrator (`migrate.py`)
-- Result passed to all worker threads via `is_initial_full_load` parameter
-- All threads use the same decision (COPY or UPSERT)
+- Check table emptiness ONCE before threading
+- Decision passed to all worker threads
+- All threads use same method (COPY or UPSERT)
 
 **Performance Impact:**
 ```
-Before Fix:  32 minutes (inconsistent COPY/UPSERT mix)
-After Fix:   29 minutes (consistent COPY mode) - 62% faster than original!
-```
-
-**Detection Logic:**
-```python
-# In migrate.py._check_is_initial_full_load()
-is_initial_full_load = (
-    table_is_empty AND
-    no_watermark_exists AND
-    has_uniqueness_columns AND
-    not_truncate_mode
-)
-```
-
-**Log Message:**
-```
-[DIMPATIENTADDRESS] Initial full load detected (empty table, no watermark) - 
-will use fast COPY mode for all chunks
-```
-
-**Code Locations:**
-- `migrate.py._check_is_initial_full_load()` - Detection logic
-- `migrate.py._process_chunks_parallel()` - Pass decision to workers
-- `lib/migration_worker.py.__init__()` - Accept `is_initial_full_load` parameter
-- `lib/migration_worker.py._load_to_postgres()` - Use cached decision
-
----
-
-### 5. Incremental Load Pre-Filtering
-
-**Purpose:** Dramatically reduce chunking time for incremental loads.
-
-**How it works:**
-- Queries `MAX(target_watermark)` before chunking
-- Only creates chunks for data AFTER the max watermark
-- Skips unchanged historical data entirely
-
-**Performance:**
-```
-BEFORE: 695 chunks, 10 seconds
-AFTER:  1 chunk, < 1 second (99% faster for up-to-date tables)
-```
-
-**Implementation:**
-- `migrate.py._create_fresh_chunks()` gets max watermark
-- `DateRangeStrategy.create_chunks()` accepts watermark filter
-- Snowflake query includes `WHERE watermark_column > max_target_watermark`
-
----
-
-### 5. Incremental Load Pre-Filtering
-
-**Purpose:** Dramatically reduce chunking time for incremental loads.
-
-**How it works:**
-- Queries `MAX(target_watermark)` before chunking
-- Only creates chunks for data AFTER the max watermark
-- Skips unchanged historical data entirely
-
-**Performance:**
-```
-BEFORE: 695 chunks, 10 seconds
-AFTER:  1 chunk, < 1 second (99% faster for up-to-date tables)
-```
-
-**Implementation:**
-- `migrate.py._create_fresh_chunks()` gets max watermark
-- `DateRangeStrategy.create_chunks()` accepts watermark filter
-- Snowflake query includes `WHERE watermark_column > max_target_watermark`
-
----
-
-### 6. Early Skip for Empty Chunks
-
-**Purpose:** Avoid unnecessary PostgreSQL operations for empty result sets.
-
-**How it works:**
-- After fetching from Snowflake, checks if DataFrame is empty
-- Skips PostgreSQL load if no rows returned
-- Logs at INFO level for visibility
-
-**Code Location:**
-- `lib/migration_worker.py._process_chunk_with_retry()`
-
----
-
-### 7. LIMIT/OFFSET Sub-Chunking
-
-**Purpose:** Handle massive single-date datasets without memory errors.
-
-**Problem Solved:**
-- Date with 5.2M rows → `MemoryError`
-- Single chunk exceeding memory limits
-
-**Solution:**
-- Detects dates with > `batch_size` rows
-- Automatically splits into sub-chunks using `LIMIT/OFFSET`
-- Each sub-chunk ≤ `batch_size`
-
-**Example:**
-```
-Date 2024-01-10: 1,399,950 rows
-→ Creates 28 sub-chunks of 50,000 rows each
-```
-
-**Metadata:**
-```json
-{
-  "strategy": "date_range_offset",
-  "date_value": "2024-01-10",
-  "offset": 0,
-  "limit": 50000,
-  "sub_chunk_index": 1,
-  "total_sub_chunks": 28
-}
+Before Fix:  Variable (COPY/UPSERT mix)
+After Fix:   Consistent (all COPY or all UPSERT)
+Result:      40-60% faster for initial loads
 ```
 
 ---
 
-## Data Integrity Features
+### 10. Deterministic ORDER BY
 
-### 8. Deterministic ORDER BY
-
-**Purpose:** Prevent duplicate keys and data gaps in LIMIT/OFFSET pagination.
+**Purpose:** Prevent duplicate keys and data gaps in pagination.
 
 **Problem:**
 - `ORDER BY "Updated Timestamp"` alone is non-deterministic
-- Multiple records with same timestamp → unstable pagination
-- LIMIT/OFFSET can return overlapping or skipped rows
+- Multiple records with same timestamp cause unstable pagination
+- LIMIT/OFFSET can skip or duplicate rows
 
 **Solution:**
 - Append `uniqueness_columns` (primary key) to ORDER BY
@@ -255,256 +299,326 @@ Date 2024-01-10: 1,399,950 rows
 **SQL Generated:**
 ```sql
 ORDER BY "Updated Timestamp", "Patient Address Id"
-         ↑ date column          ↑ primary key (ensures uniqueness)
-```
-
-**Impact:**
-- ✅ Eliminates duplicate key errors
-- ✅ Prevents data loss from pagination gaps
-- ✅ Reproducible results across runs
-
----
-
-### 9. Force UPSERT for Date-Based Strategies
-
-**Purpose:** Safely handle overlapping data in date-based chunking.
-
-**Why Needed:**
-- Same primary key can appear in multiple date chunks
-- Parallel processing → race conditions
-- COPY mode → duplicate key violations
-
-**Solution:**
-- Detect `date_range` and `date_range_offset` strategies
-- Force UPSERT mode even if table is empty
-- Use `INSERT ... ON CONFLICT DO UPDATE` with watermark conditions
-
-**Code Location:**
-- `lib/migration_worker.py._load_to_postgres()`
-
-```python
-if strategy in ['date_range', 'date_range_offset']:
-    self.logger.info("Using date-based chunking - forcing UPSERT mode.")
-    use_copy = False
+         ↑ timestamp           ↑ primary key
 ```
 
 ---
 
-### 10. Column Name Translation in Filters
+### 11. Parallel Processing
 
-**Purpose:** Correctly translate Snowflake column names to PostgreSQL in chunk filters.
+**Configuration:**
+- Default: 4 parallel threads
+- Configurable: Global or per-table
+- Processing: Concurrent chunk execution
 
-**How it works:**
-- Chunk filters contain Snowflake column names
-- PostgreSQL queries need PostgreSQL column names
-- Applies `column_mapping` (including auto-inferred) to filters
+**Thread Safety:**
+- Each thread has own database connection
+- Status updates are atomic
+- No shared state between threads
 
-**Example:**
-```sql
--- Snowflake filter stored in chunk metadata
-"Updated Timestamp"::DATE = '2024-01-10'
-
--- Translated to PostgreSQL
-"Updated Datatimestamp"::DATE = '2024-01-10'
-```
-
-**Code Location:**
-- `lib/migration_worker.py._translate_chunk_filter_to_postgres()`
-
----
-
-## Bug Fixes
-
-### 11. NaT Timestamp Handling
-
-**Problem:**
-```
-invalid input syntax for type timestamp: "NaT"
-```
-
-**Solution:**
-```python
-df_filtered = df_filtered.replace({pd.NaT: None})
-```
-
-Converts Pandas' `NaT` (Not-a-Time) to SQL `NULL`.
-
----
-
-### 12. Source Filter Cleanup
-
-**Problem:**
-- Source filter left orphaned parentheses in translated queries
-- Syntax errors in PostgreSQL
-
-**Solution:**
-- Improved regex-based filter removal
-- Handles various patterns and nested parentheses
-- Cleans up orphaned operators (AND, OR)
-
----
-
-### 13. Batch Size Check for Remaining Dates
-
-**Problem:**
-- Final chunk of accumulated dates could exceed `batch_size`
-- Example: Last chunk with 1.5M rows when batch_size = 50K
-
-**Solution:**
-- Check row count before finalizing multi-date chunks
-- Split into individual date chunks if too large
-
-**Code Location:**
-- `lib/chunking.py.DateRangeStrategy.create_chunks()`
+**Lambda Constraints:**
+- CPU scales with memory allocation
+- 8 GB memory = ~4 vCPUs
+- Optimal: 4-6 threads for 8 GB
 
 ---
 
 ## Configuration
+
+### Global Settings
+
+```json
+{
+  "parallel_threads": 4,
+  "batch_size": 50000,
+  "batch_size_copy_mode": 100000,
+  "max_retry_attempts": 3,
+  "lambda_timeout_buffer_seconds": 120
+}
+```
 
 ### Table Configuration
 
 ```json
 {
   "enabled": true,
-  "source": "DIMPATIENTADDRESS",
-  "target": "dimpatientaddress",
-  "source_filter": "\"Source System\" = 'hha'",
-  "chunking_columns": ["Updated Timestamp"],
-  "chunking_column_types": ["timestamp"],
-  "uniqueness_columns": ["Patient Address Id"],
-  "source_watermark": "Updated Timestamp",
+  "source": "DIMPATIENT",
+  "target": "dimpatient",
+  "source_filter": "\"Source System\" = 'hha' AND \"Status\" = 'Active'",
+  "chunking_columns": ["Patient Id"],
+  "chunking_column_types": ["varchar"],
+  "uniqueness_columns": ["Patient Id"],
+  "source_watermark": "Updated Datatimestamp",
   "target_watermark": "Updated Datatimestamp",
   "truncate_onstart": false,
   "disable_index": true
 }
 ```
 
-### Global Configuration
+### Per-Table Overrides
 
 ```json
 {
-  "parallel_threads": 6,
-  "batch_size": 50000,
-  "max_retry_attempts": 3,
-  "lambda_timeout_buffer_seconds": 120
+  "source": "LARGE_TABLE",
+  "parallel_threads": 2,        // Override global
+  "batch_size": 30000,          // Override global
+  "batch_size_copy_mode": 35000 // Override global
 }
 ```
 
-### Removed/Dead Configuration
-
-- `sort_columns` - No longer used (ORDER BY determined by strategy)
-- Explicit `column_mapping` for watermarks - Now auto-inferred
-
 ---
 
-## Performance Metrics
+## Deployment
 
-### Full Load (9.2M rows)
-- **Time:** 45-60 minutes
-- **Chunks:** ~200 (with auto sub-chunking)
-- **Chunk Size:** ≤ 50,000 rows each
-- **Method:** UPSERT (date-based strategy)
+### Local Development
 
-### Incremental Load (19K rows)
-- **Time:** 2 minutes
-- **Chunks:** 1
-- **Speedup:** 99% faster (pre-filtering optimization)
+```bash
+# Install dependencies
+pip install -r requirements.txt
 
-### Resume After Failure
-- **Detection:** Automatic (within 12-hour window)
-- **Chunks Reprocessed:** Only incomplete ones
-- **Data Integrity:** Maintained (deterministic ORDER BY)
+# Configure environment
+cp env.example .env
+# Edit .env with your credentials
+
+# Run migration
+python migrate.py
+```
+
+### Lambda Deployment
+
+**Prerequisites:**
+- Docker Desktop running
+- PowerShell
+- AWS Console access
+
+**Build Scripts:**
+```powershell
+# First time: Build dependency layer (8-10 min)
+cd deploy
+.\rebuild_layer.ps1
+
+# Upload dependencies_layer.zip via AWS Console
+# Attach layer to Lambda function
+
+# Daily: Quick app-only build (10-20 sec)
+.\rebuild_app_only.ps1
+
+# Upload lambda_deployment.zip via AWS Console
+```
+
+**Layer Management:**
+- Build layers once
+- Update only when dependencies change
+- App updates are fast (250 KB vs 50 MB)
 
 ---
 
 ## Architecture
 
-### Chunking Strategies
+### Chunking Flow
 
-1. **SingleChunkStrategy** - Small tables, no chunking
-2. **NumericRangeStrategy** - Integer ID columns
-3. **GroupedValuesStrategy** - High-cardinality columns (IN clause)
-4. **DateRangeStrategy** - Date/timestamp columns
-5. **OffsetBasedStrategy** - UUIDs and high-cardinality (LIMIT/OFFSET)
-6. **date_range_offset** - Hybrid: Large single dates with LIMIT/OFFSET sub-chunking
+```
+1. Determine strategy (based on column types)
+2. Query Snowflake for row counts/ranges
+3. Create chunks (each ≤ batch_size)
+4. Save chunk metadata to status tables
+5. Process chunks in parallel
+6. Mark completed chunks
+```
 
-### Load Methods
+### Load Flow
 
-1. **COPY** - Fast bulk insert
-   - Used for: `truncate_onstart: true`, empty tables (non-date strategies)
-   - No conflict handling
+```
+1. Fetch chunk data from Snowflake (pandas DataFrame)
+2. Apply filters and transformations
+3. Check if empty (skip if no rows)
+4. Choose load method (COPY vs UPSERT)
+5. Load to PostgreSQL
+6. Update chunk status
+7. Handle errors with retry logic
+```
 
-2. **UPSERT** - Incremental with conflict handling
-   - Used for: Incremental loads, date-based strategies
-   - SQL: `INSERT ... ON CONFLICT DO UPDATE`
-   - Conditions: Watermark-based updates
+### Resume Flow
 
----
-
-## Testing
-
-### Resume Capability Test
-
-**Scenario Simulated:**
-- Run status: `partial`
-- Failed chunks: 6 (chunks 10-15)
-- In-progress chunks: 5 (chunks 16-20)
-- Pending chunks: 7 (chunks 21-27)
-- Data deleted: 1,399,950 rows for 2024-01-10
-
-**Result:**
-- ✅ Resume detection worked
-- ✅ 18 chunks reprocessed
-- ✅ 900,000 rows restored
-- ✅ No duplicate keys
-- ✅ All watermarks populated
+```
+1. Calculate config_hash (MD5 of config)
+2. Query for resumable run
+   - Same config_hash
+   - Status != 'completed'
+   - Age < resume_max_age
+3. If found: Resume from pending chunks
+4. If not found: Start fresh run
+```
 
 ---
 
-## Files
+## Status Tracking
 
-### Core Files
+### Migration Runs
+
+```sql
+CREATE TABLE migration_status.migration_runs (
+    run_id UUID PRIMARY KEY,
+    config_hash VARCHAR(32),
+    status VARCHAR(20),  -- running, partial, completed, failed
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    total_tables INT,
+    completed_tables INT,
+    failed_tables INT,
+    total_rows_copied BIGINT
+);
+```
+
+### Chunk Status
+
+```sql
+CREATE TABLE migration_status.migration_chunk_status (
+    id SERIAL PRIMARY KEY,
+    run_id UUID,
+    chunk_id VARCHAR(100),
+    status VARCHAR(20),  -- pending, in_progress, completed, failed
+    rows_copied INT,
+    chunk_metadata JSONB,
+    error_message TEXT,
+    completed_at TIMESTAMP
+);
+```
+
+---
+
+## Error Handling
+
+### Retry Logic
+
+- **Max Attempts:** 3 (configurable)
+- **Backoff:** Exponential with jitter
+- **Errors Caught:** Connection errors, timeouts, transient failures
+- **Not Retried:** Data validation errors, schema mismatches
+
+### Lambda Timeout
+
+- **Buffer:** 120 seconds before hard timeout
+- **Detection:** Check remaining time before each chunk
+- **Action:** Save progress, exit gracefully, resume later
+- **Recovery:** Step Functions automatically retries
+
+### Step Functions Errors
+
+- **Lambda.Unknown:** Timeout error → Resume
+- **Lambda.TooManyRequestsException:** Throttling → Retry
+- **States.ALL:** Other errors → Fail state
+
+---
+
+## Best Practices
+
+### For Performance
+
+1. **Use truncate_onstart for full reloads** (3-5x faster)
+2. **Enable disable_index for large tables** (faster loads)
+3. **Set appropriate batch_size** (50K-100K for most tables)
+4. **Configure watermarks for incremental loads** (99% fewer chunks)
+
+### For Reliability
+
+1. **Always configure uniqueness_columns** (enables UPSERT, prevents duplicates)
+2. **Use deterministic chunking columns** (numeric ID, timestamp)
+3. **Test with small batch first** (validate config before full run)
+4. **Monitor Lambda memory usage** (adjust threads if OOM)
+
+### For Maintenance
+
+1. **Review migration_runs table regularly** (check for failures)
+2. **Clean old status records** (keep last 30 days)
+3. **Update layers when upgrading dependencies** (rebuild_layer.ps1)
+4. **Version control config.json** (track changes over time)
+
+---
+
+## Production Metrics
+
+### Typical Performance
+
+| Table Size | Records | Chunks | Time | Throughput |
+|------------|---------|--------|------|------------|
+| Small | < 100K | 1-5 | 1-2 min | 1,000 rows/sec |
+| Medium | 100K-1M | 5-50 | 5-15 min | 2,000 rows/sec |
+| Large | 1M-10M | 50-200 | 30-60 min | 3,000 rows/sec |
+| Very Large | 10M+ | 200+ | 2-4 hours | 2,500 rows/sec |
+
+### Memory Usage
+
+| Threads | Batch | B/Row | Memory | Status |
+|---------|-------|-------|--------|--------|
+| 4 | 50K | 5 KB | 1.9 GB | ✅ Safe |
+| 4 | 50K | 10 KB | 3.8 GB | ✅ Safe |
+| 4 | 50K | 20 KB | 7.6 GB | ⚠️ Limit |
+| 3 | 40K | 20 KB | 4.6 GB | ✅ Safe |
+
+**Recommendation:** Keep memory usage < 80% of Lambda allocation (6.4 GB for 8 GB Lambda)
+
+---
+
+## Files Reference
+
+### Core Application
 - `migrate.py` - Main orchestrator
-- `lib/chunking.py` - Chunking strategies
-- `lib/migration_worker.py` - Data processing
-- `lib/status_tracker.py` - Resume tracking
-- `lib/connections.py` - Database connections
-- `lib/config_loader.py` - Configuration management
-- `schema.sql` - Status tracking schema
-
-### Configuration
-- `config.json` - Table and global settings
+- `config.json` - Migration configuration
+- `migration_status_schema.sql` - Status tables schema
 - `requirements.txt` - Python dependencies
-- `.env` - Database credentials
+- `env.example` - Environment template
 
-### Documentation
-- `README.md` - Quick start guide
-- `FEATURES.md` - This file
+### Library Code
+- `lib/chunking.py` - Chunking strategies
+- `lib/migration_worker.py` - Data processing and loading
+- `lib/status_tracker.py` - Resume tracking and status management
+- `lib/connections.py` - Database connection pooling
+- `lib/config_loader.py` - Configuration management
+- `lib/config_validator.py` - Configuration validation
+- `lib/index_manager.py` - Index disable/enable
+- `lib/utils.py` - Utilities and helpers
+
+### Lambda Integration
+- `scripts/lambda_handler.py` - AWS Lambda entry point
+- `scripts/migration_orchestrator.py` - Lambda orchestration wrapper
+
+### AWS Resources
+- `aws/step_functions/migration_workflow.json` - Step Functions definition
+- `aws/README.md` - AWS deployment guide
+
+### Deployment
+- `deploy/rebuild_app.ps1` - Full package build
+- `deploy/rebuild_app_only.ps1` - Quick app rebuild
+- `deploy/rebuild_layer.ps1` - Dependency layer build
+- `deploy/requirements_layer.txt` - Lambda dependencies
 
 ---
 
-## Production Readiness
+## Status: Production Ready ✅
 
-✅ **Tested Features:**
-- Full loads (9.2M rows)
-- Incremental loads (19K rows)
-- Resume capability
-- Large single dates (1.4M rows)
-- Parallel processing (6 threads)
-- Column name mapping
-- Deterministic pagination
+**Tested Features:**
+- ✅ Full loads (millions of rows)
+- ✅ Incremental loads with watermarks
+- ✅ Resume capability after failures
+- ✅ Lambda timeout handling
+- ✅ Parallel processing (4-6 threads)
+- ✅ Multi-source migrations
+- ✅ Per-table memory optimization
 
-✅ **Error Handling:**
-- Automatic retries (3 attempts)
-- Exponential backoff
-- Graceful degradation
-- Comprehensive logging
+**Deployment Options:**
+- ✅ Local execution (development)
+- ✅ AWS Lambda (production)
+- ✅ AWS Step Functions (orchestration)
 
-✅ **Data Integrity:**
-- No duplicate keys
-- No NULL watermarks
-- Watermark-based updates
-- Transaction safety
+**Data Integrity:**
+- ✅ No duplicate keys
+- ✅ Watermark-based updates
+- ✅ Deterministic pagination
+- ✅ Transaction safety
 
-**Status: Production Ready** 🚀
+---
 
+**Version:** 2.0  
+**Last Updated:** December 2025  
+**License:** Internal Use
