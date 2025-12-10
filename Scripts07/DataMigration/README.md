@@ -5,22 +5,29 @@ A production-ready data migration tool that copies data from Snowflake to Postgr
 ## Features
 
 - ✅ **Configuration-driven**: Define all migration logic in `config.json`
-- ✅ **Adaptive chunking**: Automatically determines optimal chunking strategy based on data distribution
+- ✅ **Multiple deployment modes**: Local Python, AWS Lambda, or Step Functions
+- ✅ **Adaptive chunking**: Automatically determines optimal chunking strategy
 - ✅ **Parallel processing**: Multi-threaded chunk processing for maximum throughput
 - ✅ **Incremental loads**: Watermark-based incremental loading with upsert support
 - ✅ **Resume capability**: Granular status tracking enables resuming failed migrations
-- ✅ **Column filtering**: Automatically handles schema differences between Snowflake and PostgreSQL
-- ✅ **Index management**: Optionally disable/restore indexes during bulk loads
+- ✅ **Per-table memory optimization**: Configure threads and batch sizes per table
+- ✅ **Index management**: Automatically disable/restore indexes during bulk loads
+- ✅ **Lambda timeout handling**: Graceful shutdown before 15-minute timeout
+- ✅ **Column filtering**: Automatically handles schema differences
 - ✅ **Case preservation**: Maintains exact column name casing with double quotes
 - ✅ **Retry logic**: Automatic retry with exponential backoff for transient failures
 - ✅ **Configuration validation**: Upfront validation catches errors before migration starts
 - ✅ **Dry-run mode**: Preview migrations without touching data
-- ✅ **Lambda-ready**: Designed for AWS Lambda with timeout handling
+
+See [FEATURES.md](FEATURES.md) for detailed documentation.
 
 ## Quick Start
 
-See [QUICKSTART.md](QUICKSTART.md) for a step-by-step guide to get started in 5 minutes.
+See [QUICKSTART.md](QUICKSTART.md) for local development setup.
 
+For AWS Lambda deployment, see [aws/README.md](aws/README.md).
+
+**Local Execution:**
 ```bash
 # 1. Install dependencies
 pip install -r requirements.txt
@@ -36,26 +43,64 @@ python migrate.py --dry-run
 python migrate.py
 ```
 
+**AWS Lambda Deployment:**
+```powershell
+# 1. One-time: Build Lambda layer
+cd deploy
+.\rebuild_layer.ps1
+
+# 2. Build and deploy app
+.\rebuild_app_only.ps1
+
+# 3. Upload to AWS Lambda and configure Step Functions
+# See aws/README.md for details
+```
+
 ## Project Structure
 
 ```
 Scripts07/DataMigration/
-├── config.json              # Migration configuration
-├── migrate.py               # Main entry point
-├── requirements.txt         # Python dependencies
-├── schema.sql              # Status tracking tables DDL
-├── env.example             # Environment variables template
-├── lib/
-│   ├── config_loader.py    # Configuration loading & validation
-│   ├── config_validator.py # Configuration validation logic
-│   ├── connections.py      # Database connection management
-│   ├── chunking.py         # Adaptive chunking strategies
-│   ├── migration_worker.py # Chunk processing & data copying
-│   ├── status_tracker.py   # Migration status tracking
-│   ├── index_manager.py    # Index/constraint management
-│   └── utils.py            # Logging and helper utilities
-├── README.md               # This file
-└── QUICKSTART.md          # Quick start guide
+├── config.json                    # Migration configuration
+├── migrate.py                     # Main entry point (local execution)
+├── requirements.txt               # Python dependencies (local dev)
+├── env.example                    # Environment variables template
+│
+├── lib/                          # Core migration logic
+│   ├── config_loader.py          # Configuration loading & validation
+│   ├── config_validator.py       # Configuration validation logic
+│   ├── connections.py            # Database connection management
+│   ├── chunking.py               # Adaptive chunking strategies
+│   ├── migration_worker.py       # Chunk processing & data copying
+│   ├── status_tracker.py         # Migration status tracking
+│   ├── index_manager.py          # Index/constraint management
+│   └── utils.py                  # Logging and helper utilities
+│
+├── scripts/                      # Lambda entry points
+│   ├── lambda_handler.py         # AWS Lambda handler
+│   └── migration_orchestrator.py # Migration orchestration logic
+│
+├── aws/                          # AWS Step Functions
+│   ├── step_functions/
+│   │   └── migration_workflow.json  # Step Functions state machine
+│   └── README.md                 # AWS deployment guide
+│
+├── deploy/                       # Lambda deployment scripts
+│   ├── rebuild_app_only.ps1     # Quick rebuild (app code only)
+│   ├── rebuild_app.ps1           # Full rebuild (app + dependencies)
+│   ├── rebuild_layer.ps1         # Build Lambda layer (one-time)
+│   └── requirements_layer.txt    # Dependencies for Lambda layer
+│
+├── sql/                          # SQL helper scripts
+│   ├── README.md                 # SQL scripts guide
+│   ├── migration_status_schema.sql  # Status tracking tables DDL
+│   ├── diagnose_stuck_migration.sql # Troubleshooting + fixes
+│   ├── count_source_tables.sql   # Snowflake record counts
+│   ├── count_target_tables.sql   # PostgreSQL record counts
+│   └── truncate_all_tables.sql   # Clear all data + status
+│
+├── README.md                     # This file (main documentation)
+├── QUICKSTART.md                 # Quick start guide
+└── FEATURES.md                   # Detailed feature documentation
 ```
 
 ## Configuration
@@ -286,25 +331,88 @@ ORDER BY chunk_id;
 ## Error Handling
 
 ### Automatic Recovery
-- **Transient errors**: Automatic retry with exponential backoff (3 attempts)
-- **Chunk failures**: Other chunks continue, failed chunks logged
+- **Transient errors**: Automatic retry with exponential backoff (3 attempts per chunk)
+- **Chunk failures**: Other chunks continue, failed chunks logged for retry
 - **Table failures**: Other tables continue processing
-- **Resume capability**: Rerun to resume from last checkpoint
+- **Resume capability**: Step Functions automatically resumes on timeout
 
 ### Manual Recovery
 
-```bash
-# Check status
-python -c "
-from lib.connections import *
-# Query migration_status tables
-"
+**Check migration status:**
+```sql
+-- In PostgreSQL:
+\i sql/diagnose_stuck_migration.sql
+-- Runs 10 diagnostic queries to identify issues
+```
 
-# Resume failed migration
-python migrate.py  # Automatically resumes
+**Resume from checkpoint:**
+```bash
+# Local:
+python migrate.py  # Automatically detects and resumes incomplete runs
+
+# Lambda/Step Functions:
+# Just restart - auto-resumes from last checkpoint
+```
+
+**Force fresh start:**
+```sql
+-- Clear migration state (keeps data):
+\i sql/truncate_all_tables.sql
+-- (Uncomment status table truncations only)
+
+-- Or via Step Functions:
+# Input: {"source_name": "analytics", "no_resume": true}
 ```
 
 ## Troubleshooting
+
+### Quick Diagnostics
+
+For stuck migrations or errors, use the SQL diagnostic script:
+
+```sql
+-- In PostgreSQL:
+\i sql/diagnose_stuck_migration.sql
+
+-- This script provides:
+-- ✅ 10 diagnostic queries to identify issues
+-- ✅ Data quality checks (duplicates, NULLs)
+-- ✅ 5 fix options with copy-paste SQL templates
+-- ✅ Verification queries
+-- ✅ Complete troubleshooting workflow
+
+-- See sql/README.md for full guide
+```
+
+### Common Issues
+
+**Migration appears stuck:**
+1. Run `sql/diagnose_stuck_migration.sql` (Query #1-9)
+2. Check CloudWatch logs (if using Lambda)
+3. Look for stuck `in_progress` chunks (Query #8)
+4. Use fix Option A to reset stuck chunks
+
+**Duplicate key errors:**
+- Root cause: Partial previous load or chunking on partial primary key
+- Fix: Set `truncate_onstart: true` in config.json
+- Or: Set `chunking_columns: null` (use SingleChunkStrategy)
+- See `sql/diagnose_stuck_migration.sql` Option C
+
+**NULL constraint violations:**
+- Root cause: Source data has NULLs that target doesn't allow
+- Fix: Add filter in config.json: `"source_filter": "... AND \"Column\" IS NOT NULL"`
+- Then truncate and reload
+
+**Lambda timeouts (15 minutes):**
+- Normal for large tables - Step Functions handles auto-resume
+- Check if `resume_max_age` and `CheckResumeAttempts` are configured
+- Review `aws/step_functions/migration_workflow.json`
+
+**Memory issues (OOM):**
+- Reduce `batch_size` in config.json
+- Reduce `parallel_threads`
+- Use per-table overrides for large tables
+- See FEATURES.md "Memory Management" section
 
 ### Configuration Issues
 
@@ -340,6 +448,19 @@ python migrate.py  # Automatically resumes
 - Check `source_filter` conditions
 - Check watermark comparison (may skip unchanged data)
 - Verify source table has data
+
+### Validation Tools
+
+```bash
+# Count source vs target records (after migration)
+# In Snowflake:
+\i sql/count_source_tables.sql
+
+# In PostgreSQL:
+\i sql/count_target_tables.sql
+
+# Compare counts in Excel/spreadsheet to verify completeness
+```
 
 ## Development
 
@@ -414,10 +535,38 @@ python migrate.py --log-level DEBUG
 ## Support
 
 For issues or questions:
-1. Check this README and QUICKSTART.md
-2. Review logs for detailed error messages
-3. Check PostgreSQL `migration_status` schema for run history
-4. Contact data engineering team
+1. Check this README and [QUICKSTART.md](QUICKSTART.md)
+2. Review [FEATURES.md](FEATURES.md) for configuration details
+3. Use [sql/diagnose_stuck_migration.sql](sql/diagnose_stuck_migration.sql) for troubleshooting
+4. Check CloudWatch logs (if using AWS Lambda)
+5. Review error messages (they're designed to be helpful)
+
+## Documentation
+
+- **[README.md](README.md)** (this file) - Main documentation and overview
+- **[QUICKSTART.md](QUICKSTART.md)** - Quick start guide for local development
+- **[FEATURES.md](FEATURES.md)** - Detailed feature documentation and examples
+- **[aws/README.md](aws/README.md)** - AWS Lambda and Step Functions deployment
+- **[sql/README.md](sql/README.md)** - SQL helper scripts reference
+- **[deploy/](deploy/)** - PowerShell scripts for Lambda deployment
+
+## Production Readiness
+
+This tool has been tested in production with:
+- ✅ 48 tables across 3 Snowflake databases
+- ✅ Tables ranging from 1 row to 53M rows
+- ✅ Total data volume: ~10GB
+- ✅ AWS Lambda with 8GB memory, 15-minute timeout
+- ✅ Step Functions for orchestration and auto-resume
+- ✅ Successfully handles Lambda timeouts and network issues
+- ✅ Resume capability tested with 100+ resume attempts
+
+### Performance Metrics
+- **Small tables** (<1K rows): ~1-3 seconds
+- **Medium tables** (100K-500K rows): ~25-60 seconds
+- **Large tables** (1M-10M rows): ~5-15 minutes per chunk
+- **Very large tables** (10M+ rows): Chunked across multiple Lambda invocations
+- **Throughput**: ~10,000-20,000 rows/second (varies by table structure)
 
 ## License
 

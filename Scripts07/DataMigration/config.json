@@ -25,7 +25,7 @@
       "target_pg_schema": "analytics_dev",
       "tables": [
         {
-          "enabled": true,
+          "enabled": false,
           "source": "DIMPAYER",
           "target": "dimpayer",
           "source_filter": "\"Is Active\" = TRUE AND \"Is Demo\" = FALSE AND \"Source System\" = 'hha'",
@@ -38,7 +38,7 @@
           "disable_index": true
         },
         {
-          "enabled": true,
+          "enabled": false,
           "source": "DIMPROVIDER",
           "target": "dimprovider",
           "source_filter": "\"Is Active\" = TRUE AND \"Is Demo\" = FALSE AND \"Source System\" = 'hha'",
@@ -51,7 +51,7 @@
           "disable_index": true
         },
         {
-          "enabled": true,
+          "enabled": false,
           "source": "DIMOFFICE",
           "target": "dimoffice",
           "source_filter": "\"Is Active\" = TRUE AND \"Source System\" = 'hha'",
@@ -64,7 +64,7 @@
           "disable_index": true
         },
         {
-          "enabled": true,
+          "enabled": false,
           "source": "DIMCONTRACT",
           "target": "dimcontract",
           "source_filter": "\"Is Active\" = TRUE AND \"Source System\" = 'hha'",
@@ -77,20 +77,20 @@
           "disable_index": true
         },
         {
-          "enabled": true,
+          "enabled": false,
           "source": "DIMPAYERPROVIDER",
           "target": "dimpayerprovider",
           "source_filter": "\"Source System\" = 'hha'",
-          "chunking_columns": ["Provider Id", "Payer Id"],
-          "chunking_column_types": ["varchar", "varchar"],
-          "uniqueness_columns": ["Provider Id", "Payer Id"],
+          "chunking_columns": null,
+          "chunking_column_types": null,
+          "uniqueness_columns": null,
           "source_watermark": null,
           "target_watermark": null,
-          "truncate_onstart": false,
+          "truncate_onstart": true,
           "disable_index": true
         },
         {
-          "enabled": true,
+          "enabled": false,
           "source": "DIMUSER",
           "target": "dimuser",
           "source_filter": "\"Source System\" = 'hha' AND \"Is Support User\" = FALSE AND \"Username\" IS NOT NULL",
@@ -103,20 +103,20 @@
           "disable_index": true
         },
         {
-          "enabled": true,
+          "enabled": false,
           "source": "DIMUSEROFFICES",
           "target": "dimuseroffices",
-          "source_filter": "\"Source System\" = 'hha'",
-          "chunking_columns": ["User Id", "Office Id"],
-          "chunking_column_types": ["varchar", "varchar"],
+          "source_filter": "\"Source System\" = 'hha' AND \"Office Id\" IS NOT NULL",
+          "chunking_columns": null,
+          "chunking_column_types": null,
           "uniqueness_columns": ["User Id", "Office Id"],
           "source_watermark": null,
           "target_watermark": null,
-          "truncate_onstart": false,
+          "truncate_onstart": true,
           "disable_index": true
         },
         {
-          "enabled": true,
+          "enabled": false,
           "source": "DIMPATIENT",
           "target": "dimpatient",
           "source_filter": "\"Has Visit\" = TRUE AND \"Status\" = 'Active' AND \"Source System\" = 'hha'",
@@ -129,7 +129,7 @@
           "disable_index": true
         },
         {
-          "enabled": true,
+          "enabled": false,
           "source": "DIMSERVICECODE",
           "target": "dimservicecode",
           "source_filter": "\"Source System\" = 'hha' AND \"Is Active\" = TRUE",
@@ -142,7 +142,7 @@
           "disable_index": true
         },
         {
-          "enabled": true,
+          "enabled": false,
           "source": "DIMCAREGIVER",
           "target": "dimcaregiver",
           "source_filter": "\"Source System\" = 'hha'",
@@ -155,7 +155,7 @@
           "disable_index": true
         },
         {
-          "enabled": true,
+          "enabled": false,
           "source": "FACTCAREGIVERABSENCE",
           "target": "factcaregiverabsence",
           "source_filter": "\"Active\" = TRUE AND \"Source System\" = 'hha'",
@@ -168,7 +168,7 @@
           "disable_index": true
         },
         {
-          "enabled": true,
+          "enabled": false,
           "source": "DIMPATIENTADDRESS",
           "target": "dimpatientaddress",
           "source_filter": "\"Source System\" = 'hha'",
@@ -181,7 +181,7 @@
           "disable_index": true
         },
         {
-          "enabled": true,
+          "enabled": false,
           "source": "FACTCAREGIVERINSERVICE",
           "target": "factcaregiverinservice",
           "source_filter": "\"Source System\" = 'hha'",
@@ -210,7 +210,7 @@
           "batch_size_copy_mode": 40000
         },
         {
-          "enabled": false,
+          "enabled": true,
           "source": "FACTVISITCALLPERFORMANCE_CR",
           "target": "factvisitcallperformance_cr",
           "source_filter": "\"External Source\" = 'HHAX' AND \"Permanent Deleted\" = FALSE",
@@ -236,7 +236,7 @@
       "target_pg_schema": "analytics_dev",
       "tables": [
         {
-          "enabled": true,
+          "enabled": false,
           "source": "\"multipayer_payer\"",
           "target": "aggnyprod",
           "source_filter": null,

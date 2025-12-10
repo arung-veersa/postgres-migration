@@ -165,7 +165,7 @@ def run_migration(
         
         # Initialize status schema
         logger.info("Initializing migration status schema...")
-        pg_manager.initialize_status_schema(status_db, "schema.sql")
+        pg_manager.initialize_status_schema(status_db, "sql/migration_status_schema.sql")
         logger.info(f"✓ Migration status schema initialized in {status_db}")
         
         # Handle resume logic
@@ -206,8 +206,8 @@ def run_migration(
                 logger.info(f"   Progress: {result[3]}/{result[2]} tables completed, {result[4]} failed")
         elif not no_resume:
             # Auto-detect resumable run
-            logger.info(f"Checking for resumable run (config_hash={config_hash[:8]}..., max_age={resume_max_age}h)")
-            resumable_run = status_tracker.find_resumable_run(config_hash, resume_max_age)
+            logger.info(f"Checking for resumable run (config_hash={config_hash[:8]}..., sources={source_names}, max_age={resume_max_age}h)")
+            resumable_run = status_tracker.find_resumable_run(config_hash, source_names, resume_max_age)
             
             if resumable_run:
                 orchestrator.run_id = resumable_run['run_id']
@@ -226,9 +226,10 @@ def run_migration(
             total_tables = sum(len(config_loader.get_enabled_tables(s)) for s in sources_to_migrate)
             orchestrator.run_id = status_tracker.create_migration_run(
                 config_hash=config_hash,
+                source_names=source_names,
                 total_sources=len(sources_to_migrate),
                 total_tables=total_tables,
-                metadata={'lambda': True, 'source_names': source_names}
+                metadata={'lambda': True}
             )
             logger.info(f"✓ Created migration run: {orchestrator.run_id}")
         

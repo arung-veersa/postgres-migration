@@ -83,10 +83,13 @@ Write-Host "  ✓ config.json" -ForegroundColor Gray
 Copy-Item -Path (Join-Path $ProjectRoot "scripts\lambda_handler.py") -Destination (Join-Path $PackageDir "lambda_handler.py") -Force
 Write-Host "  ✓ lambda_handler.py (at root)" -ForegroundColor Gray
 
-# Copy schema.sql if exists
-if (Test-Path (Join-Path $ProjectRoot "schema.sql")) {
-    Copy-Item -Path (Join-Path $ProjectRoot "schema.sql") -Destination $PackageDir -Force
-    Write-Host "  ✓ schema.sql" -ForegroundColor Gray
+# Copy sql folder if exists
+$SqlDir = Join-Path $ProjectRoot "sql"
+if (Test-Path $SqlDir) {
+    $TargetSqlDir = Join-Path $PackageDir "sql"
+    New-Item -ItemType Directory -Path $TargetSqlDir -Force | Out-Null
+    Copy-Item -Path (Join-Path $SqlDir "migration_status_schema.sql") -Destination $TargetSqlDir -Force -ErrorAction SilentlyContinue
+    Write-Host "  ✓ sql/migration_status_schema.sql" -ForegroundColor Gray
 }
 
 # Clean cache files

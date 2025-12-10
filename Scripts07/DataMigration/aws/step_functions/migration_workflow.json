@@ -255,7 +255,7 @@
     "TooManyResumeAttempts": {
       "Type": "Fail",
       "Error": "TooManyResumeAttemptsError",
-      "Cause": "Migration did not complete after 10 resume attempts. Check for stuck chunks or increase Lambda timeout."
+      "Cause": "Migration did not complete after 100 resume attempts. Check for stuck chunks, memory issues, or performance problems. Query migration_status.migration_chunk_status for failed/in_progress chunks."
     },
     "MigrationSuccess": {
       "Type": "Succeed",
@@ -263,4 +263,3 @@
     }
   }
 }
-

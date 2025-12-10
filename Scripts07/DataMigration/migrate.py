@@ -115,6 +115,9 @@ class MigrationOrchestrator:
                 self.logger.warning("No enabled sources found in configuration")
                 return
             
+            # Extract source names for execution hash
+            source_names = [source.get('source_name', f'source_{i}') for i, source in enumerate(sources)]
+            
             # Count total tables
             total_tables = sum(
                 len(self.config_loader.get_enabled_tables(source))
@@ -133,7 +136,7 @@ class MigrationOrchestrator:
             
             # Initialize status schema
             self.logger.info("Initializing migration status schema...")
-            self.pg_manager.initialize_status_schema(first_target_db, "schema.sql")
+            self.pg_manager.initialize_status_schema(first_target_db, "sql/migration_status_schema.sql")
             
             # Check for resumable run (unless --no-resume specified)
             config_hash = self.config_loader.get_config_hash()
@@ -147,7 +150,8 @@ class MigrationOrchestrator:
             elif not (self.args and self.args.no_resume):
                 # Auto-detect resumable run
                 max_age = self.args.resume_max_age if self.args else 12
-                resumable_run = self.status_tracker.find_resumable_run(config_hash, max_age)
+                self.logger.info(f"Checking for resumable run (sources={source_names}, max_age={max_age}h)")
+                resumable_run = self.status_tracker.find_resumable_run(config_hash, source_names, max_age)
                 
                 if resumable_run:
                     self._display_resume_warning(resumable_run)
@@ -158,6 +162,7 @@ class MigrationOrchestrator:
             if not self.resuming:
                 self.run_id = self.status_tracker.create_migration_run(
                     config_hash=config_hash,
+                    source_names=source_names,
                     total_sources=len(sources),
                     total_tables=total_tables,
                     metadata={'config_path': self.config_path}

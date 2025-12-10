@@ -5,11 +5,22 @@ Manages migration status tracking in PostgreSQL
 
 import uuid
 import json
+import hashlib
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+from decimal import Decimal
 
 from .connections import PostgresConnectionManager
 from .utils import logger
+
+
+class DecimalEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles Decimal objects from Snowflake"""
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            # Convert to int if it's a whole number, otherwise float
+            return int(obj) if obj % 1 == 0 else float(obj)
+        return super().default(obj)
 
 
 class StatusTracker:
@@ -21,9 +32,25 @@ class StatusTracker:
         self.logger = logger
         self.current_run_id: Optional[uuid.UUID] = None
     
-    def create_migration_run(self, config_hash: str, total_sources: int, 
-                            total_tables: int, metadata: Optional[Dict] = None) -> uuid.UUID:
+    def create_migration_run(self, config_hash: str, source_names: List[str],
+                            total_sources: int, total_tables: int, 
+                            metadata: Optional[Dict] = None) -> uuid.UUID:
         """Create a new migration run record"""
+        
+        # Calculate execution context hash for resume matching
+        context = {
+            'config_hash': config_hash,
+            'source_names': sorted(source_names)
+        }
+        execution_hash = hashlib.md5(
+            json.dumps(context, sort_keys=True).encode()
+        ).hexdigest()
+        
+        # Enhance metadata with execution_hash for concurrent execution safety
+        metadata = metadata or {}
+        metadata['execution_hash'] = execution_hash
+        metadata['source_names'] = source_names
+        
         query = """
             INSERT INTO migration_status.migration_runs 
                 (config_hash, total_sources, total_tables, metadata)
@@ -31,7 +58,7 @@ class StatusTracker:
             RETURNING run_id
         """
         
-        metadata_json = json.dumps(metadata) if metadata else None
+        metadata_json = json.dumps(metadata, cls=DecimalEncoder)
         
         conn = self.pg_manager.get_connection(self.target_database)
         cursor = conn.cursor()
@@ -203,7 +230,7 @@ class StatusTracker:
         if isinstance(chunk_range, str):
             chunk_range_json = chunk_range
         else:
-            chunk_range_json = json.dumps(chunk_range)
+            chunk_range_json = json.dumps(chunk_range, cls=DecimalEncoder)
         
         conn = self.pg_manager.get_connection(self.target_database)
         cursor = conn.cursor()
@@ -231,7 +258,9 @@ class StatusTracker:
         params = [status]
         
         if status == 'in_progress':
-            updates.append("started_at = CURRENT_TIMESTAMP")
+            # Only set started_at if it's NULL (first attempt)
+            # This prevents resetting started_at on retry and avoids timestamp constraint violations
+            updates.append("started_at = COALESCE(started_at, CURRENT_TIMESTAMP)")
         
         if status in ['completed', 'failed']:
             updates.append("completed_at = CURRENT_TIMESTAMP")
@@ -299,21 +328,35 @@ class StatusTracker:
             cursor.close()
             self.pg_manager.return_connection(conn)
     
-    def find_resumable_run(self, config_hash: str, max_age_hours: int = 12) -> Optional[Dict]:
+    def find_resumable_run(self, config_hash: str, source_names: List[str],
+                          max_age_hours: int = 12) -> Optional[Dict]:
         """
-        Find the most recent incomplete run with same config hash within age limit.
+        Find the most recent incomplete run with same execution context.
         
         Args:
             config_hash: MD5 hash of configuration
+            source_names: List of source names for execution context matching
             max_age_hours: Maximum age in hours for resumable runs (default: 12)
         
         Returns:
             Dict with run details or None if no resumable run found
             
         Note:
-            Resumes runs with status IN ('running', 'partial', 'failed')
-            i.e., any status that is NOT 'completed'
+            Matches on execution_hash (config_hash + source_names) to enable
+            safe concurrent execution of different source combinations.
+            Falls back to source_names comparison for backward compatibility
+            with runs created before execution_hash was implemented.
         """
+        
+        # Calculate execution context hash
+        context = {
+            'config_hash': config_hash,
+            'source_names': sorted(source_names)
+        }
+        execution_hash = hashlib.md5(
+            json.dumps(context, sort_keys=True).encode()
+        ).hexdigest()
+        
         query = """
             SELECT 
                 run_id, 
@@ -322,31 +365,68 @@ class StatusTracker:
                 total_tables,
                 completed_tables,
                 failed_tables,
-                total_rows_copied
+                total_rows_copied,
+                metadata
             FROM migration_status.migration_runs
             WHERE config_hash = %s
               AND status != 'completed'
               AND started_at > CURRENT_TIMESTAMP - INTERVAL '%s hours'
             ORDER BY started_at DESC
-            LIMIT 1
         """
         
         conn = self.pg_manager.get_connection(self.target_database)
         cursor = conn.cursor()
         try:
             cursor.execute(query, (config_hash, max_age_hours))
-            result = cursor.fetchone()
+            results = cursor.fetchall()
             
-            if result:
-                return {
-                    'run_id': result[0],
-                    'status': result[1],
-                    'started_at': result[2],
-                    'total_tables': result[3],
-                    'completed_tables': result[4],
-                    'failed_tables': result[5],
-                    'total_rows_copied': result[6]
-                }
+            # Filter by execution_hash in metadata
+            for result in results:
+                # Handle metadata: psycopg2 returns JSONB as dict already
+                if isinstance(result[7], dict):
+                    metadata = result[7]
+                elif result[7]:
+                    metadata = json.loads(result[7])
+                else:
+                    metadata = {}
+                
+                # Match on execution_hash if present (new runs)
+                result_execution_hash = metadata.get('execution_hash')
+                result_source_names = metadata.get('source_names', [])
+                
+                if result_execution_hash:
+                    # New approach: Match on execution_hash
+                    if result_execution_hash == execution_hash:
+                        self.logger.info(
+                            f"Found resumable run with matching execution_hash: {result[0]} "
+                            f"(sources: {result_source_names})"
+                        )
+                        return {
+                            'run_id': result[0],
+                            'status': result[1],
+                            'started_at': result[2],
+                            'total_tables': result[3],
+                            'completed_tables': result[4],
+                            'failed_tables': result[5],
+                            'total_rows_copied': result[6]
+                        }
+                else:
+                    # Backward compatibility: Match on source_names list comparison
+                    if set(source_names) == set(result_source_names):
+                        self.logger.warning(
+                            f"⚠️  Found resumable run without execution_hash: {result[0]}. "
+                            f"This is an old run. Consider starting fresh for best results."
+                        )
+                        return {
+                            'run_id': result[0],
+                            'status': result[1],
+                            'started_at': result[2],
+                            'total_tables': result[3],
+                            'completed_tables': result[4],
+                            'failed_tables': result[5],
+                            'total_rows_copied': result[6]
+                        }
+            
             return None
         finally:
             cursor.close()

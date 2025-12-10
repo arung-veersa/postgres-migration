@@ -300,7 +300,7 @@ class PostgresConnectionManager:
             self.logger.warning(f"Could not get max watermark for {schema}.{table} with filter: {e}")
             return None
     
-    def initialize_status_schema(self, database: str, schema_file: str = "schema.sql"):
+    def initialize_status_schema(self, database: str, schema_file: str = "sql/migration_status_schema.sql"):
         """Initialize migration status tracking tables"""
         try:
             with open(schema_file, 'r') as f:

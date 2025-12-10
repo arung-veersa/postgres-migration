@@ -135,6 +135,31 @@ class ConfigLoader:
         config_str = json.dumps(self.config, sort_keys=True)
         return hashlib.md5(config_str.encode()).hexdigest()
     
+    def get_execution_hash(self, source_names: List[str]) -> str:
+        """
+        Generate execution context hash (config + source selection).
+        Used for safe concurrent execution and resume matching.
+        
+        Args:
+            source_names: List of source names being migrated
+                         - For single source: ["analytics"]
+                         - For multiple: ["analytics", "conflict"]
+                         - For all enabled: ["aggregator", "analytics", "conflict"]
+        
+        Returns:
+            MD5 hash combining config_hash and sorted source_names
+            
+        Note:
+            source_names are sorted before hashing to ensure consistency
+            regardless of input order (e.g., "analytics,conflict" vs "conflict,analytics")
+        """
+        context = {
+            'config_hash': self.get_config_hash(),
+            'source_names': sorted(source_names)  # Sort for consistency
+        }
+        context_str = json.dumps(context, sort_keys=True)
+        return hashlib.md5(context_str.encode()).hexdigest()
+    
     @staticmethod
     def resolve_filter(source_filter: Any) -> str:
         """Resolve source filter to SQL WHERE clause"""

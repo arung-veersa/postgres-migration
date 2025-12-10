@@ -536,6 +536,93 @@ CREATE TABLE migration_status.migration_chunk_status (
 
 ---
 
+## Concurrent Execution
+
+### Running Multiple Migrations Simultaneously
+
+**Purpose:** Run analytics and conflict table migrations **concurrently** for faster overall migration time.
+
+**Architecture:**
+- ✅ **Single Lambda function** (shared code)
+- ✅ **Multiple Step Functions** (separate orchestration)
+- ✅ **Isolated execution contexts** (separate run_ids, execution_hash)
+- ✅ **Parallel execution** (independent Lambda instances)
+
+**How it works:**
+- Each Step Functions execution launches its own Lambda instance
+- Instances don't share state except for PostgreSQL tracking tables
+- Each execution gets a unique `run_id` and `execution_hash`
+- Resume logic matches by `execution_hash` to prevent cross-execution conflicts
+
+**Setup:**
+
+1. **Deploy Lambda once** (already supports concurrent execution):
+```powershell
+cd deploy
+.\rebuild_app_only.ps1
+# Upload to AWS Lambda
+```
+
+2. **Create separate Step Functions**:
+   - Copy `migration_workflow.json` for each source
+   - Modify `InitializeDefaults` to set `source_name`:
+   
+```json
+{
+  "InitializeDefaults": {
+    "Type": "Pass",
+    "Parameters": {
+      "action": "migrate",
+      "input": {
+        "source_name": "analytics"  ← Set per Step Function
+      },
+      "defaults": {
+        "resume_attempt_count": 0,
+        "resume_max_age": 12
+      }
+    },
+    "Next": "ValidateConfig"
+  }
+}
+```
+
+3. **Execute concurrently**:
+   - Start analytics Step Function
+   - Start conflict Step Function immediately
+   - Both run in parallel without interference
+
+**Execution Hash:**
+- Combines `config_hash` + sorted `source_names`
+- Ensures analytics migration can only resume analytics runs
+- Ensures conflict migration can only resume conflict runs
+- Stored in `migration_runs.metadata` as `execution_hash`
+
+**Example:**
+```python
+# Analytics execution
+execution_hash = MD5({config: "abc...", sources: ["analytics"]})
+→ "111aaa..."
+
+# Conflict execution  
+execution_hash = MD5({config: "abc...", sources: ["conflict"]})
+→ "222bbb..."
+
+# Different hashes = No cross-execution resume conflicts!
+```
+
+**Benefits:**
+- ✅ Faster total migration time (parallel processing)
+- ✅ Independent progress tracking
+- ✅ Separate retry logic per source
+- ✅ Safe concurrent execution
+
+**Limitations:**
+- PostgreSQL connection pool must support concurrent connections
+- Snowflake warehouse must support concurrent queries
+- Lambda concurrency limits apply (default: 1000 concurrent executions)
+
+---
+
 ## Production Metrics
 
 ### Typical Performance
@@ -565,7 +652,7 @@ CREATE TABLE migration_status.migration_chunk_status (
 ### Core Application
 - `migrate.py` - Main orchestrator
 - `config.json` - Migration configuration
-- `migration_status_schema.sql` - Status tables schema
+- `sql/migration_status_schema.sql` - Status tables schema
 - `requirements.txt` - Python dependencies
 - `env.example` - Environment template
 
