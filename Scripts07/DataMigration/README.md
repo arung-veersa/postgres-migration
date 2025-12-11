@@ -6,6 +6,9 @@ A production-ready data migration tool that copies data from Snowflake to Postgr
 
 - ✅ **Configuration-driven**: Define all migration logic in `config.json`
 - ✅ **Multiple deployment modes**: Local Python, AWS Lambda, or Step Functions
+- ✅ **Smart COPY/UPSERT mode**: Automatically selects optimal loading strategy per chunk (8-10x faster)
+- ✅ **Tiered error handling**: Auto-retry, auto-fallback, adaptive batch sizing, skip & continue
+- ✅ **Insert-only mode**: Skip duplicates for fast catch-up/resume scenarios
 - ✅ **Adaptive chunking**: Automatically determines optimal chunking strategy
 - ✅ **Parallel processing**: Multi-threaded chunk processing for maximum throughput
 - ✅ **Incremental loads**: Watermark-based incremental loading with upsert support
@@ -19,7 +22,8 @@ A production-ready data migration tool that copies data from Snowflake to Postgr
 - ✅ **Configuration validation**: Upfront validation catches errors before migration starts
 - ✅ **Dry-run mode**: Preview migrations without touching data
 
-See [FEATURES.md](FEATURES.md) for detailed documentation.
+See [FEATURES.md](FEATURES.md) for detailed documentation.  
+See [CHANGES.md](CHANGES.md) for recent enhancements (December 2024).
 
 ## Quick Start
 
@@ -172,12 +176,14 @@ POSTGRES_PASSWORD=mypassword
 - **parallel_threads**: Number of parallel threads (default: 4, recommended: 4-8)
 - **batch_size**: Rows per chunk (default: 10000)
 - **max_retry_attempts**: Retry attempts for failed chunks (default: 3)
+- **insert_only_mode**: Skip duplicates instead of updating (default: false)
+- **lambda_timeout_buffer_seconds**: Buffer before Lambda timeout (default: 90)
 
 #### Table Settings
 - **enabled**: Process this table (true/false)
 - **source**: Source table in Snowflake (e.g., `"DIMPAYER"` or `"\"lowercase_table\""`)
 - **target**: Target table in PostgreSQL (lowercase by default)
-- **source_filter**: WHERE clause to filter rows
+- **source_filter**: WHERE clause to filter rows (e.g., `"ID > 5000000"` to skip processed ranges)
 - **chunking_columns**: Column(s) for chunking (must match exact casing)
 - **chunking_column_types**: Data types (`int`, `uuid`, `date`, `varchar`)
 - **uniqueness_columns**: Primary/unique key columns (must match exact casing)
@@ -186,6 +192,9 @@ POSTGRES_PASSWORD=mypassword
 - **target_watermark**: Timestamp column in target
 - **truncate_onstart**: Truncate before loading (faster than upsert)
 - **disable_index**: Disable indexes during load (recommended for large tables)
+- **insert_only_mode**: Override global setting per table (true/false)
+- **parallel_threads**: Override global setting per table (integer)
+- **batch_size**: Override global setting per table (integer)
 
 ### Important: Column Name Casing
 

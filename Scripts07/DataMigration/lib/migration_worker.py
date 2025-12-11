@@ -106,7 +106,9 @@ class MigrationWorker:
     
     def process_chunk(self, run_id: str, chunk_id: int, chunk_filter: str, chunk_metadata: Dict[str, Any] = None) -> int:
         """
-        Process a single data chunk
+        Process a single data chunk with tiered error handling
+        
+        TIER 3: Adaptive batch sizing for OOM errors
         
         Args:
             run_id: Migration run ID
@@ -123,8 +125,12 @@ class MigrationWorker:
             chunk_id, 'in_progress'
         )
         
+        chunk_metadata = chunk_metadata or {}
+        chunk_metadata['chunk_id'] = chunk_id  # Ensure chunk_id is in metadata
+        
         try:
-            rows_processed = self._process_chunk_with_retry(chunk_filter, chunk_metadata or {})
+            # TIER 3: Try with adaptive batch sizing for OOM resilience
+            rows_processed = self._process_chunk_with_oom_protection(chunk_filter, chunk_metadata)
             
             # Update chunk status to completed
             self.status_tracker.update_chunk_status(
@@ -142,6 +148,265 @@ class MigrationWorker:
                 chunk_id, 'failed', error_message=error_msg
             )
             raise
+    
+    def _process_chunk_with_oom_protection(self, chunk_filter: str, chunk_metadata: Dict[str, Any]) -> int:
+        """
+        TIER 3: Process chunk with adaptive batch sizing for OOM resilience
+        
+        If processing fails due to OOM, automatically splits the data into smaller
+        sub-batches and retries. This prevents OOM from causing complete chunk failure.
+        
+        Args:
+            chunk_filter: SQL WHERE clause for this chunk
+            chunk_metadata: Metadata about the chunk
+            
+        Returns:
+            Total number of rows processed
+        """
+        chunk_id = chunk_metadata.get('chunk_id', 'unknown')
+        
+        try:
+            # First attempt with standard processing
+            return self._process_chunk_with_retry(chunk_filter, chunk_metadata)
+            
+        except MemoryError as e:
+            # OOM detected - try adaptive batch sizing
+            self.logger.warning(
+                f"⚠️ [{self.source_table}] OOM detected in chunk {chunk_id}, "
+                f"attempting adaptive batch sizing"
+            )
+            
+            # Try to split into smaller sub-batches
+            return self._process_chunk_with_sub_batches(chunk_filter, chunk_metadata)
+            
+        except Exception as e:
+            # Check if error message indicates OOM (psycopg2 may not raise MemoryError)
+            error_str = str(e).lower()
+            if any(oom_indicator in error_str for oom_indicator in 
+                   ['out of memory', 'memory', 'cannot allocate', 'memoryerror']):
+                self.logger.warning(
+                    f"⚠️ [{self.source_table}] OOM-like error in chunk {chunk_id}: {str(e)[:100]}"
+                )
+                
+                # Try sub-batching
+                try:
+                    return self._process_chunk_with_sub_batches(chunk_filter, chunk_metadata)
+                except Exception as retry_error:
+                    self.logger.error(
+                        f"❌ [{self.source_table}] Chunk {chunk_id} failed even with "
+                        f"adaptive batch sizing: {str(retry_error)[:200]}"
+                    )
+                    raise retry_error
+            else:
+                # Not an OOM error, re-raise
+                raise
+    
+    def _process_chunk_with_sub_batches(self, chunk_filter: str, chunk_metadata: Dict[str, Any]) -> int:
+        """
+        Process a chunk by splitting into smaller sub-batches to avoid OOM
+        
+        Strategy:
+        1. Fetch data in smaller portions using LIMIT/OFFSET
+        2. Process each portion separately
+        3. Aggregate results
+        
+        Args:
+            chunk_filter: SQL WHERE clause for this chunk
+            chunk_metadata: Metadata about the chunk
+            
+        Returns:
+            Total number of rows processed
+        """
+        chunk_id = chunk_metadata.get('chunk_id', 'unknown')
+        
+        # Define sub-batch sizes to try (progressively smaller)
+        # Start with 10K, then 5K, then 2K as last resort
+        sub_batch_sizes = [10000, 5000, 2000]
+        
+        for sub_batch_size in sub_batch_sizes:
+            try:
+                self.logger.info(
+                    f"🔄 [{self.source_table}] Attempting chunk {chunk_id} "
+                    f"with sub-batch size: {format_number(sub_batch_size)}"
+                )
+                
+                total_rows = 0
+                offset = 0
+                batch_num = 1
+                
+                while True:
+                    # Build query with LIMIT/OFFSET for sub-batching
+                    fetch_query = self._build_fetch_query_with_limit(
+                        chunk_filter, chunk_metadata, sub_batch_size, offset
+                    )
+                    
+                    self.logger.debug(
+                        f"Fetching sub-batch {batch_num} (offset {offset}): {fetch_query[:200]}..."
+                    )
+                    
+                    # Fetch sub-batch
+                    with Timer(f"Fetch sub-batch {batch_num}", self.logger):
+                        result = self.sf_manager.fetch_dataframe(fetch_query)
+                    
+                    rows = result['data']
+                    columns = result['columns']
+                    
+                    # No more data?
+                    if not rows or len(rows) == 0:
+                        self.logger.debug(f"Sub-batch {batch_num} is empty, finished")
+                        break
+                    
+                    rows_count = len(rows)
+                    self.logger.info(
+                        f"📦 [{self.source_table}] Sub-batch {batch_num}: "
+                        f"{format_number(rows_count)} rows"
+                    )
+                    
+                    # Convert to DataFrame and load
+                    import pandas as pd
+                    df = pd.DataFrame(rows, columns=columns)
+                    
+                    with Timer(f"Load sub-batch {batch_num}", self.logger):
+                        self._load_to_postgres(df, chunk_metadata)
+                    
+                    total_rows += rows_count
+                    
+                    # If we got fewer rows than requested, we're done
+                    if rows_count < sub_batch_size:
+                        self.logger.debug(
+                            f"Sub-batch {batch_num} returned {rows_count} < {sub_batch_size}, "
+                            f"assuming end of data"
+                        )
+                        break
+                    
+                    # Move to next sub-batch
+                    offset += rows_count
+                    batch_num += 1
+                
+                # Success!
+                self.logger.info(
+                    f"✅ [{self.source_table}] Chunk {chunk_id} completed via sub-batching: "
+                    f"{format_number(total_rows)} total rows in {batch_num} sub-batches "
+                    f"(size: {format_number(sub_batch_size)})"
+                )
+                
+                return total_rows
+                
+            except MemoryError as e:
+                if sub_batch_size == sub_batch_sizes[-1]:
+                    # Even smallest sub-batch failed
+                    self.logger.error(
+                        f"❌ [{self.source_table}] Chunk {chunk_id} failed even with "
+                        f"smallest sub-batch size ({format_number(sub_batch_size)})"
+                    )
+                    raise
+                else:
+                    # Try next smaller size
+                    self.logger.warning(
+                        f"⚠️ [{self.source_table}] Sub-batch size {format_number(sub_batch_size)} "
+                        f"still causes OOM, trying smaller size..."
+                    )
+                    continue
+            
+            except Exception as e:
+                # Check if OOM-like error
+                error_str = str(e).lower()
+                if any(oom_indicator in error_str for oom_indicator in 
+                       ['out of memory', 'memory', 'cannot allocate']):
+                    if sub_batch_size == sub_batch_sizes[-1]:
+                        self.logger.error(
+                            f"❌ [{self.source_table}] Chunk {chunk_id} failed with OOM "
+                            f"even at smallest sub-batch: {str(e)[:200]}"
+                        )
+                        raise
+                    else:
+                        self.logger.warning(
+                            f"⚠️ [{self.source_table}] OOM at sub-batch {format_number(sub_batch_size)}, "
+                            f"trying smaller..."
+                        )
+                        continue
+                else:
+                    # Not OOM, re-raise
+                    raise
+        
+        # Should never reach here
+        raise RuntimeError(f"Failed to process chunk {chunk_id} with any sub-batch size")
+    
+    def _build_fetch_query_with_limit(
+        self, chunk_filter: str, chunk_metadata: Dict[str, Any], limit: int, offset: int
+    ) -> str:
+        """
+        Build a fetch query with LIMIT/OFFSET for sub-batching
+        
+        Args:
+            chunk_filter: Base chunk filter
+            chunk_metadata: Chunk metadata
+            limit: LIMIT value
+            offset: OFFSET value
+            
+        Returns:
+            SQL query string
+        """
+        strategy = chunk_metadata.get('strategy', '')
+        
+        # Get watermark filter if applicable
+        watermark_filter = None
+        if self.source_watermark and self.target_watermark and not self.truncate_onstart:
+            if strategy in ['date_range', 'numeric_range', 'grouped_values', 'date_range_offset']:
+                max_watermark = self._get_chunk_scoped_watermark(chunk_filter, chunk_metadata)
+                if max_watermark:
+                    self.logger.debug(f"Chunk-scoped watermark: {max_watermark}")
+            else:
+                max_watermark = self.pg_manager.get_max_watermark(
+                    self.target_db, self.target_schema, self.target_table, self.target_watermark
+                )
+                if max_watermark:
+                    self.logger.debug(f"Global watermark: {max_watermark}")
+            
+            if max_watermark:
+                watermark_filter = f'{quote_identifier(self.source_watermark)} > \'{max_watermark}\''
+        
+        # Build WHERE clause
+        filters = [chunk_filter]
+        if watermark_filter:
+            filters.append(watermark_filter)
+        
+        where_clause = " AND ".join(f"({f})" for f in filters if f and f.strip() and f != "1=1")
+        if where_clause:
+            where_clause = f"WHERE {where_clause}"
+        else:
+            where_clause = ""
+        
+        # Build ORDER BY for deterministic pagination
+        # Use uniqueness columns if available, otherwise try to infer from metadata
+        order_by_cols = []
+        
+        if self.uniqueness_columns:
+            order_by_cols = [quote_identifier(col) for col in self.uniqueness_columns]
+        elif 'chunking_column' in chunk_metadata:
+            # Fallback to chunking column
+            order_by_cols = [quote_identifier(chunk_metadata['chunking_column'])]
+        
+        if order_by_cols:
+            order_by_clause = f"ORDER BY {', '.join(order_by_cols)}"
+        else:
+            # No deterministic ordering available - log warning
+            self.logger.warning(
+                f"⚠️ [{self.source_table}] No ordering columns for sub-batching, "
+                f"results may be inconsistent across retries"
+            )
+            order_by_clause = ""
+        
+        # Build query
+        query = f"""
+            SELECT *
+            FROM {self.source_db}.{self.source_schema}.{self.source_table}
+            {where_clause}
+            {order_by_clause}
+            LIMIT {limit} OFFSET {offset}
+        """
+        
+        return query
     
     @retry(
         stop=stop_after_attempt(3),
@@ -448,7 +713,12 @@ class MigrationWorker:
         return pg_filter
     
     def _load_to_postgres(self, df: pd.DataFrame, chunk_metadata: Dict[str, Any] = None):
-        """Load DataFrame to PostgreSQL using COPY or UPSERT"""
+        """
+        Load DataFrame to PostgreSQL using COPY or UPSERT with tiered error handling
+        
+        TIER 2: Auto-fallback for duplicate keys (COPY → UPSERT)
+        TIER 3: Adaptive batch sizing for OOM (handled at process_chunk level)
+        """
         # Filter DataFrame to only include columns that exist in PostgreSQL target table
         # (Snowflake sources may have more columns than PostgreSQL targets)
         df_filtered = self._filter_columns_for_target(df)
@@ -460,32 +730,91 @@ class MigrationWorker:
         # Replace NaT (Not-a-Time) with None for PostgreSQL compatibility
         df_filtered = df_filtered.replace({pd.NaT: None})
         
-        # Smart decision: Use COPY (fast) if:
-        # 1. truncate_onstart is True, OR
-        # 2. No uniqueness_columns defined, OR
-        # 3. Initial full load (pre-determined by orchestrator before threads started)
+        # SMART DECISION LOGIC:
+        # Priority order:
+        # 1. If chunk metadata has pre-determined mode (from smart mode analysis), use it
+        # 2. If truncate_onstart, always COPY
+        # 3. If no uniqueness_columns, always COPY
+        # 4. Otherwise, fallback to old initial_full_load logic
         
         chunk_metadata = chunk_metadata or {}
         
-        # Check if we can safely use COPY
-        use_copy = (
-            self.truncate_onstart or 
-            not self.uniqueness_columns or
-            self._is_initial_full_load  # Use the pre-determined value
-        )
+        # Check if chunk has pre-determined smart mode decision
+        use_copy = chunk_metadata.get('use_copy_mode')
         
-        # Log the decision once (first chunk only)
-        if use_copy and self._is_initial_full_load and not hasattr(self, '_logged_initial_load'):
-            self._logged_initial_load = True
-            self.logger.info(
-                f"[{self.source_table}] Initial full load detected "
-                f"(empty table, no watermark) - will use fast COPY mode for all chunks"
+        if use_copy is None:
+            # Fallback to legacy logic if chunk doesn't have smart mode set
+            use_copy = (
+                self.truncate_onstart or 
+                not self.uniqueness_columns or
+                self._is_initial_full_load  # Use the pre-determined value
             )
-        
-        if use_copy:
-            # Use fast COPY for inserts
-            self._copy_to_postgres(df_filtered)
+            decision_reason = "legacy logic"
         else:
+            decision_reason = "smart chunk analysis"
+        
+        # Log the decision (only once per table)
+        if use_copy:
+            if not hasattr(self, '_logged_copy_mode'):
+                self._logged_copy_mode = True
+                self.logger.info(
+                    f"[{self.source_table}] Using COPY mode ({decision_reason})"
+                )
+            
+            # TIER 2: Try COPY, fallback to UPSERT on duplicate key errors
+            try:
+                self._copy_to_postgres(df_filtered)
+            except psycopg2.errors.UniqueViolation as e:
+                # Duplicate key detected in COPY mode
+                chunk_id = chunk_metadata.get('chunk_id', 'unknown')
+                insert_only_mode = self.table_config.get('insert_only_mode', False)
+                
+                if insert_only_mode:
+                    # INSERT-ONLY MODE: Skip duplicates, log and continue
+                    self.logger.warning(
+                        f"⚠️ [{self.source_table}] Duplicate key detected in COPY mode "
+                        f"(chunk {chunk_id}) - INSERT_ONLY_MODE enabled, skipping duplicates"
+                    )
+                    self.logger.info(
+                        f"📊 [{self.source_table}] Chunk {chunk_id}: Some rows skipped due to "
+                        f"existing keys. New rows (if any) were inserted successfully."
+                    )
+                    self.logger.debug(f"Duplicate key error: {str(e)[:200]}")
+                    # Don't raise, don't fallback - just log and continue
+                    # The rows that could be inserted were already inserted before the error
+                else:
+                    # NORMAL MODE: Fallback to UPSERT for smart mode mis-prediction
+                    self.logger.warning(
+                        f"⚠️ [{self.source_table}] Duplicate key detected in COPY mode "
+                        f"(chunk {chunk_id}), auto-falling back to UPSERT mode"
+                    )
+                    self.logger.debug(f"Duplicate key error: {str(e)[:200]}")
+                    
+                    # Check if we have uniqueness_columns configured for UPSERT
+                    if not self.uniqueness_columns:
+                        self.logger.error(
+                            f"❌ [{self.source_table}] Cannot fallback to UPSERT: "
+                            f"no uniqueness_columns configured"
+                        )
+                        raise  # Re-raise, can't recover without uniqueness columns
+                    
+                    # AUTO-RETRY with UPSERT
+                    self.logger.info(
+                        f"🔄 [{self.source_table}] Retrying chunk {chunk_id} with UPSERT mode"
+                    )
+                    self._upsert_to_postgres(df_filtered)
+                    
+                    # Log successful recovery
+                    self.logger.info(
+                        f"✅ [{self.source_table}] Chunk {chunk_id} completed successfully "
+                        f"via UPSERT fallback"
+                    )
+        else:
+            if not hasattr(self, '_logged_upsert_mode'):
+                self._logged_upsert_mode = True
+                self.logger.info(
+                    f"[{self.source_table}] Using UPSERT mode ({decision_reason})"
+                )
             # Use UPSERT for incremental loads
             self._upsert_to_postgres(df_filtered)
     

@@ -300,6 +300,79 @@ class PostgresConnectionManager:
             self.logger.warning(f"Could not get max watermark for {schema}.{table} with filter: {e}")
             return None
     
+    def check_range_exists(self, database: str, schema: str, table: str, 
+                          column: str, min_value: Any, max_value: Any) -> bool:
+        """
+        Check if any data exists in the specified column range.
+        Used by smart mode to determine COPY vs UPSERT.
+        
+        Args:
+            database: Target database name
+            schema: Target schema name
+            table: Target table name
+            column: Column to check range on
+            min_value: Minimum value of range
+            max_value: Maximum value of range
+        
+        Returns:
+            True if data exists in range, False otherwise
+        """
+        query = f"""
+            SELECT EXISTS (
+                SELECT 1 
+                FROM {schema}.{table}
+                WHERE {quote_identifier(column)} BETWEEN %s AND %s
+                LIMIT 1
+            )
+        """
+        
+        try:
+            result = self.execute_query(database, query, (min_value, max_value))
+            return result[0][0] if result else False
+        except Exception as e:
+            self.logger.warning(
+                f"Range existence check failed for {schema}.{table} "
+                f"({column} BETWEEN {min_value} AND {max_value}): {e}"
+            )
+            # On error, assume exists (safe fallback to UPSERT)
+            return True
+    
+    def check_date_exists(self, database: str, schema: str, table: str,
+                         date_column: str, date_value: str) -> bool:
+        """
+        Check if any data exists for the specified date.
+        Used by smart mode for date-based chunking.
+        
+        Args:
+            database: Target database name
+            schema: Target schema name
+            table: Target table name
+            date_column: Date/timestamp column name
+            date_value: Date value to check (YYYY-MM-DD format)
+        
+        Returns:
+            True if data exists for this date, False otherwise
+        """
+        query = f"""
+            SELECT EXISTS (
+                SELECT 1 
+                FROM {schema}.{table}
+                WHERE {quote_identifier(date_column)}::DATE = %s
+                LIMIT 1
+            )
+        """
+        
+        try:
+            result = self.execute_query(database, query, (date_value,))
+            return result[0][0] if result else False
+        except Exception as e:
+            self.logger.warning(
+                f"Date existence check failed for {schema}.{table} "
+                f"({date_column} = {date_value}): {e}"
+            )
+            # On error, assume exists (safe fallback to UPSERT)
+            return True
+    
     def initialize_status_schema(self, database: str, schema_file: str = "sql/migration_status_schema.sql"):
         """Initialize migration status tracking tables"""
         try:

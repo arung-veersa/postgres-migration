@@ -31,9 +31,11 @@ class ChunkingStrategy:
         source_schema: str,
         source_table: str,
         table_config: Dict[str, Any],
-        batch_size: int
+        batch_size: int,
+        pg_manager=None  # Optional PostgreSQL manager for smart mode
     ):
         self.sf_manager = sf_manager
+        self.pg_manager = pg_manager  # Store for smart mode checks
         self.source_db = source_db
         self.source_schema = source_schema
         self.source_table = source_table
@@ -148,6 +150,101 @@ class NumericRangeStrategy(ChunkingStrategy):
             chunk_id += 1
         
         self.logger.info(f"Created {len(chunks)} chunks for {self.source_table}")
+        
+        # Smart mode: Check which chunks already exist in target
+        chunks = self._apply_smart_copy_mode(chunks, id_column)
+        
+        return chunks
+    
+    def _apply_smart_copy_mode(self, chunks: List[ChunkInfo], id_column: str) -> List[ChunkInfo]:
+        """
+        Apply smart COPY/UPSERT mode detection to chunks.
+        Checks which numeric ranges already exist in target table.
+        """
+        from .config_loader import ConfigLoader
+        
+        # CRITICAL: Skip smart mode if truncate_onstart is True
+        # The table will be empty, so all chunks should use COPY mode
+        if self.table_config.get('truncate_onstart', False):
+            self.logger.info(
+                f"[{self.source_table}] truncate_onstart=true: "
+                f"Skipping smart mode analysis (all chunks will use COPY mode)"
+            )
+            for chunk in chunks:
+                chunk.metadata['use_copy_mode'] = True
+            return chunks
+        
+        # Only apply if we have PostgreSQL manager and uniqueness columns
+        if not hasattr(self, 'pg_manager') or not self.table_config.get('uniqueness_columns'):
+            # No smart mode possible, mark all as COPY (safe default)
+            for chunk in chunks:
+                chunk.metadata['use_copy_mode'] = True
+            return chunks
+        
+        target_db = self.table_config.get('target_pg_database')
+        target_schema = self.table_config.get('target_pg_schema')
+        target_table = self.table_config.get('target')
+        
+        if not all([target_db, target_schema, target_table]):
+            # Missing target info, use COPY mode
+            for chunk in chunks:
+                chunk.metadata['use_copy_mode'] = True
+            return chunks
+        
+        self.logger.info("=" * 80)
+        self.logger.info("🔍 SMART COPY/UPSERT MODE ANALYSIS")
+        self.logger.info("=" * 80)
+        self.logger.info(f"Table: {self.source_table}")
+        self.logger.info(f"Strategy: NumericRangeStrategy")
+        self.logger.info(f"Total chunks: {len(chunks)}")
+        self.logger.info(f"Uniqueness column: {self.table_config.get('uniqueness_columns')}")
+        self.logger.info(f"Checking existence in target...")
+        
+        # Check each chunk's range
+        copy_count = 0
+        upsert_count = 0
+        
+        for chunk in chunks:
+            min_value = chunk.metadata.get('min_id')
+            max_value = chunk.metadata.get('max_id')
+            
+            if min_value is not None and max_value is not None:
+                # Check if this range exists in target
+                exists = self.pg_manager.check_range_exists(
+                    target_db, target_schema, target_table,
+                    id_column, min_value, max_value
+                )
+                
+                chunk.metadata['use_copy_mode'] = not exists
+                
+                if exists:
+                    upsert_count += 1
+                else:
+                    copy_count += 1
+            else:
+                # Can't determine, use UPSERT (safe)
+                chunk.metadata['use_copy_mode'] = False
+                upsert_count += 1
+        
+        # Calculate percentages and estimates
+        copy_pct = (copy_count / len(chunks) * 100) if chunks else 0
+        upsert_pct = (upsert_count / len(chunks) * 100) if chunks else 0
+        
+        # Estimate time savings (COPY ~3s vs UPSERT ~40s per 100K rows)
+        avg_copy_time = 3  # seconds per chunk
+        avg_upsert_time = 40  # seconds per chunk
+        
+        estimated_time_with_smart = (copy_count * avg_copy_time + upsert_count * avg_upsert_time) / 3600
+        estimated_time_all_upsert = (len(chunks) * avg_upsert_time) / 3600
+        time_saved_hours = estimated_time_all_upsert - estimated_time_with_smart
+        
+        self.logger.info("")
+        self.logger.info("📊 SMART MODE RESULTS:")
+        self.logger.info(f"  ✅ COPY mode chunks: {copy_count} ({copy_pct:.1f}%) - NEW data")
+        self.logger.info(f"  🔄 UPSERT mode chunks: {upsert_count} ({upsert_pct:.1f}%) - EXISTING data")
+        self.logger.info(f"  ⚡ Estimated time: {estimated_time_with_smart:.1f}h (saves {time_saved_hours:.1f}h vs all UPSERT)")
+        self.logger.info("=" * 80)
+        
         return chunks
 
 
@@ -504,7 +601,8 @@ class ChunkingStrategyFactory:
         source_table: str,
         table_config: Dict[str, Any],
         batch_size: int,
-        max_target_watermark: Optional[str] = None
+        max_target_watermark: Optional[str] = None,
+        pg_manager=None  # Add pg_manager for smart mode
     ) -> ChunkingStrategy:
         """
         Create appropriate chunking strategy based on table configuration
@@ -517,6 +615,7 @@ class ChunkingStrategyFactory:
             table_config: Table configuration from config.json
             batch_size: Batch size for chunking
             max_target_watermark: Maximum watermark value from target table (for incremental optimization)
+            pg_manager: PostgreSQL connection manager (for smart COPY/UPSERT mode)
         
         Returns:
             Appropriate ChunkingStrategy instance
@@ -530,7 +629,7 @@ class ChunkingStrategyFactory:
         # No chunking columns - use single chunk
         if not chunking_columns or chunking_columns == [None] or chunking_columns == []:
             return SingleChunkStrategy(
-                sf_manager, source_db, source_schema, source_table, table_config, batch_size
+                sf_manager, source_db, source_schema, source_table, table_config, batch_size, pg_manager
             )
         
         # Determine strategy based on column type
@@ -539,12 +638,12 @@ class ChunkingStrategyFactory:
             
             if first_type in ['int', 'bigint', 'integer', 'number']:
                 return NumericRangeStrategy(
-                    sf_manager, source_db, source_schema, source_table, table_config, batch_size
+                    sf_manager, source_db, source_schema, source_table, table_config, batch_size, pg_manager
                 )
             elif first_type in ['date', 'timestamp', 'timestamp_ntz', 'timestamp_ltz', 'timestamp_tz']:
                 return DateRangeStrategy(
                     sf_manager, source_db, source_schema, source_table, table_config, batch_size,
-                    max_target_watermark
+                    max_target_watermark, pg_manager
                 )
             elif first_type in ['uuid', 'varchar', 'string', 'text']:
                 # Smart strategy selection for high-cardinality columns:
@@ -563,16 +662,16 @@ class ChunkingStrategyFactory:
                     modified_config['chunking_column_types'] = ['timestamp']
                     return DateRangeStrategy(
                         sf_manager, source_db, source_schema, source_table, modified_config, batch_size,
-                        max_target_watermark
+                        max_target_watermark, pg_manager
                     )
                 else:
                     # Full load: Use offset-based strategy (efficient)
                     return OffsetBasedStrategy(
-                        sf_manager, source_db, source_schema, source_table, table_config, batch_size
+                        sf_manager, source_db, source_schema, source_table, table_config, batch_size, pg_manager
                     )
         
         # Default to offset-based strategy (most universal)
         return OffsetBasedStrategy(
-            sf_manager, source_db, source_schema, source_table, table_config, batch_size
+            sf_manager, source_db, source_schema, source_table, table_config, batch_size, pg_manager
         )
 

@@ -5,7 +5,7 @@
 -- Copy results to Excel/spreadsheet for comparison with Snowflake
 -- =====================================================================
 
-SELECT 'ANALYTICS' AS source_name, 'DIMPAYER' AS table_name, COUNT(*) AS record_count
+SELECT 'ANALYTICS' AS pg_source_name, 'DIMPAYER' AS pg_table_name, COUNT(*) AS pg_record_count
 FROM conflict_management.analytics_dev.dimpayer
 
 UNION ALL
@@ -268,5 +268,4 @@ UNION ALL
 SELECT 'CONFLICT', 'LOG_HISTORY_VALUES', COUNT(*)
 FROM conflict_management.conflict_dev.log_history_values
 
-ORDER BY source_name, table_name;
-
+ORDER BY pg_source_name, pg_table_name;

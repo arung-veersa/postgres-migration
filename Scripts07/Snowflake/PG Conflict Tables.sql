@@ -303,6 +303,8 @@ CREATE TABLE IF NOT EXISTS conflictvisitmaps (
 	"ConPTOEndDate" timestamp,
 	"FlagForReview" varchar(5),
 	"FlagForReviewDate" timestamp,
+	"AggFlagForReview" varchar(5),
+	"AggFlagForReviewDate" timestamp,
 	"BILLABLEMINUTESFULLSHIFT" numeric(8,4),
 	"BILLABLEUNITSFULLSHIFT" numeric(8,4),
 	"BILLABLEMINUTESOVERLAP" numeric(8,4),

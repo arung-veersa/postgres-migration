@@ -10,11 +10,11 @@
     "user": "${POSTGRES_USER}",
     "password": "${POSTGRES_PASSWORD}"
   },
-  "parallel_threads": 4,
-  "batch_size": 50000,
-  "batch_size_copy_mode": 100000,
+  "parallel_threads": 6,
+  "batch_size": 75000,
   "max_retry_attempts": 3,
-  "lambda_timeout_buffer_seconds": 120,
+  "lambda_timeout_buffer_seconds": 90,
+  "insert_only_mode": false,
   "sources": [
     {
       "source_name": "analytics",
@@ -204,26 +204,22 @@
           "source_watermark": "Visit Updated Timestamp",
           "target_watermark": "Visit Updated Timestamp",
           "truncate_onstart": false,
-          "disable_index": true,
-          "parallel_threads": 3,
-          "batch_size": 40000,
-          "batch_size_copy_mode": 40000
+          "disable_index": true
         },
         {
-          "enabled": true,
+          "enabled": false,
           "source": "FACTVISITCALLPERFORMANCE_CR",
           "target": "factvisitcallperformance_cr",
-          "source_filter": "\"External Source\" = 'HHAX' AND \"Permanent Deleted\" = FALSE",
-          "chunking_columns": ["Visit Id"],
-          "chunking_column_types": ["varchar"],
+          "source_filter": "\"External Source\" = 'HHAX' AND \"Permanent Deleted\" = FALSE AND \"Visit Updated Timestamp\" >= '2024-12-10' AND \"Visit Updated Timestamp\" < '2024-12-11'",
+          "chunking_columns": ["Application Visit Id"],
+          "chunking_column_types": ["int"],
           "uniqueness_columns": ["Visit Id"],
+          "sort_columns": ["Application Visit Id"],
           "source_watermark": "Visit Updated Timestamp",
           "target_watermark": "Visit Updated Timestamp",
           "truncate_onstart": false,
           "disable_index": true,
-          "parallel_threads": 3,
-          "batch_size": 40000,
-          "batch_size_copy_mode": 40000
+          "insert_only_mode": true
         }
       ]
     },
@@ -697,11 +693,12 @@
           "uniqueness_columns": ["CONFLICTID"],
           "source_watermark": null,
           "target_watermark": null,
-          "truncate_onstart": true,
-          "disable_index": true
+          "truncate_onstart": false,
+          "disable_index": true,
+          "insert_only_mode": true
         },
         {
-          "enabled": false,
+          "enabled": true,
           "source": "CONFLICTVISITMAPS",
           "target": "conflictvisitmaps",
           "source_filter": null,
@@ -714,7 +711,7 @@
           "disable_index": true,
           "parallel_threads": 3,
           "batch_size": 40000,
-          "batch_size_copy_mode": 40000
+          "insert_only_mode": true
         },
         {
           "enabled": false,
@@ -726,11 +723,8 @@
           "uniqueness_columns": ["ID"],
           "source_watermark": null,
           "target_watermark": null,
-          "truncate_onstart": true,
-          "disable_index": true,
-          "parallel_threads": 3,
-          "batch_size": 40000,
-          "batch_size_copy_mode": 40000
+          "truncate_onstart": false,
+          "disable_index": true
         },
         {
           "enabled": false,
@@ -742,11 +736,8 @@
           "uniqueness_columns": ["ID"],
           "source_watermark": null,
           "target_watermark": null,
-          "truncate_onstart": true,
-          "disable_index": true,
-          "parallel_threads": 3,
-          "batch_size": 40000,
-          "batch_size_copy_mode": 40000
+          "truncate_onstart": false,
+          "disable_index": true
         }
       ]
     }

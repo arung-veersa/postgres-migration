@@ -5,7 +5,7 @@
 -- Copy results to Excel/spreadsheet for comparison
 -- =====================================================================
 
-SELECT 'ANALYTICS' AS source_name, 'DIMPAYER' AS table_name, COUNT(*) AS record_count
+SELECT 'ANALYTICS' AS sf_source_name, 'DIMPAYER' AS sf_source_name, COUNT(*) AS sf_record_count
 FROM ANALYTICS.BI.DIMPAYER
 WHERE "Is Active" = TRUE AND "Is Demo" = FALSE AND "Source System" = 'hha'
 
@@ -283,5 +283,4 @@ UNION ALL
 SELECT 'CONFLICT', 'LOG_HISTORY_VALUES', COUNT(*)
 FROM CONFLICTREPORT.PUBLIC.LOG_HISTORY_VALUES
 
-ORDER BY source_name, table_name;
-
+ORDER BY sf_source_name, pg_source_name;

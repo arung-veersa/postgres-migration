@@ -432,7 +432,8 @@ class MigrationOrchestrator:
             source_table,
             table,
             batch_size,
-            max_target_watermark
+            max_target_watermark,
+            self.pg_manager  # Pass pg_manager for smart mode
         )
         
         chunks = chunking_strategy.create_chunks()
@@ -519,6 +520,14 @@ class MigrationOrchestrator:
                 worker.truncate_table()
             elif table.get('truncate_onstart', False) and self.resuming:
                 self.logger.info(f"[{source_table}] Skipping truncate on resume (preserving existing data)")
+            
+            # Log insert_only_mode warning if enabled
+            if table.get('insert_only_mode', False):
+                self.logger.warning(
+                    f"⚠️ [{source_table}] INSERT_ONLY_MODE enabled: "
+                    f"Will skip duplicate keys instead of updating. "
+                    f"Existing records will NOT be updated!"
+                )
             
             # Handle index disabling
             indexes = []
@@ -649,7 +658,14 @@ class MigrationOrchestrator:
     
     def _process_chunks_parallel(self, source: Dict[str, Any], 
                                 table: Dict[str, Any], chunks: List, parallel_threads: int = None) -> int:
-        """Process chunks in parallel using thread pool
+        """
+        Process chunks in parallel using thread pool with TIER 4 resilience
+        
+        TIER 4: Skip and Continue strategy with smart failure detection
+        - Continue processing even if some chunks fail
+        - FAIL FAST for systemic errors (schema, config)
+        - Skip isolated failures after logging
+        - Report detailed failure summary at end
         
         Args:
             source: Source configuration
@@ -660,6 +676,9 @@ class MigrationOrchestrator:
         total_rows = 0
         completed = 0
         failed = 0
+        failed_chunks = []  # Track failed chunks with details
+        
+        source_table = table['source']
         
         # Use provided parallel_threads or fall back to global config
         if parallel_threads is None:
@@ -688,7 +707,7 @@ class MigrationOrchestrator:
                 for chunk in chunks
             }
             
-            # Process completed chunks
+            # Process completed chunks with TIER 4 resilience
             for future in as_completed(future_to_chunk):
                 chunk = future_to_chunk[future]
                 try:
@@ -703,12 +722,175 @@ class MigrationOrchestrator:
                         )
                 except Exception as e:
                     failed += 1
-                    self.logger.error(f"  Chunk {chunk.chunk_id} failed: {e}")
+                    error_type = type(e).__name__
+                    error_msg = str(e)
+                    
+                    # TIER 4: Classify error severity
+                    is_systemic = self._is_systemic_error(error_type, error_msg)
+                    
+                    if is_systemic:
+                        # FAIL FAST: Systemic errors indicate broken config/schema
+                        self.logger.error(
+                            f"\n{'='*80}\n"
+                            f"❌ FATAL: Systemic error detected in table '{source_table}'\n"
+                            f"{'='*80}\n"
+                            f"Error Type: {error_type}\n"
+                            f"Chunk: {chunk.chunk_id}\n"
+                            f"Error: {error_msg[:500]}\n"
+                            f"\n"
+                            f"This error indicates a configuration or schema problem that\n"
+                            f"affects the entire table. Aborting table migration.\n"
+                            f"{'='*80}"
+                        )
+                        raise  # Stop processing this table immediately
+                    else:
+                        # LOG AND SKIP: Isolated error, continue with other chunks
+                        failed_chunks.append({
+                            'chunk_id': chunk.chunk_id,
+                            'error_type': error_type,
+                            'error': error_msg[:500],
+                            'filter': chunk.filter_sql[:200] if hasattr(chunk, 'filter_sql') else 'N/A'
+                        })
+                        
+                        self.logger.warning(
+                            f"⚠️ Chunk {chunk.chunk_id} failed ({error_type}), "
+                            f"continuing with remaining chunks..."
+                        )
+                        self.logger.debug(f"Failed chunk error: {error_msg[:200]}")
         
+        # Calculate success metrics
+        total_chunks = len(chunks)
+        success_rate = (completed / total_chunks * 100) if total_chunks > 0 else 0
+        
+        # TIER 4: Report results with failure analysis
         if failed > 0:
-            raise Exception(f"{failed}/{len(chunks)} chunks failed")
+            # Check if failure rate is too high (>50% = systemic issue)
+            if success_rate < 50:
+                self.logger.error(
+                    f"\n{'='*80}\n"
+                    f"❌ CRITICAL: High failure rate in table '{source_table}'\n"
+                    f"{'='*80}\n"
+                    f"Success Rate: {success_rate:.1f}% ({completed}/{total_chunks} chunks)\n"
+                    f"Failed Chunks: {failed}\n"
+                    f"\n"
+                    f"More than 50% of chunks failed, indicating a systemic problem.\n"
+                    f"Aborting table migration.\n"
+                    f"{'='*80}"
+                )
+                raise Exception(
+                    f"Table '{source_table}': {failed}/{total_chunks} chunks failed "
+                    f"(success rate: {success_rate:.1f}%)"
+                )
+            
+            # Report partial success with detailed failure info
+            self.logger.warning(
+                f"\n{'='*80}\n"
+                f"⚠️  TABLE COMPLETED WITH FAILURES: '{source_table}'\n"
+                f"{'='*80}\n"
+                f"✅ Succeeded:  {completed} chunks ({success_rate:.1f}%)\n"
+                f"❌ Failed:     {failed} chunks ({100-success_rate:.1f}%)\n"
+                f"📊 Total Rows: {format_number(total_rows)}\n"
+                f"\n"
+                f"Failed Chunks Details:\n"
+            )
+            
+            # Print first 10 failed chunks
+            for i, fc in enumerate(failed_chunks[:10], 1):
+                self.logger.warning(
+                    f"  {i}. Chunk {fc['chunk_id']}: {fc['error_type']}\n"
+                    f"     Error: {fc['error'][:150]}...\n"
+                    f"     Filter: {fc['filter'][:100]}..."
+                )
+            
+            if len(failed_chunks) > 10:
+                self.logger.warning(
+                    f"  ... and {len(failed_chunks) - 10} more failed chunks"
+                )
+            
+            self.logger.warning(
+                f"\n"
+                f"⚡ RECOMMENDATION:\n"
+                f"  - Review failed chunks in CloudWatch logs\n"
+                f"  - Use resume capability to retry failed chunks\n"
+                f"  - Check if failed chunks share common characteristics\n"
+                f"{'='*80}\n"
+            )
+        else:
+            # Perfect success
+            self.logger.info(
+                f"✅ Table '{source_table}' completed successfully: "
+                f"{completed}/{total_chunks} chunks, {format_number(total_rows)} rows"
+            )
         
         return total_rows
+    
+    def _is_systemic_error(self, error_type: str, error_msg: str) -> bool:
+        """
+        Determine if an error is systemic (affects entire table) or isolated
+        
+        Systemic errors should cause FAIL FAST, isolated errors can be skipped.
+        
+        Args:
+            error_type: Type of exception (e.g. 'ProgrammingError')
+            error_msg: Error message text
+            
+        Returns:
+            True if systemic error, False if isolated/transient
+        """
+        error_msg_lower = error_msg.lower()
+        
+        # Systemic error indicators
+        systemic_indicators = [
+            # Schema/structure errors
+            ('column', 'does not exist'),
+            ('column', 'not found'),
+            ('table', 'does not exist'),
+            ('table', 'not found'),
+            ('relation', 'does not exist'),
+            
+            # Type/constraint errors
+            ('type', 'mismatch'),
+            ('invalid input syntax', 'type'),
+            ('could not convert', 'type'),
+            
+            # Configuration errors
+            ('permission denied', ''),
+            ('access denied', ''),
+            ('authentication', 'failed'),
+            ('invalid', 'credentials'),
+            
+            # SQL syntax errors
+            ('syntax error', ''),
+            ('invalid sql', ''),
+            
+            # Connection errors that persist
+            ('connection refused', ''),
+            ('could not connect', 'database'),
+        ]
+        
+        # Check for systemic indicators
+        for indicator1, indicator2 in systemic_indicators:
+            if indicator1 in error_msg_lower:
+                if not indicator2 or indicator2 in error_msg_lower:
+                    return True
+        
+        # Check error types that are usually systemic
+        systemic_error_types = [
+            'ProgrammingError',  # SQL syntax, missing columns
+            'InvalidColumnName',
+            'UndefinedTable',
+            'SyntaxError',
+            'OperationalError',  # Usually connection/permission issues
+        ]
+        
+        if error_type in systemic_error_types:
+            # These types are systemic UNLESS they're transient network issues
+            transient_patterns = ['timeout', 'connection reset', 'broken pipe']
+            if not any(p in error_msg_lower for p in transient_patterns):
+                return True
+        
+        # Default: treat as isolated/transient
+        return False
     
     def _print_summary(self, completed: int, failed: int, total_rows: int):
         """Print migration summary"""
