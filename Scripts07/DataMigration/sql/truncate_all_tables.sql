@@ -83,22 +83,22 @@ TRUNCATE TABLE conflict_management.conflict_dev.log_history_values CASCADE;
 -- This forces a fresh migration run (bypasses resume logic)
 -- =====================================================================
 
-TRUNCATE TABLE conflict_management.analytics_dev.migration_chunk_status CASCADE;
-TRUNCATE TABLE conflict_management.analytics_dev.migration_table_status CASCADE;
-TRUNCATE TABLE conflict_management.analytics_dev.migration_runs CASCADE;
+TRUNCATE TABLE conflict_management.migration_status.migration_chunk_status CASCADE;
+TRUNCATE TABLE conflict_management.migration_status.migration_table_status CASCADE;
+TRUNCATE TABLE conflict_management.migration_status.migration_runs CASCADE;
 
 -- =====================================================================
 -- VERIFY STATUS TABLES ARE EMPTY
 -- =====================================================================
 
 SELECT 'migration_runs' AS table_name, COUNT(*) AS record_count
-FROM conflict_management.analytics_dev.migration_runs
+FROM conflict_management.migration_status.migration_runs
 UNION ALL
 SELECT 'migration_table_status', COUNT(*)
-FROM conflict_management.analytics_dev.migration_table_status
+FROM conflict_management.migration_status.migration_table_status
 UNION ALL
 SELECT 'migration_chunk_status', COUNT(*)
-FROM conflict_management.analytics_dev.migration_chunk_status;
+FROM conflict_management.migration_status.migration_chunk_status;
 
 -- All counts should be 0 after truncation
 

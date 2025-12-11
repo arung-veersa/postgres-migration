@@ -256,6 +256,66 @@ SELECT
 FROM conflict_management.analytics_dev.dimuseroffices;
 
 -- ============================================
+-- 11. Missing Rows Analysis (Status=Completed but counts differ)
+-- ============================================
+-- Use when: All chunks show 'completed' but source has more rows than target
+
+-- 11.1: Compare reported rows copied vs actual target count
+-- Replace 'conflictvisitmaps' and schema names with your table
+SELECT 
+    'Chunks report' as source,
+    SUM(rows_copied) as row_count
+FROM migration_status.migration_chunk_status
+WHERE run_id = (
+    SELECT run_id 
+    FROM migration_status.migration_runs 
+    WHERE status IN ('running', 'partial', 'failed', 'completed')
+    ORDER BY started_at DESC 
+    LIMIT 1
+)
+AND source_table = 'CONFLICTVISITMAPS'
+UNION ALL
+SELECT 
+    'PostgreSQL actual' as source,
+    COUNT(*) as row_count
+FROM conflict_dev.conflictvisitmaps;
+
+-- 11.2: Find ID distribution in PostgreSQL
+-- This helps identify gaps in ID ranges
+SELECT 
+    FLOOR("ID" / 100000) * 100000 as id_range_start,
+    FLOOR("ID" / 100000) * 100000 + 99999 as id_range_end,
+    COUNT(*) as rows_in_range,
+    MIN("ID") as min_id_in_range,
+    MAX("ID") as max_id_in_range
+FROM conflict_dev.conflictvisitmaps
+GROUP BY FLOOR("ID" / 100000)
+ORDER BY id_range_start;
+
+-- 11.3: Get max ID for source_filter recommendation
+SELECT 
+    MAX("ID") as max_id_in_postgres,
+    'Recommended source_filter: "ID" > ' || MAX("ID") as filter_recommendation
+FROM conflict_dev.conflictvisitmaps;
+
+-- ROOT CAUSE: Sparse ID distribution with NumericRangeStrategy
+-- The chunking strategy divides ID RANGE (not actual rows)
+-- If data is sparse (e.g., many gaps in IDs), some chunks process 0 rows
+-- while dense ID regions are missed
+--
+-- SOLUTION OPTIONS:
+-- A) Add source_filter to skip already-processed ID ranges:
+--    "source_filter": "\"ID\" > {max_id_from_query_11.3}"
+--    
+-- B) Use truncate_onstart for full reload:
+--    "truncate_onstart": true,
+--    "insert_only_mode": true
+--
+-- C) Switch chunking strategy (if applicable):
+--    - Use DateRangeStrategy if you have a date column
+--    - Use chunking_columns: null for SingleChunkStrategy
+
+-- ============================================
 -- RECOMMENDED ACTIONS & FIX TEMPLATES:
 -- ============================================
 -- 

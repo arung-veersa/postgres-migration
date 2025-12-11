@@ -22,14 +22,15 @@ A production-ready data migration tool that copies data from Snowflake to Postgr
 - ✅ **Configuration validation**: Upfront validation catches errors before migration starts
 - ✅ **Dry-run mode**: Preview migrations without touching data
 
-See [FEATURES.md](FEATURES.md) for detailed documentation.  
-See [CHANGES.md](CHANGES.md) for recent enhancements (December 2024).
+See [docs/FEATURES.md](docs/FEATURES.md) for detailed documentation.
 
 ## Quick Start
 
-See [QUICKSTART.md](QUICKSTART.md) for local development setup.
+See [docs/QUICKSTART.md](docs/QUICKSTART.md) for local development setup.
 
 For AWS Lambda deployment, see [aws/README.md](aws/README.md).
+
+For troubleshooting, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 **Local Execution:**
 ```bash
@@ -384,7 +385,8 @@ For stuck migrations or errors, use the SQL diagnostic script:
 \i sql/diagnose_stuck_migration.sql
 
 -- This script provides:
--- ✅ 10 diagnostic queries to identify issues
+-- ✅ 11 diagnostic queries to identify issues
+-- ✅ Missing rows analysis (Query #11)
 -- ✅ Data quality checks (duplicates, NULLs)
 -- ✅ 5 fix options with copy-paste SQL templates
 -- ✅ Verification queries
@@ -396,10 +398,17 @@ For stuck migrations or errors, use the SQL diagnostic script:
 ### Common Issues
 
 **Migration appears stuck:**
-1. Run `sql/diagnose_stuck_migration.sql` (Query #1-9)
+1. Run `sql/diagnose_stuck_migration.sql` (Query #1-11)
 2. Check CloudWatch logs (if using Lambda)
 3. Look for stuck `in_progress` chunks (Query #8)
 4. Use fix Option A to reset stuck chunks
+
+**Rows missing (status=completed but counts differ):**
+1. Run Query #11 in `sql/diagnose_stuck_migration.sql`
+2. Check ID distribution and gaps
+3. Use recommended `source_filter` to skip processed ranges
+4. Or set `truncate_onstart: true` for full reload
+5. See Query #11 comments for root cause explanation
 
 **Duplicate key errors:**
 - Root cause: Partial previous load or chunking on partial primary key
@@ -553,11 +562,18 @@ For issues or questions:
 ## Documentation
 
 - **[README.md](README.md)** (this file) - Main documentation and overview
-- **[QUICKSTART.md](QUICKSTART.md)** - Quick start guide for local development
-- **[FEATURES.md](FEATURES.md)** - Detailed feature documentation and examples
+- **[docs/QUICKSTART.md](docs/QUICKSTART.md)** - Quick start guide for local development
+- **[docs/FEATURES.md](docs/FEATURES.md)** - Detailed feature documentation and examples
+- **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Common issues and solutions
 - **[aws/README.md](aws/README.md)** - AWS Lambda and Step Functions deployment
 - **[sql/README.md](sql/README.md)** - SQL helper scripts reference
 - **[deploy/](deploy/)** - PowerShell scripts for Lambda deployment
+
+### Technical Documentation
+
+- **[docs/MIGRATION_ISSUES_RESOLVED.md](docs/MIGRATION_ISSUES_RESOLVED.md)** - Known issues and resolutions
+- **[docs/SCHEMA_REPLICATION_GUIDE.md](docs/SCHEMA_REPLICATION_GUIDE.md)** - PostgreSQL schema-to-schema copying
+- **[SQL_CLEANUP_SUMMARY.md](SQL_CLEANUP_SUMMARY.md)** - SQL files consolidation (Dec 2025)
 
 ## Production Readiness
 
@@ -583,6 +599,6 @@ Internal use only - Conflict Management System
 
 ---
 
-**Version:** 1.0  
-**Last Updated:** December 2024  
+**Version:** 2.0  
+**Last Updated:** December 11, 2025  
 **Status:** Production Ready

@@ -292,7 +292,7 @@ def run_migration(
                         query = """
                             SELECT 
                                 COUNT(*) as tables_completed,
-                                SUM(rows_copied) as rows_migrated
+                                SUM(total_rows_copied) as rows_migrated
                             FROM migration_status.migration_table_status
                             WHERE run_id = %s
                               AND source_table = ANY(%s)
@@ -436,6 +436,25 @@ def run_migration(
             result['summary'] = f"{sources_failed} source(s) failed"
         
         logger.info(f"Migration orchestrator completed: status={overall_status}, sources={total_sources}, rows={total_rows_all_sources}, duration={duration:.1f}s")
+        
+        # Update the run status in the database
+        if orchestrator.run_id:
+            try:
+                # Calculate total completed and failed tables across all sources
+                total_completed = sum(r.get('tables_completed', 0) for r in source_results.values())
+                total_failed = sum(r.get('tables_failed', 0) for r in source_results.values())
+                
+                status_tracker.update_run_status(
+                    orchestrator.run_id,
+                    status=overall_status,
+                    completed_tables=total_completed,
+                    failed_tables=total_failed,
+                    total_rows_copied=total_rows_all_sources
+                )
+                logger.info(f"✓ Updated run status in database: {overall_status}")
+            except Exception as e:
+                logger.warning(f"Failed to update run status in database: {e}")
+                # Don't fail the entire migration just because status update failed
         
         return result
     

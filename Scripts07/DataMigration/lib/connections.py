@@ -139,7 +139,7 @@ class SnowflakeConnectionManager:
             WHERE {where_clause}
         """
         result = self.execute_query(query)
-        return result[0][0] if result else 0
+        return int(result[0][0]) if result else 0
     
     def get_column_info(self, database: str, schema: str, table: str) -> list:
         """Get column information for a table"""
@@ -234,7 +234,7 @@ class PostgresConnectionManager:
             WHERE {where_clause}
         """
         result = self.execute_query(database, query)
-        return result[0][0] if result else 0
+        return int(result[0][0]) if result else 0
     
     def get_column_info(self, database: str, schema: str, table: str) -> list:
         """Get column information for a table"""

@@ -57,7 +57,7 @@ class ChunkingStrategy:
             WHERE {self.source_filter}
         """
         result = self.sf_manager.execute_query(query)
-        return result[0][0] if result else 0
+        return int(result[0][0]) if result else 0
     
     def create_chunks(self) -> List[ChunkInfo]:
         """Create list of chunks - to be implemented by subclasses"""
@@ -96,11 +96,26 @@ class NumericRangeStrategy(ChunkingStrategy):
         id_column = self.chunking_columns[0]
         quoted_col = quote_identifier(id_column)
         
+        # Check if we need to CAST the column (e.g., VARCHAR storing numeric strings)
+        # If chunking_column_types says "int", we should cast for proper numeric comparison
+        column_types = self.table_config.get('chunking_column_types', [])
+        should_cast = column_types and column_types[0] in ['int', 'bigint', 'integer', 'numeric']
+        
+        if should_cast:
+            # CAST to BIGINT for proper numeric MIN/MAX/comparison
+            col_expr = f"CAST({quoted_col} AS BIGINT)"
+            self.logger.info(
+                f"[{self.source_table}] Column '{id_column}' marked as numeric type in config, "
+                f"applying CAST for proper numeric sorting"
+            )
+        else:
+            col_expr = quoted_col
+        
         # Get min, max, and count
         query = f"""
             SELECT 
-                MIN({quoted_col}) as min_id,
-                MAX({quoted_col}) as max_id,
+                MIN({col_expr}) as min_id,
+                MAX({col_expr}) as max_id,
                 COUNT(*) as total_rows,
                 COUNT(DISTINCT {quoted_col}) as distinct_ids
             FROM {self.source_db}.{self.source_schema}.{self.source_table}
@@ -112,7 +127,11 @@ class NumericRangeStrategy(ChunkingStrategy):
             self.logger.warning(f"No data found for {self.source_table}")
             return []
         
-        min_id, max_id, total_rows, distinct_ids = result[0]
+        # Convert to int to handle Snowflake returning numeric values as strings
+        min_id = int(result[0][0])
+        max_id = int(result[0][1])
+        total_rows = int(result[0][2])
+        distinct_ids = int(result[0][3])
         
         self.logger.info(
             f"Numeric range strategy for {self.source_table}: "
@@ -132,7 +151,11 @@ class NumericRangeStrategy(ChunkingStrategy):
         while current_min <= max_id:
             current_max = min(current_min + chunk_step - 1, max_id)
             
-            filter_sql = f"({self.source_filter}) AND {quoted_col} >= {current_min} AND {quoted_col} <= {current_max}"
+            # Use col_expr (with CAST if needed) for numeric comparison in filter
+            if should_cast:
+                filter_sql = f"({self.source_filter}) AND {col_expr} >= {current_min} AND {col_expr} <= {current_max}"
+            else:
+                filter_sql = f"({self.source_filter}) AND {quoted_col} >= {current_min} AND {quoted_col} <= {current_max}"
             
             chunks.append(ChunkInfo(
                 chunk_id=chunk_id,
@@ -142,7 +165,8 @@ class NumericRangeStrategy(ChunkingStrategy):
                     'strategy': 'numeric_range',
                     'id_column': id_column,
                     'min_id': current_min,
-                    'max_id': current_max
+                    'max_id': current_max,
+                    'uses_cast': should_cast  # Track for debugging
                 }
             ))
             
@@ -553,7 +577,7 @@ class OffsetBasedStrategy(ChunkingStrategy):
             self.logger.warning(f"No data found for {self.source_table}")
             return []
         
-        total_rows = result[0][0]
+        total_rows = int(result[0][0])  # Convert to int in case Snowflake returns string
         num_chunks = math.ceil(total_rows / self.batch_size)
         
         self.logger.info(

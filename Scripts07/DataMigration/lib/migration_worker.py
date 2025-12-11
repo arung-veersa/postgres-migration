@@ -444,9 +444,15 @@ class MigrationWorker:
         
         # Load data to PostgreSQL (pass chunk_metadata for smart COPY/UPSERT decision)
         with Timer(f"Load to PostgreSQL: {self.target_table}", self.logger):
-            self._load_to_postgres(df, chunk_metadata)
+            rows_actually_inserted = self._load_to_postgres(df, chunk_metadata)
         
-        return rows_count
+        # Return actual rows inserted, not rows fetched
+        # This is critical for insert_only_mode where some rows may be skipped
+        if rows_actually_inserted is not None:
+            return rows_actually_inserted
+        else:
+            # Fallback to rows_count for backward compatibility (UPSERT mode)
+            return rows_count
     
     def _build_fetch_query(self, chunk_filter: str, chunk_metadata: Dict[str, Any]) -> str:
         """Build SELECT query for Snowflake"""
@@ -712,12 +718,15 @@ class MigrationWorker:
         
         return pg_filter
     
-    def _load_to_postgres(self, df: pd.DataFrame, chunk_metadata: Dict[str, Any] = None):
+    def _load_to_postgres(self, df: pd.DataFrame, chunk_metadata: Dict[str, Any] = None) -> int:
         """
         Load DataFrame to PostgreSQL using COPY or UPSERT with tiered error handling
         
         TIER 2: Auto-fallback for duplicate keys (COPY → UPSERT)
         TIER 3: Adaptive batch sizing for OOM (handled at process_chunk level)
+        
+        Returns:
+            Number of rows actually inserted/updated in PostgreSQL
         """
         # Filter DataFrame to only include columns that exist in PostgreSQL target table
         # (Snowflake sources may have more columns than PostgreSQL targets)
@@ -725,7 +734,7 @@ class MigrationWorker:
         
         if df_filtered.empty:
             self.logger.warning(f"No matching columns found between source and target")
-            return
+            return 0
         
         # Replace NaT (Not-a-Time) with None for PostgreSQL compatibility
         df_filtered = df_filtered.replace({pd.NaT: None})
@@ -764,6 +773,7 @@ class MigrationWorker:
             # TIER 2: Try COPY, fallback to UPSERT on duplicate key errors
             try:
                 self._copy_to_postgres(df_filtered)
+                return len(df_filtered)  # All rows successfully inserted
             except psycopg2.errors.UniqueViolation as e:
                 # Duplicate key detected in COPY mode
                 chunk_id = chunk_metadata.get('chunk_id', 'unknown')
@@ -771,17 +781,18 @@ class MigrationWorker:
                 
                 if insert_only_mode:
                     # INSERT-ONLY MODE: Skip duplicates, log and continue
+                    # CRITICAL: COPY is atomic - when it fails, ZERO rows are inserted!
                     self.logger.warning(
                         f"⚠️ [{self.source_table}] Duplicate key detected in COPY mode "
-                        f"(chunk {chunk_id}) - INSERT_ONLY_MODE enabled, skipping duplicates"
+                        f"(chunk {chunk_id}) - INSERT_ONLY_MODE enabled, entire chunk skipped"
                     )
-                    self.logger.info(
-                        f"📊 [{self.source_table}] Chunk {chunk_id}: Some rows skipped due to "
-                        f"existing keys. New rows (if any) were inserted successfully."
+                    self.logger.warning(
+                        f"📊 [{self.source_table}] Chunk {chunk_id}: 0 rows inserted "
+                        f"(COPY is atomic, rejected all {len(df_filtered)} rows due to duplicates)"
                     )
                     self.logger.debug(f"Duplicate key error: {str(e)[:200]}")
-                    # Don't raise, don't fallback - just log and continue
-                    # The rows that could be inserted were already inserted before the error
+                    # Return 0 to accurately track that no rows were inserted
+                    return 0
                 else:
                     # NORMAL MODE: Fallback to UPSERT for smart mode mis-prediction
                     self.logger.warning(
@@ -809,6 +820,7 @@ class MigrationWorker:
                         f"✅ [{self.source_table}] Chunk {chunk_id} completed successfully "
                         f"via UPSERT fallback"
                     )
+                    return len(df_filtered)  # UPSERT processed all rows (insert or update)
         else:
             if not hasattr(self, '_logged_upsert_mode'):
                 self._logged_upsert_mode = True
@@ -817,6 +829,7 @@ class MigrationWorker:
                 )
             # Use UPSERT for incremental loads
             self._upsert_to_postgres(df_filtered)
+            return len(df_filtered)  # UPSERT processed all rows
     
     def _filter_columns_for_target(self, df: pd.DataFrame) -> pd.DataFrame:
         """

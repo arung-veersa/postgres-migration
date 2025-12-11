@@ -207,17 +207,17 @@
           "disable_index": true
         },
         {
-          "enabled": false,
+          "enabled": true,
           "source": "FACTVISITCALLPERFORMANCE_CR",
           "target": "factvisitcallperformance_cr",
-          "source_filter": "\"External Source\" = 'HHAX' AND \"Permanent Deleted\" = FALSE AND \"Visit Updated Timestamp\" >= '2024-12-10' AND \"Visit Updated Timestamp\" < '2024-12-11'",
+          "source_filter": "\"External Source\" = 'HHAX' AND \"Permanent Deleted\" = FALSE",
           "chunking_columns": ["Application Visit Id"],
           "chunking_column_types": ["int"],
           "uniqueness_columns": ["Visit Id"],
           "sort_columns": ["Application Visit Id"],
           "source_watermark": "Visit Updated Timestamp",
           "target_watermark": "Visit Updated Timestamp",
-          "truncate_onstart": false,
+          "truncate_onstart": true,
           "disable_index": true,
           "insert_only_mode": true
         }
@@ -710,7 +710,7 @@
           "truncate_onstart": true,
           "disable_index": true,
           "parallel_threads": 3,
-          "batch_size": 40000,
+          "batch_size": 25000,
           "insert_only_mode": true
         },
         {

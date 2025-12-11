@@ -8,17 +8,21 @@ All helper SQL scripts are in: `Scripts07/DataMigration/sql/`
 ## 🔍 Diagnostic Scripts
 
 ### `diagnose_stuck_migration.sql` - PostgreSQL
-**Purpose:** Comprehensive troubleshooting guide for stuck migrations
+**Purpose:** Comprehensive troubleshooting guide for stuck migrations and missing rows
 
 **When to use:**
 - Migration appears stuck
 - Tables not completing
+- **All chunks completed but row counts don't match source**
 - Need to check migration status
 - Errors in CloudWatch logs
 - Step Functions timeout after 100 retries
 
 **Features:**
-- ✅ **10 diagnostic queries** to identify issues
+- ✅ **11 diagnostic queries** to identify issues:
+  - Queries #1-9: Standard status/progress/errors
+  - Query #10: Data quality checks
+  - **Query #11: Missing rows analysis** (when status=completed but counts differ)
 - ✅ **Data quality checks** (duplicates, NULLs)
 - ✅ **5 fix options** with copy-paste SQL templates:
   - Option A: Reset stuck in_progress chunks
