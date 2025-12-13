@@ -357,6 +357,12 @@ class StatusTracker:
             json.dumps(context, sort_keys=True).encode()
         ).hexdigest()
         
+        self.logger.info(f"🔍 find_resumable_run() searching database...")
+        self.logger.info(f"   Config hash: {config_hash[:8]}...")
+        self.logger.info(f"   Execution hash: {execution_hash}")
+        self.logger.info(f"   Source names: {source_names}")
+        self.logger.info(f"   Max age: {max_age_hours}h")
+        
         query = """
             SELECT 
                 run_id, 
@@ -380,8 +386,14 @@ class StatusTracker:
             cursor.execute(query, (config_hash, max_age_hours))
             results = cursor.fetchall()
             
+            self.logger.info(f"   Found {len(results)} candidate run(s) with matching config_hash")
+            
             # Filter by execution_hash in metadata
-            for result in results:
+            for idx, result in enumerate(results):
+                run_id = result[0]
+                status = result[1]
+                started_at = result[2]
+                
                 # Handle metadata: psycopg2 returns JSONB as dict already
                 if isinstance(result[7], dict):
                     metadata = result[7]
@@ -394,13 +406,16 @@ class StatusTracker:
                 result_execution_hash = metadata.get('execution_hash')
                 result_source_names = metadata.get('source_names', [])
                 
+                self.logger.info(f"   Candidate {idx+1}: run_id={run_id}, status={status}, started={started_at}")
+                self.logger.info(f"      Sources: {result_source_names}")
+                self.logger.info(f"      Execution hash: {result_execution_hash or 'NOT SET (old run)'}")
+                
                 if result_execution_hash:
                     # New approach: Match on execution_hash
                     if result_execution_hash == execution_hash:
-                        self.logger.info(
-                            f"Found resumable run with matching execution_hash: {result[0]} "
-                            f"(sources: {result_source_names})"
-                        )
+                        self.logger.info(f"   ✅ MATCH FOUND: Execution hashes match!")
+                        self.logger.info(f"      Run ID: {run_id}")
+                        self.logger.info(f"      This run will be resumed")
                         return {
                             'run_id': result[0],
                             'status': result[1],
@@ -410,12 +425,18 @@ class StatusTracker:
                             'failed_tables': result[5],
                             'total_rows_copied': result[6]
                         }
+                    else:
+                        self.logger.info(f"      ❌ No match: Execution hash differs")
+                        self.logger.info(f"         Expected: {execution_hash}")
+                        self.logger.info(f"         Got: {result_execution_hash}")
                 else:
                     # Backward compatibility: Match on source_names list comparison
                     if set(source_names) == set(result_source_names):
                         self.logger.warning(
-                            f"⚠️  Found resumable run without execution_hash: {result[0]}. "
-                            f"This is an old run. Consider starting fresh for best results."
+                            f"   ⚠️  MATCH FOUND (backward compatibility): Run without execution_hash: {run_id}"
+                        )
+                        self.logger.warning(
+                            f"      This is an old run. Consider starting fresh for best results."
                         )
                         return {
                             'run_id': result[0],
@@ -426,7 +447,12 @@ class StatusTracker:
                             'failed_tables': result[5],
                             'total_rows_copied': result[6]
                         }
+                    else:
+                        self.logger.info(f"      ❌ No match: Source names differ")
+                        self.logger.info(f"         Expected: {source_names}")
+                        self.logger.info(f"         Got: {result_source_names}")
             
+            self.logger.warning(f"   ❌ NO RESUMABLE RUN FOUND after checking {len(results)} candidate(s)")
             return None
         finally:
             cursor.close()

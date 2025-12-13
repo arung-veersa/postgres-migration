@@ -489,7 +489,165 @@ class MigrationOrchestrator:
         self.logger.info(f"\n[{source_table}] Starting migration...")
         
         with Timer(f"Table migration: {source_table}", self.logger):
-            # Create or update table status
+            # CRITICAL FIX: Check table status BEFORE creating/updating it
+            # This prevents the bug where we create status, then immediately check it
+            self.logger.info(f"[{source_table}] " + "=" * 60)
+            self.logger.info(f"[{source_table}] TRUNCATION SAFETY CHECK - PHASE 1: Query existing status")
+            self.logger.info(f"[{source_table}]    Run ID: {self.run_id}")
+            self.logger.info(f"[{source_table}]    Resuming flag: {self.resuming}")
+            self.logger.info(f"[{source_table}]    truncate_onstart config: {table.get('truncate_onstart', False)}")
+            
+            existing_table_status = self.status_tracker.get_table_status(
+                self.run_id,
+                source['source_sf_database'],
+                source['source_sf_schema'],
+                source_table
+            )
+            
+            if existing_table_status:
+                self.logger.info(f"[{source_table}]    ✅ Found existing status:")
+                self.logger.info(f"[{source_table}]       Status: {existing_table_status.get('status')}")
+                self.logger.info(f"[{source_table}]       Rows copied: {existing_table_status.get('total_rows_copied', 0):,}")
+                self.logger.info(f"[{source_table}]       Chunks: {existing_table_status.get('completed_chunks', 0)}/{existing_table_status.get('total_chunks', 0)}")
+            else:
+                self.logger.warning(f"[{source_table}]    ❌ NO existing status found for this run_id")
+                self.logger.warning(f"[{source_table}]       This could be:")
+                self.logger.warning(f"[{source_table}]       a) Fresh start (expected)")
+                self.logger.warning(f"[{source_table}]       b) Resume detection failed (DANGEROUS)")
+            
+            # Handle truncate BEFORE creating/updating table status
+            # Determine if we should truncate based on EXISTING state (if any)
+            if table.get('truncate_onstart', False):
+                should_truncate = False
+                
+                self.logger.info(f"[{source_table}] TRUNCATION SAFETY CHECK - PHASE 2: Direct table query")
+                
+                # ADDITIONAL SAFETY: Check if target table actually has data
+                # This handles the case where resume detection fails and a new run_id is created
+                # but the target table still has data from the previous run
+                target_has_data = False
+                try:
+                    conn = self.pg_manager.get_connection(source['target_pg_database'])
+                    cursor = conn.cursor()
+                    cursor.execute(f"""
+                        SELECT EXISTS (
+                            SELECT 1 FROM {source['target_pg_schema']}.{target_table} LIMIT 1
+                        )
+                    """)
+                    target_has_data = cursor.fetchone()[0]
+                    cursor.close()
+                    self.pg_manager.return_connection(conn)
+                    
+                    if target_has_data:
+                        self.logger.warning(
+                            f"[{source_table}]    ⚠️  Target table contains data "
+                            f"(detected via direct SELECT EXISTS query)"
+                        )
+                    else:
+                        self.logger.info(
+                            f"[{source_table}]    ✅ Target table is empty "
+                            f"(verified via direct SELECT EXISTS query)"
+                        )
+                except Exception as e:
+                    self.logger.warning(
+                        f"[{source_table}]    ⚠️  Could not check if target table has data: {e}. "
+                        f"Assuming empty for safety."
+                    )
+                    target_has_data = False
+                
+                self.logger.info(f"[{source_table}] TRUNCATION SAFETY CHECK - PHASE 3: Decision matrix")
+                
+                if not existing_table_status:
+                    # No table status exists for this run_id
+                    if not target_has_data:
+                        # No status AND no data → Safe to truncate (brand new table)
+                        should_truncate = True
+                        self.logger.info(f"[{source_table}]    ✅ DECISION: TRUNCATE")
+                        self.logger.info(
+                            f"[{source_table}]       Reason: No existing table status AND table is empty"
+                        )
+                        self.logger.info(
+                            f"[{source_table}]       This is a fresh start (run_id: {self.run_id})"
+                        )
+                    else:
+                        # No status BUT table has data → DO NOT truncate!
+                        # This can happen if resume detection failed and a new run_id was created
+                        should_truncate = False
+                        self.logger.error(f"[{source_table}]    🚨🚨🚨 CRITICAL SAFETY CHECK TRIGGERED! 🚨🚨🚨")
+                        self.logger.error(
+                            f"[{source_table}]       DECISION: SKIP TRUNCATE (data protection activated)"
+                        )
+                        self.logger.error(
+                            f"[{source_table}]       Reason: No table status found for run_id {self.run_id},"
+                        )
+                        self.logger.error(
+                            f"[{source_table}]               BUT target table already contains data!"
+                        )
+                        self.logger.error(
+                            f"[{source_table}]       Analysis: Likely from a previous run (resume detection may have failed)"
+                        )
+                        self.logger.error(
+                            f"[{source_table}]       Action: PRESERVING EXISTING DATA to prevent loss"
+                        )
+                        self.logger.error(
+                            f"[{source_table}]       ⚠️  You should investigate why resume detection failed"
+                        )
+                elif existing_table_status['status'] == 'pending':
+                    # Table exists but pending → Safe to truncate (never started)
+                    should_truncate = True
+                    self.logger.info(f"[{source_table}]    ✅ DECISION: TRUNCATE")
+                    self.logger.info(
+                        f"[{source_table}]       Reason: Table status is 'pending' (never started)"
+                    )
+                    self.logger.info(
+                        f"[{source_table}]       Safe for fresh start (run_id: {self.run_id})"
+                    )
+                elif existing_table_status['status'] in ['in_progress', 'completed']:
+                    # Table has been started or completed → DO NOT truncate
+                    should_truncate = False
+                    rows_copied = existing_table_status.get('total_rows_copied', 0)
+                    completed_chunks = existing_table_status.get('completed_chunks', 0)
+                    total_chunks = existing_table_status.get('total_chunks', 0)
+                    self.logger.warning(f"[{source_table}]    ⚠️  DECISION: SKIP TRUNCATE (resume protection)")
+                    self.logger.warning(
+                        f"[{source_table}]       Reason: Table has '{existing_table_status['status']}' status"
+                    )
+                    self.logger.warning(
+                        f"[{source_table}]       Progress: {completed_chunks}/{total_chunks} chunks, "
+                        f"{format_number(rows_copied)} rows copied"
+                    )
+                    self.logger.warning(
+                        f"[{source_table}]       Action: Preserving existing data and resuming"
+                    )
+                    self.logger.warning(
+                        f"[{source_table}]       (run_id: {self.run_id}, resuming: {self.resuming})"
+                    )
+                else:
+                    # Unknown state → DO NOT truncate (safe default)
+                    should_truncate = False
+                    self.logger.warning(f"[{source_table}]    ⚠️  DECISION: SKIP TRUNCATE (unknown state - safe default)")
+                    self.logger.warning(
+                        f"[{source_table}]       Reason: Unknown table state "
+                        f"(status={existing_table_status.get('status')}, resuming={self.resuming})"
+                    )
+                    self.logger.warning(
+                        f"[{source_table}]       Action: Skipping truncation for safety (run_id: {self.run_id})"
+                    )
+                
+                self.logger.info(f"[{source_table}] " + "=" * 60)
+                
+                if should_truncate:
+                    self.logger.info(f"[{source_table}] 🗑️  Executing TRUNCATE TABLE...")
+                    worker = MigrationWorker(
+                        self.sf_manager, self.pg_manager, self.status_tracker,
+                        source, table, self.global_config['max_retry_attempts']
+                    )
+                    worker.truncate_table()
+                    self.logger.info(f"[{source_table}] ✅ Table truncated successfully")
+                else:
+                    self.logger.info(f"[{source_table}] ✅ Truncation skipped - data preserved")
+            
+            # NOW create or update table status (after truncation decision is made)
             self.status_tracker.create_table_status(
                 run_id=self.run_id,
                 source_name=source.get('source_name', 'unnamed'),
@@ -510,16 +668,6 @@ class MigrationOrchestrator:
                 source_table,
                 'in_progress'
             )
-            
-            # Handle truncate (skip on resume to preserve existing data)
-            if table.get('truncate_onstart', False) and not self.resuming:
-                worker = MigrationWorker(
-                    self.sf_manager, self.pg_manager, self.status_tracker,
-                    source, table, self.global_config['max_retry_attempts']
-                )
-                worker.truncate_table()
-            elif table.get('truncate_onstart', False) and self.resuming:
-                self.logger.info(f"[{source_table}] Skipping truncate on resume (preserving existing data)")
             
             # Log insert_only_mode warning if enabled
             if table.get('insert_only_mode', False):

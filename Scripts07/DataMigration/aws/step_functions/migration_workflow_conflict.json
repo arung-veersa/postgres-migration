@@ -1,5 +1,5 @@
 {
-  "Comment": "Snowflake to PostgreSQL Migration Workflow with Auto-Resume - INPUT OPTIONAL: {\"source_name\": \"conflict\"} or {} for all sources",
+  "Comment": "Snowflake to PostgreSQL Migration Workflow for Conflict - INPUT OPTIONAL: {\"source_name\": \"conflict\"} or {} to use default",
   "StartAt": "InitializeDefaults",
   "States": {
     "InitializeDefaults": {
@@ -10,7 +10,8 @@
         "input.$": "$",
         "defaults": {
           "resume_attempt_count": 0,
-          "resume_max_age": 12
+          "resume_max_age": 12,
+          "no_resume": false
         }
       },
       "Next": "ValidateConfig"
@@ -89,7 +90,7 @@
     "ExecuteMigration": {
       "Type": "Task",
       "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
-      "Comment": "Execute migration for the specified source(s). Supports single or comma-separated sources. Auto-resumes if incomplete run found.",
+      "Comment": "Execute migration for conflict source. Auto-resumes if incomplete run found.",
       "ResultPath": "$.migrationResult",
       "TimeoutSeconds": 900,
       "Retry": [
@@ -247,7 +248,8 @@
         "input.$": "$.input",
         "defaults": {
           "resume_attempt_count.$": "States.MathAdd($.defaults.resume_attempt_count, 1)",
-          "resume_max_age.$": "$.defaults.resume_max_age"
+          "resume_max_age.$": "$.defaults.resume_max_age",
+          "no_resume.$": "$.defaults.no_resume"
         }
       },
       "Next": "WaitBeforeResume"
@@ -263,3 +265,4 @@
     }
   }
 }
+

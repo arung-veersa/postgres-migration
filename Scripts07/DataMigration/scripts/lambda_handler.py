@@ -196,7 +196,12 @@ def lambda_handler(event: Dict[str, Any], context: Optional[Any]) -> Dict[str, A
                 logger.info(f"Executing migration for {len(source_names)} source(s): {', '.join(source_names)}")
             
             # Extract migration parameters from input_data (already extracted resume_max_age above)
-            no_resume = input_data.get('no_resume', False)
+            # Check both input_data and defaults for no_resume (defaults to False)
+            # Explicitly check presence to handle False correctly
+            if 'no_resume' in input_data:
+                no_resume = input_data['no_resume']
+            else:
+                no_resume = defaults.get('no_resume', False)
             resume_run_id = input_data.get('resume_run_id')
             
             # Run migration with timeout detection

@@ -2,6 +2,18 @@
 
 A production-ready data migration tool that copies data from Snowflake to PostgreSQL with advanced features including adaptive chunking, parallel processing, watermark-based incremental loads, and comprehensive status tracking.
 
+**Version:** 2.1 | **Last Updated:** December 13, 2025
+
+## What's New in 2.1
+
+- 🛡️ **Concurrent Execution Isolation**: Multiple migrations run safely without interference
+- 🔒 **Bulletproof Truncation Protection**: Dual-layer protection prevents accidental data loss
+- 📊 **Enhanced Diagnostic Logging**: Detailed resume and truncation decision logging
+- ⚙️ **Per-Table Memory Optimization**: Override threads/batch size per table
+- 🔧 **Improved Resume Logic**: Fixed resume detection in Step Functions
+
+See [docs/FEATURES.md](docs/FEATURES.md) for detailed information.
+
 ## Features
 
 - ✅ **Configuration-driven**: Define all migration logic in `config.json`
@@ -13,7 +25,10 @@ A production-ready data migration tool that copies data from Snowflake to Postgr
 - ✅ **Parallel processing**: Multi-threaded chunk processing for maximum throughput
 - ✅ **Incremental loads**: Watermark-based incremental loading with upsert support
 - ✅ **Resume capability**: Granular status tracking enables resuming failed migrations
+- ✅ **Concurrent execution isolation**: Multiple migrations run safely without interference
+- ✅ **Bulletproof truncation protection**: Dual-layer protection prevents data loss
 - ✅ **Per-table memory optimization**: Configure threads and batch sizes per table
+- ✅ **Enhanced diagnostics**: Comprehensive logging for resume and truncation decisions
 - ✅ **Index management**: Automatically disable/restore indexes during bulk loads
 - ✅ **Lambda timeout handling**: Graceful shutdown before 15-minute timeout
 - ✅ **Column filtering**: Automatically handles schema differences
@@ -86,7 +101,10 @@ Scripts07/DataMigration/
 │
 ├── aws/                          # AWS Step Functions
 │   ├── step_functions/
-│   │   └── migration_workflow.json  # Step Functions state machine
+│   │   ├── migration_workflow_analytics.json  # Analytics migration workflow
+│   │   ├── migration_workflow_conflict.json   # Conflict migration workflow
+│   │   ├── SETUP.md              # Quick deployment guide
+│   │   └── README.md             # Workflow documentation
 │   └── README.md                 # AWS deployment guide
 │
 ├── deploy/                       # Lambda deployment scripts
@@ -104,8 +122,12 @@ Scripts07/DataMigration/
 │   └── truncate_all_tables.sql   # Clear all data + status
 │
 ├── README.md                     # This file (main documentation)
-├── QUICKSTART.md                 # Quick start guide
-└── FEATURES.md                   # Detailed feature documentation
+└── docs/                         # Detailed documentation
+    ├── QUICKSTART.md             # Quick start guide
+    ├── FEATURES.md               # Detailed feature documentation
+    ├── TROUBLESHOOTING.md        # Common issues and solutions
+    ├── MIGRATION_ISSUES_RESOLVED.md  # Historical bug fixes
+    └── SCHEMA_REPLICATION_GUIDE.md  # Schema setup guide
 ```
 
 ## Configuration

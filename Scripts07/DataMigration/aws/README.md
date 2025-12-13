@@ -40,7 +40,7 @@ Step Functions (Orchestrator)
 
 **Lambda Configuration:**
 - Runtime: Python 3.11
-- Memory: 3GB (configurable up to 10GB for very large datasets)
+- Memory: 8-10GB (recommended, configurable based on table size)
 - Timeout: 900 seconds (15 minutes, Lambda maximum)
 - Ephemeral Storage: 10GB (for large data buffering)
 - VPC: Enabled (for PostgreSQL access)

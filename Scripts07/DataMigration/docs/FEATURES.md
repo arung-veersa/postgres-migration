@@ -1,22 +1,23 @@
 # PostgreSQL Migration Tool - Features & Configuration Guide
 
-**Version:** 2.0  
-**Last Updated:** December 11, 2025
+**Version:** 2.1  
+**Last Updated:** December 13, 2025
 
 ---
 
 ## 📋 **Table of Contents**
 
 1. [Core Features](#core-features)
-2. [Smart COPY/UPSERT Mode](#smart-copyupsert-mode)
-3. [Tiered Error Handling](#tiered-error-handling)
-4. [Insert-Only Mode](#insert-only-mode)
-5. [Chunking Strategies](#chunking-strategies)
-6. [VARCHAR as Numeric IDs](#varchar-as-numeric-ids)
-7. [Incremental Loads](#incremental-loads)
-8. [Memory Management](#memory-management)
-9. [Configuration Reference](#configuration-reference)
-10. [Performance Tuning](#performance-tuning)
+2. [New in Version 2.1](#new-in-version-21)
+3. [Smart COPY/UPSERT Mode](#smart-copyupsert-mode)
+4. [Tiered Error Handling](#tiered-error-handling)
+5. [Insert-Only Mode](#insert-only-mode)
+6. [Chunking Strategies](#chunking-strategies)
+7. [VARCHAR as Numeric IDs](#varchar-as-numeric-ids)
+8. [Incremental Loads](#incremental-loads)
+9. [Memory Management](#memory-management)
+10. [Configuration Reference](#configuration-reference)
+11. [Performance Tuning](#performance-tuning)
 
 ---
 
@@ -37,6 +38,207 @@
 | **Index Management** | Auto disable/restore | Faster bulk loads |
 | **VARCHAR Numeric Handling** | Auto-CAST for numeric VARCHAR | Correct sorting/chunking |
 | **Lambda Timeout Handling** | Graceful shutdown, auto-resume | Works with 15min limit |
+| **Concurrent Execution Isolation** | Hash-based run isolation | Multiple migrations run safely |
+| **Bulletproof Truncation Protection** | Dual-layer data safety | Prevents accidental data loss |
+| **Enhanced Diagnostics** | Comprehensive logging | Fast troubleshooting |
+
+---
+
+## New in Version 2.1
+
+### 🛡️ **Concurrent Execution Isolation**
+
+**Problem Solved:** Multiple Step Functions executions (e.g., analytics + conflict migrations) can now run simultaneously without interfering with each other.
+
+**How It Works:**
+- Each execution gets a unique `execution_hash` based on configuration and source names
+- Resume detection only finds runs matching the same `execution_hash`
+- Prevents cross-contamination between different migration jobs
+
+**Configuration:**
+```json
+{
+  "sources": [
+    {"source_name": "analytics", ...},
+    {"source_name": "conflict", ...}
+  ]
+}
+```
+
+Each source runs independently with its own tracking.
+
+---
+
+### 🔒 **Bulletproof Truncation Protection**
+
+**Problem Solved:** Prevents accidental table truncation during resume after Lambda timeout, even if resume detection fails.
+
+**Dual-Layer Protection:**
+
+**Layer 1:** Check migration status table
+```sql
+-- Does this table have a status record for current run?
+SELECT status FROM migration_table_status 
+WHERE run_id = ? AND table_name = ?
+```
+
+**Layer 2:** Direct table existence check
+```sql
+-- Does the target table actually contain data?
+SELECT EXISTS (SELECT 1 FROM schema.table LIMIT 1)
+```
+
+**Decision Logic:**
+```
+IF no status record found for current run:
+    IF target table contains data:
+        ⚠️  SKIP TRUNCATION (data protection)
+        ✅ Continue with existing data
+    ELSE:
+        ✅ Safe to truncate (truly empty)
+ELSE:
+    Use status record to decide
+```
+
+**Why This Matters:**
+- If resume detection fails and creates a new `run_id`
+- The new run won't find the old table status
+- BUT Layer 2 detects existing data and prevents truncation
+- **Your data is safe even if resume logic has issues**
+
+---
+
+### 📊 **Enhanced Diagnostic Logging**
+
+**New Logging Features:**
+
+**1. Resume Detection Phase**
+```
+================================================================================
+RESUME DETECTION PHASE
+================================================================================
+Config hash: ea0e2edd02766225db1c479d13a9350c
+Execution hash: f6e396e03b0070b567679a848362d239
+Resume settings: no_resume=False, resume_max_age=2h, resume_run_id=None
+Requested sources: analytics
+```
+
+**2. Truncation Safety Check**
+```
+================================================================================
+TRUNCATION SAFETY CHECK: factvisitcallperformance_cr
+================================================================================
+Phase 1: Check migration_table_status for run_id=abc123
+  → Status record: NOT FOUND for this run_id
+
+Phase 2: Direct table data check
+  → Query: SELECT EXISTS(SELECT 1 FROM analytics_dev.factvisitcallperformance_cr LIMIT 1)
+  → Result: Table contains data (533580 rows)
+
+Phase 3: Final Decision
+  ⚠️  SKIPPING TRUNCATION - Data protection activated
+  Reason: No status for current run, but table has data
+```
+
+**3. Resume Run Matching**
+```
+[STATUS] Looking for resumable run...
+[STATUS] Found 2 candidate runs to evaluate
+[STATUS] Evaluating run abc123: execution_hash=f6e39... (age: 0.5h)
+[STATUS] ✅ Execution hash matches! Found resumable run: abc123
+```
+
+**Benefits:**
+- Quickly diagnose resume issues
+- Verify truncation decisions
+- Understand execution isolation
+- Faster troubleshooting
+
+---
+
+### ⚙️ **Per-Table Memory Optimization**
+
+**Problem Solved:** Different tables have different memory requirements. Global settings cause OOM for large tables or waste resources for small tables.
+
+**New Configuration:**
+```json
+{
+  "parallel_threads": 6,        // Global default
+  "batch_size": 100000,         // Global default
+  
+  "tables": [
+    {
+      "source": "LARGE_TABLE",
+      "parallel_threads": 3,    // Override for this table
+      "batch_size": 30000       // Override for this table
+    },
+    {
+      "source": "SMALL_TABLE"
+      // Uses global settings (6 threads, 100K batch)
+    }
+  ]
+}
+```
+
+**Memory Calculation:**
+```
+Total rows in memory = parallel_threads × batch_size
+
+Example (analytics table with wide columns):
+- 6 threads × 100K batch = 600K rows → 7 GB RAM (OOM!)
+- 3 threads × 30K batch = 90K rows → 5 GB RAM (safe)
+```
+
+**Best Practices:**
+- Start with recommended settings (see Performance Tuning section)
+- Monitor Lambda memory usage in CloudWatch
+- Adjust per-table if OOM occurs
+- Tables with wide VARCHAR/TEXT columns need smaller batches
+
+---
+
+### 🔧 **Improved Resume Logic**
+
+**Problem Solved:** Resume detection was failing due to incorrect `no_resume` parameter handling in Step Functions.
+
+**What Was Fixed:**
+- Step Functions now properly defaults `no_resume` to `false`
+- Value persists across Lambda invocations
+- Resume detection works correctly after timeout
+
+**Step Functions Changes:**
+```json
+{
+  "InitializeDefaults": {
+    "Type": "Pass",
+    "Result": {
+      "no_resume": false,        // Explicit default
+      "resume_max_age": 2
+    }
+  },
+  "IncrementResumeCount": {
+    "Parameters": {
+      "no_resume.$": "$.defaults.no_resume"  // Preserve value
+    }
+  }
+}
+```
+
+**Before Fix:**
+```
+Invocation 1: Creates run_id=abc123
+Timeout...
+Invocation 2: no_resume=True (implicit) → Creates NEW run_id=def456
+Result: Duplicate runs, reprocessing chunks
+```
+
+**After Fix:**
+```
+Invocation 1: Creates run_id=abc123
+Timeout...
+Invocation 2: no_resume=False (explicit) → Resumes run_id=abc123
+Result: Proper resumption, no duplicate work
+```
 
 ---
 

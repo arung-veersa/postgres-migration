@@ -170,8 +170,25 @@ def run_migration(
         
         # Handle resume logic
         config_hash = config_loader.get_config_hash()
+        
+        # Calculate execution hash (same logic as in status_tracker.find_resumable_run)
+        import hashlib
+        import json
+        context = {
+            'config_hash': config_hash,
+            'source_names': sorted(source_names)
+        }
+        execution_hash = hashlib.md5(
+            json.dumps(context, sort_keys=True).encode()
+        ).hexdigest()
+        
+        logger.info("=" * 80)
+        logger.info("RESUME DETECTION PHASE")
+        logger.info("=" * 80)
         logger.info(f"Config hash: {config_hash}")
+        logger.info(f"Execution hash: {execution_hash}")
         logger.info(f"Resume settings: no_resume={no_resume}, resume_max_age={resume_max_age}h, resume_run_id={resume_run_id}")
+        logger.info(f"Requested sources: {', '.join(source_names)}")
         
         if resume_run_id:
             # User specified run ID to resume - validate it exists and is not completed
@@ -190,36 +207,49 @@ def run_migration(
                 result = cursor.fetchone()
             
             if not result:
-                logger.error(f"Resume run ID {resume_run_id} not found in database")
-                logger.info("Creating new migration run instead")
+                logger.error(f"❌ Resume run ID {resume_run_id} not found in database")
+                logger.info("→ Creating new migration run instead")
             elif result[0] == 'completed':
-                logger.warning(f"Resume run ID {resume_run_id} is already completed")
+                logger.warning(f"❌ Resume run ID {resume_run_id} is already completed")
                 logger.warning(f"   Started: {result[1]}, Tables: {result[3]}/{result[2]} completed")
-                logger.info("Creating new migration run instead")
+                logger.info("→ Creating new migration run instead")
             else:
                 # Valid resumable run
                 orchestrator.run_id = run_uuid
                 orchestrator.resuming = True
-                logger.info(f"⚠️  Resuming specified run: {orchestrator.run_id}")
+                logger.info(f"✅ RESUME DETECTED: Explicit run_id provided")
+                logger.info(f"   Run ID: {orchestrator.run_id}")
                 logger.info(f"   Status: {result[0]}")
                 logger.info(f"   Started: {result[1]}")
                 logger.info(f"   Progress: {result[3]}/{result[2]} tables completed, {result[4]} failed")
+                logger.info(f"   Will preserve existing data in tables")
         elif not no_resume:
             # Auto-detect resumable run
-            logger.info(f"Checking for resumable run (config_hash={config_hash[:8]}..., sources={source_names}, max_age={resume_max_age}h)")
+            logger.info(f"🔍 Searching for resumable run...")
+            logger.info(f"   Config hash: {config_hash[:8]}...")
+            logger.info(f"   Execution hash: {execution_hash}")
+            logger.info(f"   Sources: {source_names}")
+            logger.info(f"   Max age: {resume_max_age}h")
+            
             resumable_run = status_tracker.find_resumable_run(config_hash, source_names, resume_max_age)
             
             if resumable_run:
                 orchestrator.run_id = resumable_run['run_id']
                 orchestrator.resuming = True
-                logger.info(f"⚠️  Resuming incomplete migration run: {orchestrator.run_id}")
+                logger.info(f"✅ RESUME DETECTED: Auto-detected resumable run")
+                logger.info(f"   Run ID: {orchestrator.run_id}")
                 logger.info(f"   Status: {resumable_run['status']}")
                 logger.info(f"   Started: {resumable_run['started_at']}")
                 logger.info(f"   Progress: {resumable_run['completed_tables']}/{resumable_run['total_tables']} tables")
+                logger.info(f"   Will preserve existing data in tables")
             else:
-                logger.info(f"No resumable run found (config_hash={config_hash[:8]}..., max_age={resume_max_age}h)")
+                logger.warning(f"❌ NO RESUMABLE RUN FOUND")
+                logger.warning(f"   Searched for config_hash={config_hash[:8]}...")
+                logger.warning(f"   Searched for execution_hash={execution_hash}")
+                logger.warning(f"   Max age: {resume_max_age}h")
+                logger.warning(f"   → Will create NEW run_id (may cause truncation if tables have data)")
         else:
-            logger.info(f"Resume disabled (no_resume={no_resume}), will create fresh run")
+            logger.info(f"⚠️  Resume disabled (no_resume={no_resume}), will create fresh run")
         
         # Create new run if not resuming
         if not orchestrator.resuming:
@@ -231,9 +261,15 @@ def run_migration(
                 total_tables=total_tables,
                 metadata={'lambda': True}
             )
-            logger.info(f"✓ Created migration run: {orchestrator.run_id}")
+            logger.info(f"✅ NEW RUN CREATED")
+            logger.info(f"   Run ID: {orchestrator.run_id}")
+            logger.info(f"   Total tables: {total_tables}")
+            logger.info(f"   Reason: {'Resume disabled' if no_resume else 'No resumable run found'}")
         
-        logger.info(f"Migration Run ID: {orchestrator.run_id}")
+        logger.info("=" * 80)
+        logger.info(f"FINAL DECISION: {'RESUMING' if orchestrator.resuming else 'NEW RUN'}")
+        logger.info(f"Run ID: {orchestrator.run_id}")
+        logger.info(f"Resuming Flag: {orchestrator.resuming}")
         logger.info("=" * 80)
         
         # Helper function to check if a source is fully completed

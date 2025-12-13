@@ -98,7 +98,139 @@ SELECT MAX("ID") FROM HHAX_NYPROD.PUBLIC.CONFLICTVISITMAPS;
 
 ---
 
-### 4. **No Data Found (Despite Large Source)**
+### 4. **Lambda OutOfMemory (OOM) Error**
+
+**Symptoms:**
+```
+Runtime.OutOfMemory
+Max Memory Used: 7168 MB (100%)
+```
+
+**Root Cause:** Lambda memory insufficient for `parallel_threads × batch_size`
+
+**Memory Calculation:**
+```
+Total rows in memory = parallel_threads × batch_size
+
+Example:
+- 6 threads × 100K batch = 600K rows
+- Wide table with VARCHAR columns = ~1-1.5 KB per row
+- Total memory: 600-900 MB (data) + overhead = 5-8 GB
+```
+
+**Quick Fix:** Reduce per-table settings
+```json
+{
+  "tables": [
+    {
+      "source": "LARGE_TABLE",
+      "parallel_threads": 3,  // Override global setting
+      "batch_size": 30000     // Override global setting
+    }
+  ]
+}
+```
+
+**Lambda Configuration:**
+```bash
+# Increase Lambda memory
+aws lambda update-function-configuration \
+  --function-name YOUR_FUNCTION \
+  --memory-size 10240 \
+  --timeout 900
+```
+
+**Recommended Configurations:**
+
+**For tables with 5-10M rows:**
+- Lambda Memory: **10 GB**
+- Parallel Threads: **3**
+- Batch Size: **25,000-30,000**
+
+**For tables with 1-5M rows:**
+- Lambda Memory: **8 GB**
+- Parallel Threads: **3-4**
+- Batch Size: **35,000-40,000**
+
+**For tables > 10M rows:**
+- Lambda Memory: **12-14 GB**
+- Parallel Threads: **4**
+- Batch Size: **30,000-35,000**
+
+**Memory Safety Rule:** Keep usage < 80% of allocated memory
+
+---
+
+### 5. **Multiple Run IDs Created (Resume Failing)**
+
+**Symptoms:**
+```
+run_id=abc123 (started, then timeout)
+run_id=def456 (created on resume) ← Duplicate!
+```
+
+**Root Cause:** `no_resume=True` being passed incorrectly
+
+**Fix:** Update Step Functions workflow
+```json
+{
+  "InitializeDefaults": {
+    "Type": "Pass",
+    "Result": {
+      "no_resume": false,        // Explicit default
+      "resume_max_age": 2
+    }
+  },
+  "IncrementResumeCount": {
+    "Parameters": {
+      "no_resume.$": "$.defaults.no_resume"  // Preserve value
+    }
+  }
+}
+```
+
+**Verification:**
+```
+# Check CloudWatch logs for:
+Resume settings: no_resume=False  ← Should be False
+```
+
+---
+
+### 6. **Unexpected Table Truncation on Resume**
+
+**Symptoms:**
+```
+Table had 500K rows
+Lambda timed out
+On resume: Table truncated, starts from 0
+```
+
+**Root Cause:** Resume detection failed, created new run_id, truncation protection didn't trigger
+
+**Fixed In:** Version 2.1 - Bulletproof dual-layer protection
+
+**How Protection Works:**
+```
+Phase 1: Check migration_table_status
+Phase 2: Direct table data check (SELECT EXISTS...)
+Phase 3: Skip truncation if table has data
+```
+
+**Verification in Logs:**
+```
+================================================================================
+TRUNCATION SAFETY CHECK: tablename
+================================================================================
+Phase 2: Direct table data check
+  → Result: Table contains data (500000 rows)
+Phase 3: Final Decision
+  ⚠️  SKIPPING TRUNCATION - Data protection activated
+```
+
+---
+
+### 7. **No Data Found (Despite Large Source)**
 
 **Symptoms:**
 ```
@@ -135,7 +267,7 @@ SELECT MAX("ID") FROM HHAX_NYPROD.PUBLIC.CONFLICTVISITMAPS;
 
 ---
 
-### 5. **Migration Status Stuck in "running"**
+### 8. **Migration Status Stuck in "running"**
 
 **Symptoms:**
 - All chunks show `status = 'completed'`

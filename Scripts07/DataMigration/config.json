@@ -11,7 +11,7 @@
     "password": "${POSTGRES_PASSWORD}"
   },
   "parallel_threads": 6,
-  "batch_size": 75000,
+  "batch_size": 100000,
   "max_retry_attempts": 3,
   "lambda_timeout_buffer_seconds": 90,
   "insert_only_mode": false,
@@ -217,9 +217,11 @@
           "sort_columns": ["Application Visit Id"],
           "source_watermark": "Visit Updated Timestamp",
           "target_watermark": "Visit Updated Timestamp",
-          "truncate_onstart": true,
+          "truncate_onstart": false,
           "disable_index": true,
-          "insert_only_mode": true
+          "insert_only_mode": true,
+          "parallel_threads": 3,
+          "batch_size": 30000
         }
       ]
     },
