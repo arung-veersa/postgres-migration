@@ -219,8 +219,8 @@
           "truncate_onstart": true,
           "disable_index": true,
           "insert_only_mode": true,
-          "parallel_threads": 3,
-          "batch_size": 50000
+          "parallel_threads": 15,
+          "batch_size": 25000
         }
       ]
     },

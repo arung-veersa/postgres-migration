@@ -80,6 +80,9 @@ class MigrationWorker:
         
         # Cache target columns to avoid repeated queries
         self._target_columns_cache = None
+        
+        # Track if we've logged column exclusions (avoid repeated logging)
+        self._logged_column_exclusions = False
     
     def _get_target_columns(self) -> List[str]:
         """Get target table columns (cached)"""
@@ -869,9 +872,12 @@ class MigrationWorker:
         
         if len(matching_columns) < len(df.columns):
             missing = set(df.columns) - set(matching_columns)
-            self.logger.warning(
-                f"Excluding {len(missing)} columns not in target table: {sorted(list(missing))[:5]}"
-            )
+            # Only log column exclusions once per table to reduce log volume
+            if not self._logged_column_exclusions:
+                self.logger.warning(
+                    f"Excluding {len(missing)} columns not in target table: {sorted(list(missing))[:5]}"
+                )
+                self._logged_column_exclusions = True
         
         self.logger.debug(f"Using {len(matching_columns)}/{len(df.columns)} columns for {self.target_table}")
         return df[matching_columns]

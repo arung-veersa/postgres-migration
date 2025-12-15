@@ -71,9 +71,7 @@ def lambda_handler(event: Dict[str, Any], context: Optional[Any]) -> Dict[str, A
     resume_max_age = input_data.get('resume_max_age') or defaults.get('resume_max_age', 12)
     
     logger.info(f"Lambda invoked with action: {action}, source: {source_name}")
-    logger.info(f"Event structure - has 'input': {'input' in event}, keys: {list(event.keys())}")  # Debug
-    
-    logger.info(f"Lambda invoked with action: {action}, source: {source_name}")
+    logger.debug(f"Event structure - has 'input': {'input' in event}, keys: {list(event.keys())}")
     
     # Check remaining time (Lambda timeout detection)
     remaining_time_ms = None

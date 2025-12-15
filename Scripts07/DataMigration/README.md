@@ -2,7 +2,19 @@
 
 A production-ready data migration tool that copies data from Snowflake to PostgreSQL with advanced features including adaptive chunking, parallel processing, watermark-based incremental loads, and comprehensive status tracking.
 
-**Version:** 2.1 | **Last Updated:** December 13, 2025
+**Version:** 2.2 | **Last Updated:** December 15, 2025
+
+## 🚀 What's New in 2.2 - Performance Optimization
+
+**Migration speed increased by 170x for large fact tables!**
+
+- ⚡ **Parallel threads**: Increased from 3 to 15 (5x more concurrency)
+- 🎯 **Batch optimization**: Reduced from 50K to 25K for faster Snowflake queries
+- 📉 **Logging efficiency**: 30% reduction in CloudWatch log volume
+- 💾 **Memory optimization**: Right-sized Lambda memory (6GB vs 10GB)
+- 🏃 **Result**: FACTVISITCALLPERFORMANCE_CR migration: 10 days → 1.5 hours
+
+📊 See [docs/PERFORMANCE_ANALYSIS.md](docs/PERFORMANCE_ANALYSIS.md) for detailed analysis.
 
 ## What's New in 2.1
 
