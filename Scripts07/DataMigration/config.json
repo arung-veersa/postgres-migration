@@ -211,17 +211,16 @@
           "source": "FACTVISITCALLPERFORMANCE_CR",
           "target": "factvisitcallperformance_cr",
           "source_filter": "\"External Source\" = 'HHAX' AND \"Permanent Deleted\" = FALSE",
-          "chunking_columns": ["Application Visit Id"],
-          "chunking_column_types": ["int"],
+          "chunking_columns": ["Visit Updated Timestamp"],
+          "chunking_column_types": ["timestamp"],
           "uniqueness_columns": ["Visit Id"],
-          "sort_columns": ["Application Visit Id"],
           "source_watermark": "Visit Updated Timestamp",
           "target_watermark": "Visit Updated Timestamp",
-          "truncate_onstart": false,
+          "truncate_onstart": true,
           "disable_index": true,
           "insert_only_mode": true,
           "parallel_threads": 3,
-          "batch_size": 30000
+          "batch_size": 50000
         }
       ]
     },
@@ -700,7 +699,7 @@
           "insert_only_mode": true
         },
         {
-          "enabled": true,
+          "enabled": false,
           "source": "CONFLICTVISITMAPS",
           "target": "conflictvisitmaps",
           "source_filter": null,

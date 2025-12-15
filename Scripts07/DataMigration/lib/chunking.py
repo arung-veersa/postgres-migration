@@ -385,9 +385,10 @@ class DateRangeStrategy(ChunkingStrategy):
         source_table: str,
         table_config: Dict[str, Any],
         batch_size: int,
-        max_target_watermark: Optional[str] = None
+        max_target_watermark: Optional[str] = None,
+        pg_manager=None
     ):
-        super().__init__(sf_manager, source_db, source_schema, source_table, table_config, batch_size)
+        super().__init__(sf_manager, source_db, source_schema, source_table, table_config, batch_size, pg_manager)
         self.max_target_watermark = max_target_watermark
     
     def create_chunks(self) -> List[ChunkInfo]:
