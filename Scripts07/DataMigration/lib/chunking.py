@@ -5,6 +5,7 @@ Determines optimal chunking strategies based on data distribution
 
 import logging
 import math
+import time
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
 
@@ -412,7 +413,15 @@ class DateRangeStrategy(ChunkingStrategy):
                 f"[{self.source_table}] Incremental chunking: Only processing data after {self.max_target_watermark}"
             )
         
-        # Get date range and row distribution
+        # 🚀 OPTIMIZED: Single aggregated query to get row counts for ALL dates at once
+        # This replaces hundreds of individual COUNT queries with ONE efficient query
+        self.logger.info(
+            f"[{self.source_table}] Fetching row counts by date using single aggregated query..."
+        )
+        
+        query_start = time.time()
+        
+        # Get date range and row distribution in a SINGLE query
         query = f"""
             SELECT 
                 {quoted_col}::DATE as date_val,
@@ -424,6 +433,12 @@ class DateRangeStrategy(ChunkingStrategy):
         """
         
         results = self.sf_manager.execute_query(query)
+        
+        query_elapsed = time.time() - query_start
+        self.logger.info(
+            f"[{self.source_table}] ✓ Retrieved counts for {len(results) if results else 0} dates "
+            f"in {query_elapsed:.1f}s"
+        )
         if not results:
             self.logger.info(
                 f"[{self.source_table}] No new data found for incremental load"

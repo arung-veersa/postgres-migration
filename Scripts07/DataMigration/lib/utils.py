@@ -5,6 +5,7 @@ Logging setup, helper functions, and common utilities
 
 import logging
 import sys
+import os
 import time
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -53,7 +54,8 @@ def setup_logging(log_level: str = "INFO", log_file: Optional[str] = None) -> lo
 
 def get_logger(name: str = "migration") -> logging.Logger:
     """
-    Get or create a logger instance
+    Get or create a logger instance.
+    Handles both AWS Lambda and local environments to prevent duplicate logs.
     
     Args:
         name: Logger name (default: "migration")
@@ -63,19 +65,38 @@ def get_logger(name: str = "migration") -> logging.Logger:
     """
     logger = logging.getLogger(name)
     
-    # If logger doesn't have handlers, set it up
-    if not logger.handlers:
+    # CRITICAL: Prevent propagation to root logger
+    # This prevents duplicate log entries
+    logger.propagate = False
+    
+    # Check if we're running in AWS Lambda
+    in_lambda = 'AWS_EXECUTION_ENV' in os.environ or 'AWS_LAMBDA_FUNCTION_NAME' in os.environ
+    
+    if in_lambda:
+        # In Lambda: Use Lambda's existing handler, just set level
+        # Don't add new handlers - Lambda runtime already provides one
         logger.setLevel(logging.INFO)
         
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setLevel(logging.INFO)
-        
-        formatter = logging.Formatter(
-            '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
+        # If Lambda's handler hasn't been configured yet, we might need basic setup
+        # But don't add a NEW handler - just configure the logger level
+        if not logger.handlers:
+            # Lambda hasn't initialized yet, but will add handler automatically
+            # Just set the level - handler will be added by Lambda runtime
+            pass
+    else:
+        # Local environment: Add our own handler if not already present
+        if not logger.handlers:
+            logger.setLevel(logging.INFO)
+            
+            handler = logging.StreamHandler(sys.stdout)
+            handler.setLevel(logging.INFO)
+            
+            formatter = logging.Formatter(
+                '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
     
     return logger
 
@@ -315,6 +336,7 @@ def sanitize_for_logging(value: Any, max_length: int = 100) -> str:
     return str_value
 
 
-# Global logger instance
-logger = setup_logging()
+# Global logger instance (for backward compatibility)
+# Configured to NOT propagate to prevent duplicates
+logger = get_logger("migration")
 

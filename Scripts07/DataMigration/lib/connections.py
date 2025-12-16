@@ -186,18 +186,40 @@ class PostgresConnectionManager:
         )
     
     def get_connection(self, database: Optional[str] = None):
-        """Get connection to specified database"""
+        """Get connection to specified database with optimized settings for bulk loads"""
         if not database:
             raise ValueError("Database name is required for PostgreSQL connection")
         
-        # Create direct connection (no pooling complexity)
+        # Create direct connection with session-level optimizations
+        # synchronous_commit=off: Don't wait for disk writes (faster bulk loads)
         conn = psycopg2.connect(
             host=self.host,
             port=self.port,
             user=self.user,
             password=self.password,
-            database=database
+            database=database,
+            options='-c synchronous_commit=off'
         )
+        
+        # Apply additional session-level performance settings
+        cursor = conn.cursor()
+        try:
+            # Increase working memory for better sorting and hashing performance
+            cursor.execute("SET work_mem = '256MB'")
+            # Increase maintenance memory for faster index operations
+            cursor.execute("SET maintenance_work_mem = '512MB'")
+            # Increase temp buffer size for temporary table operations
+            cursor.execute("SET temp_buffers = '128MB'")
+            # Hint to query planner about available cache
+            cursor.execute("SET effective_cache_size = '4GB'")
+            conn.commit()
+            self.logger.debug(f"Applied session-level performance optimizations for {database}")
+        except Exception as e:
+            self.logger.warning(f"Could not set all session parameters: {e}")
+            # Continue anyway - these are optimizations, not requirements
+        finally:
+            cursor.close()
+        
         return conn
     
     def return_connection(self, conn):

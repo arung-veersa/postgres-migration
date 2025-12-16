@@ -22,7 +22,7 @@
       "source_sf_database": "ANALYTICS",
       "source_sf_schema": "BI",
       "target_pg_database": "conflict_management",
-      "target_pg_schema": "analytics_dev",
+      "target_pg_schema": "analytics_dev2",
       "tables": [
         {
           "enabled": false,
@@ -219,7 +219,7 @@
           "truncate_onstart": true,
           "disable_index": true,
           "insert_only_mode": true,
-          "parallel_threads": 15,
+          "parallel_threads": 20,
           "batch_size": 25000
         }
       ]
@@ -230,7 +230,7 @@
       "source_sf_database": "AGGNYPROD",
       "source_sf_schema": "PUBLIC",
       "target_pg_database": "conflict_management",
-      "target_pg_schema": "analytics_dev",
+      "target_pg_schema": "analytics_dev2",
       "tables": [
         {
           "enabled": false,
@@ -253,7 +253,7 @@
       "source_sf_database": "CONFLICTREPORT",
       "source_sf_schema": "PUBLIC",
       "target_pg_database": "conflict_management",
-      "target_pg_schema": "conflict_dev",
+      "target_pg_schema": "conflict_dev2",
       "tables": [
         {
           "enabled": false,

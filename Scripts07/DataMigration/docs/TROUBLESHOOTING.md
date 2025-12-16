@@ -1,578 +1,674 @@
 # Troubleshooting Guide
 
-**Quick diagnostics for common migration issues**
+Complete guide to diagnosing and resolving common migration issues.
 
 ---
 
-## 🚨 **Quick Diagnosis**
+## Table of Contents
 
-Run this SQL script first for comprehensive diagnostics:
-
-```sql
--- In PostgreSQL:
-\i sql/diagnose_stuck_migration.sql
-
--- Provides:
--- ✅ 10 diagnostic queries
--- ✅ Data quality checks
--- ✅ 5 fix options with SQL templates
--- ✅ Verification queries
-```
+1. [Quick Diagnosis](#quick-diagnosis)
+2. [Connection Issues](#connection-issues)
+3. [Performance Problems](#performance-problems)
+4. [Memory Issues](#memory-issues)
+5. [Data Issues](#data-issues)
+6. [Resume Problems](#resume-problems)
+7. [Configuration Errors](#configuration-errors)
+8. [AWS/Lambda Issues](#awslambda-issues)
+9. [When to Check Historical Issues](#when-to-check-historical-issues)
 
 ---
 
-## 📋 **Common Issues**
+## Quick Diagnosis
 
-### 1. **Type Conversion Error**
+### Symptom Checklist
+
+| Symptom | Likely Cause | Quick Fix |
+|---------|--------------|-----------|
+| Migration won't start | Config error | Run validate_config |
+| Can't connect to Snowflake | Auth/network | Check RSA key, firewall |
+| Can't connect to PostgreSQL | VPC/security group | Check VPC config |
+| Migration very slow | Warehouse too small | Upgrade to MEDIUM |
+| Out of memory | Too many threads | Reduce parallel_threads |
+| Missing rows | Wrong chunking strategy | Use date-based chunking |
+| Won't resume | Config changed | Use explicit resume_run_id |
+| Duplicate logs | Old code version | Deploy v2.3+ |
+
+---
+
+## Connection Issues
+
+### Can't Connect to Snowflake
 
 **Symptoms:**
 ```
-TypeError: unsupported operand type(s) for -: 'str' and 'str'
+Error: Snowflake authentication failed
+Error: Could not connect to Snowflake account
 ```
 
-**Root Cause:** Snowflake returns numeric values as strings
+**Diagnosis:**
+1. **Check RSA key format:**
+   ```bash
+   # Key must be PEM format
+   -----BEGIN PRIVATE KEY-----
+   MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC...
+   -----END PRIVATE KEY-----
+   ```
 
-**Fix:** ✅ Already fixed in code (automatic int() conversion)
+2. **Verify environment variable:**
+   ```bash
+   # In Lambda, newlines must be \n
+   SNOWFLAKE_RSA_KEY="-----BEGIN PRIVATE KEY-----\nMIIEv...\n-----END PRIVATE KEY-----"
+   ```
 
-**Deploy:**
-```bash
-cd Scripts07/DataMigration
-zip -r lambda.zip lib/ scripts/ config.json
-aws lambda update-function-code --function-name cm-datacopy-test01 --zip-file fileb://lambda.zip
-```
+3. **Test Snowflake user:**
+   ```sql
+   -- Run in Snowflake console
+   SHOW GRANTS TO USER migration_user;
+   -- Should have: USAGE on warehouse, database, schema
+   --               SELECT on tables
+   ```
+
+**Solutions:**
+- ✅ Re-generate RSA key pair if corrupted
+- ✅ Ensure Snowflake user has correct permissions
+- ✅ Check account identifier format (should be `account.region`)
+- ✅ Verify warehouse exists and is running
 
 ---
 
-### 2. **VARCHAR ID Min > Max**
+### Can't Connect to PostgreSQL
 
 **Symptoms:**
 ```
-ID range [1000000000, 999999999]  ← Backwards!
+Error: could not connect to server: Connection timed out
+Error: FATAL: password authentication failed
 ```
 
-**Root Cause:** Column is VARCHAR storing numeric strings, Snowflake does alphabetical comparison
+**Diagnosis:**
+1. **VPC Configuration (Lambda):**
+   - Lambda must be in VPC with route to PostgreSQL
+   - Security groups must allow outbound to PostgreSQL port
+   - PostgreSQL security group must allow inbound from Lambda
 
-**Fix:** Declare column type in config
-```json
-{
-  "chunking_columns": ["Application Visit Id"],
-  "chunking_column_types": ["int"]  // ← Auto-CAST to BIGINT
-}
-```
+2. **Test from Lambda:**
+   ```python
+   # Use test_connections action
+   {
+     "action": "test_connections"
+   }
+   ```
 
-**See:** `VARCHAR_NUMERIC_CHUNKING.md` for details
+3. **Check PostgreSQL logs:**
+   ```sql
+   -- Enable logging
+   ALTER SYSTEM SET log_connections = on;
+   ALTER SYSTEM SET log_disconnections = on;
+   SELECT pg_reload_conf();
+   
+   -- Check logs
+   SELECT * FROM pg_stat_activity;
+   ```
+
+**Solutions:**
+- ✅ Verify security group rules (inbound 5432 from Lambda SG)
+- ✅ Check VPC route tables (NAT gateway if private subnets)
+- ✅ Test credentials locally first
+- ✅ Ensure PostgreSQL allows remote connections
 
 ---
 
-### 3. **Missing Rows After Migration**
+### Intermittent Connection Drops
 
 **Symptoms:**
-- Chunks report "X rows copied"
-- PostgreSQL has fewer rows than expected
-- `insert_only_mode: true` is enabled
+```
+Error: SSL connection has been closed unexpectedly
+Error: server closed the connection unexpectedly
+```
 
-**Root Cause:** PostgreSQL COPY is atomic - rejects entire batch on first duplicate
+**Solutions:**
+- ✅ Increase PostgreSQL `max_connections`
+- ✅ Reduce `parallel_threads` (fewer concurrent connections)
+- ✅ Check network stability
+- ✅ Verify no idle connection timeouts
+
+---
+
+## Performance Problems
+
+### Migration Very Slow
+
+**Symptoms:**
+- 10+ minutes per 25K row chunk
+- CloudWatch shows long "Fetch from Snowflake" times
+- ETA showing days instead of hours
 
 **Diagnosis:**
 ```sql
--- Check target max ID
-SELECT MAX("ID") FROM conflict_dev.conflictvisitmaps;
--- Result: 8,420,381
+-- Check Snowflake warehouse size
+SHOW WAREHOUSES LIKE 'your_warehouse';
 
--- Check source max ID
-SELECT MAX("ID") FROM HHAX_NYPROD.PUBLIC.CONFLICTVISITMAPS;
--- Result: 8,471,089
-
--- Missing: 50,708 rows
+-- Check query execution time
+SELECT query_text, execution_time
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE query_text LIKE '%FACTVISIT%'
+ORDER BY start_time DESC
+LIMIT 10;
 ```
 
-**Fix:** Use `source_filter` to skip existing IDs
-```json
-{
-  "source_filter": "\"ID\" > 8420381",  // Only load new rows
-  "insert_only_mode": true
-}
-```
+**Solutions (in priority order):**
+1. **Upgrade Snowflake warehouse:**
+   ```sql
+   ALTER WAREHOUSE migration_wh SET WAREHOUSE_SIZE = 'MEDIUM';
+   ```
+   **Impact:** 3-5 min → 45-60 sec per chunk (80% faster)
 
-**See:** `BUG_FIX_ROW_TRACKING.md` for technical details
+2. **Reduce batch_size:**
+   ```json
+   {
+     "batch_size": 25000  // From 50000
+   }
+   ```
+   **Impact:** Faster Snowflake queries, more chunks
+
+3. **Increase parallel_threads:**
+   ```json
+   {
+     "parallel_threads": 15  // From 10
+   }
+   ```
+   **Impact:** More concurrent chunks (watch memory)
+
+4. **Check for slow queries in PostgreSQL:**
+   ```sql
+   SELECT query, mean_exec_time, calls
+   FROM pg_stat_statements
+   WHERE query LIKE '%INSERT%'
+   ORDER BY mean_exec_time DESC;
+   ```
+
+See [OPTIMIZATION.md](OPTIMIZATION.md) for detailed tuning guide.
 
 ---
 
-### 4. **Lambda OutOfMemory (OOM) Error**
+### Chunks Taking Too Long
+
+**Symptoms:**
+- Single chunk > 5 minutes
+- "Fetch from Snowflake" > 2 minutes
+
+**Diagnosis:**
+- Check Snowflake query profile for full table scans
+- Verify chunking column has clustering/indexing
+
+**Solutions:**
+- ✅ Add clustering key in Snowflake:
+  ```sql
+  ALTER TABLE fact_table CLUSTER BY (date_column);
+  ```
+- ✅ Use date-based chunking instead of ID-based
+- ✅ Reduce batch_size if queries still slow
+
+---
+
+## Memory Issues
+
+### Out of Memory (OOM)
 
 **Symptoms:**
 ```
-Runtime.OutOfMemory
-Max Memory Used: 7168 MB (100%)
+Error Type: Runtime.OutOfMemory
+Max Memory Used: 6144 MB (at limit)
 ```
 
-**Root Cause:** Lambda memory insufficient for `parallel_threads × batch_size`
+**Diagnosis:**
+```
+# Check CloudWatch REPORT lines
+REPORT: Memory Size: 6144 MB Max Memory Used: 6144 MB
+
+# Calculate memory usage
+parallel_threads × batch_size × columns × avg_row_size
+```
+
+**Solutions (in order of preference):**
+
+1. **Reduce parallel_threads:**
+   ```json
+   {
+     "parallel_threads": 8  // From 15
+   }
+   ```
+   **Expected memory reduction:** 7.5GB → 4GB
+
+2. **Reduce batch_size:**
+   ```json
+   {
+     "batch_size": 10000  // From 25000
+   }
+   ```
+   **Expected memory reduction:** 40% per chunk
+
+3. **Increase Lambda memory:**
+   ```bash
+   aws lambda update-function-configuration \
+     --function-name snowflake-postgres-migration \
+     --memory-size 10240 \
+     --region us-east-1
+   ```
 
 **Memory Calculation:**
 ```
-Total rows in memory = parallel_threads × batch_size
+Safe configuration:
+  Lambda Memory: 10GB
+  Parallel Threads: 20
+  Expected Usage: 20 × 300MB = 6GB (60% utilization) ✅
 
-Example:
-- 6 threads × 100K batch = 600K rows
-- Wide table with VARCHAR columns = ~1-1.5 KB per row
-- Total memory: 600-900 MB (data) + overhead = 5-8 GB
+Unsafe configuration:
+  Lambda Memory: 6GB
+  Parallel Threads: 15
+  Expected Usage: 15 × 500MB = 7.5GB (125% utilization) ❌
 ```
 
-**Quick Fix:** Reduce per-table settings
-```json
-{
-  "tables": [
-    {
-      "source": "LARGE_TABLE",
-      "parallel_threads": 3,  // Override global setting
-      "batch_size": 30000     // Override global setting
-    }
-  ]
-}
-```
-
-**Lambda Configuration:**
-```bash
-# Increase Lambda memory
-aws lambda update-function-configuration \
-  --function-name YOUR_FUNCTION \
-  --memory-size 10240 \
-  --timeout 900
-```
-
-**Recommended Configurations:**
-
-**For tables with 5-10M rows:**
-- Lambda Memory: **10 GB**
-- Parallel Threads: **3**
-- Batch Size: **25,000-30,000**
-
-**For tables with 1-5M rows:**
-- Lambda Memory: **8 GB**
-- Parallel Threads: **3-4**
-- Batch Size: **35,000-40,000**
-
-**For tables > 10M rows:**
-- Lambda Memory: **12-14 GB**
-- Parallel Threads: **4**
-- Batch Size: **30,000-35,000**
-
-**Memory Safety Rule:** Keep usage < 80% of allocated memory
+See [OPTIMIZATION.md](OPTIMIZATION.md) for memory tuning details.
 
 ---
 
-### 5. **Multiple Run IDs Created (Resume Failing)**
+### Memory Creeping Up
 
 **Symptoms:**
-```
-run_id=abc123 (started, then timeout)
-run_id=def456 (created on resume) ← Duplicate!
-```
+- Memory usage increases over time
+- Eventually hits OOM after hours
 
-**Root Cause:** `no_resume=True` being passed incorrectly
+**Diagnosis:**
+- Memory leak (rare)
+- Large result sets being held in memory
 
-**Fix:** Update Step Functions workflow
-```json
-{
-  "InitializeDefaults": {
-    "Type": "Pass",
-    "Result": {
-      "no_resume": false,        // Explicit default
-      "resume_max_age": 2
-    }
-  },
-  "IncrementResumeCount": {
-    "Parameters": {
-      "no_resume.$": "$.defaults.no_resume"  // Preserve value
-    }
-  }
-}
-```
-
-**Verification:**
-```
-# Check CloudWatch logs for:
-Resume settings: no_resume=False  ← Should be False
-```
+**Solutions:**
+- ✅ Deploy latest code (memory leaks fixed in v2.3)
+- ✅ Reduce batch_size
+- ✅ Force Lambda container refresh:
+  ```bash
+  aws lambda update-function-configuration \
+    --function-name snowflake-postgres-migration \
+    --environment "Variables={MIGRATION_VERSION=refresh,...}" \
+    --region us-east-1
+  ```
 
 ---
 
-### 6. **Unexpected Table Truncation on Resume**
+## Data Issues
+
+### Missing Rows After Completion
 
 **Symptoms:**
-```
-Table had 500K rows
-Lambda timed out
-On resume: Table truncated, starts from 0
-```
+- All chunks show "completed"
+- Row count doesn't match source
+- No errors in logs
 
-**Root Cause:** Resume detection failed, created new run_id, truncation protection didn't trigger
-
-**Fixed In:** Version 2.1 - Bulletproof dual-layer protection
-
-**How Protection Works:**
-```
-Phase 1: Check migration_table_status
-Phase 2: Direct table data check (SELECT EXISTS...)
-Phase 3: Skip truncation if table has data
-```
-
-**Verification in Logs:**
-```
-================================================================================
-TRUNCATION SAFETY CHECK: tablename
-================================================================================
-Phase 2: Direct table data check
-  → Result: Table contains data (500000 rows)
-Phase 3: Final Decision
-  ⚠️  SKIPPING TRUNCATION - Data protection activated
-```
-
----
-
-### 7. **No Data Found (Despite Large Source)**
-
-**Symptoms:**
-```
-⚠️ No data found for FACTVISITCALLPERFORMANCE_CR
-```
-
-**Root Cause:** Conflicting `source_filter` and `target_watermark`
-
-**Example:**
-```json
-{
-  "source_filter": "\"Visit Date\" = '2024-12-01'",  // Only Dec 1, 2024
-  "target_watermark": "2025-05-15"  // Filters to data AFTER May 15, 2025
-}
-// Result: No data matches BOTH conditions!
-```
-
-**Fix Option 1:** Remove date filter
-```json
-{
-  "source_filter": "\"External Source\" = 'HHAX' AND \"Permanent Deleted\" = FALSE"
-  // Let watermark handle date filtering
-}
-```
-
-**Fix Option 2:** Disable watermarks for full load
-```json
-{
-  "source_watermark": null,
-  "target_watermark": null,
-  "truncate_onstart": true
-}
-```
-
----
-
-### 8. **Migration Status Stuck in "running"**
-
-**Symptoms:**
-- All chunks show `status = 'completed'`
-- Table status shows `status = 'completed'`
-- Run status still shows `status = 'running'`
-
-**Root Cause:** ✅ Fixed - Missing database update call
-
-**Verify Fix:**
+**Diagnosis:**
 ```sql
-SELECT status, completed_at 
-FROM migration_status.migration_runs 
-ORDER BY started_at DESC 
-LIMIT 1;
+-- Compare counts
+-- Source (Snowflake)
+SELECT COUNT(*) FROM snowflake_table;
+
+-- Target (PostgreSQL)
+SELECT COUNT(*) FROM postgres_table;
+
+-- Check for failed chunks
+SELECT * FROM migration_status.migration_chunk_status
+WHERE status = 'failed';
+
+-- Check ID distribution (for ID-based chunking)
+SELECT 
+    MIN(id) as min_id,
+    MAX(id) as max_id,
+    COUNT(*) as row_count,
+    MAX(id) - MIN(id) + 1 as id_span,
+    ROUND((MAX(id) - MIN(id) + 1.0) / COUNT(*), 2) as sparsity
+FROM source_table;
+-- If sparsity > 10, IDs are sparse
 ```
 
-**If still stuck:**
-```sql
--- Manual fix:
-UPDATE migration_status.migration_runs
-SET status = 'completed',
-    completed_at = NOW()
-WHERE run_id = 'your-run-id';
-```
+**Root Cause:**
+- Numeric ID-based chunking with sparse IDs
+- Chunks created based on ID range, not actual data distribution
+- Chunks with no data show "completed" with 0 rows
 
----
+**Solutions:**
 
-### 6. **Duplicate Key Errors**
-
-**Symptoms:**
-```
-ERROR: duplicate key value violates unique constraint
-DETAIL: Key ("ID")=(5203519) already exists
-```
-
-**Root Cause:** Chunking on partial primary key or previous partial load
-
-**Fix Option A:** Use `truncate_onstart`
+**Option 1: Switch to Date-Based Chunking (Recommended)**
 ```json
 {
-  "truncate_onstart": true  // Start fresh
+  "chunking_columns": ["created_date"],
+  "chunking_column_types": ["timestamp"]
 }
 ```
 
-**Fix Option B:** Use `insert_only_mode` with `source_filter`
+**Option 2: Use source_filter for Missing Data**
+```sql
+-- Find max ID in target
+SELECT MAX(id) FROM target_table;
+-- Returns: 5,099,999
+```
+
 ```json
 {
-  "source_filter": "\"ID\" > {max_existing_id}",
+  "source_filter": "id > 5099999",
+  "truncate_onstart": false,
   "insert_only_mode": true
 }
 ```
 
-**Fix Option C:** Change chunking strategy
+**Option 3: Full Reload**
 ```json
 {
-  "chunking_columns": null  // Use SingleChunkStrategy
+  "truncate_onstart": true,
+  "source_filter": null
 }
+```
+
+See [.context/HISTORICAL_ISSUES.md](../.context/HISTORICAL_ISSUES.md) Issue #5 for detailed analysis.
+
+---
+
+### Duplicate Rows
+
+**Symptoms:**
+- More rows in target than source
+- Duplicate primary key errors
+
+**Root Cause:**
+- Resume without proper truncation protection
+- Multiple migrations to same target
+- Failed resume with new run_id
+
+**Solutions:**
+- ✅ Check for multiple run_ids:
+  ```sql
+  SELECT run_id, COUNT(*) 
+  FROM migration_status.migration_table_status
+  WHERE source_table = 'YOUR_TABLE'
+  GROUP BY run_id;
+  ```
+
+- ✅ Use explicit resume_run_id:
+  ```json
+  {
+    "resume_run_id": "correct-run-id-here"
+  }
+  ```
+
+- ✅ Clean and restart:
+  ```sql
+  TRUNCATE TABLE target_schema.target_table;
+  DELETE FROM migration_status.migration_table_status WHERE run_id = 'old-run-id';
+  ```
+
+---
+
+## Resume Problems
+
+### Won't Resume After Config Change
+
+**Symptoms:**
+- Changed config.json
+- Step Function creates new run instead of resuming
+- Logs show: "NO RESUMABLE RUN FOUND"
+
+**Root Cause:**
+Config change alters `config_hash`, breaking resume detection
+
+**Solution:**
+Use explicit `resume_run_id`:
+```json
+{
+  "action": "migrate",
+  "source_name": "analytics",
+  "resume_run_id": "ad27ffdc-d104-4ccf-a2bc-9bc31e93d43c"
+}
+```
+
+**Get run_id:**
+```sql
+SELECT run_id, started_at, status
+FROM migration_status.migration_runs
+ORDER BY started_at DESC
+LIMIT 5;
 ```
 
 ---
 
-### 7. **Out of Memory (OOM) Errors**
+### Resume Starts Fresh (Unwanted)
+
+**Symptoms:**
+- Resume expected but table gets truncated
+- Data loss
+- Logs show: "TRUNCATION SAFETY CHECK TRIGGERED"
+
+**Root Cause:**
+- Truncation protection activated
+- Target table has data but no status record
+- Resume detection failed
+
+**What to do:**
+1. **Check if data exists:**
+   ```sql
+   SELECT COUNT(*) FROM target_schema.target_table;
+   ```
+
+2. **If data is from failed run:**
+   ```sql
+   -- Clear partial data
+   TRUNCATE TABLE target_schema.target_table;
+   
+   -- Clear status
+   DELETE FROM migration_status.migration_table_status 
+   WHERE run_id = 'failed-run-id';
+   ```
+
+3. **Start fresh:**
+   ```json
+   {
+     "action": "migrate",
+     "source_name": "analytics",
+     "no_resume": true
+   }
+   ```
+
+---
+
+## Configuration Errors
+
+### Validation Fails
 
 **Symptoms:**
 ```
-MemoryError: Unable to allocate array
-[Lambda exceeded memory limit]
+Error: source_name is required
+Error: chunking_columns must be an array
+Error: parallel_threads must be between 1 and 20
 ```
 
-**Immediate Fix:** Reduce batch size and threads
-```json
-{
-  "source": "PROBLEMATIC_TABLE",
-  "parallel_threads": 2,  // Was 4
-  "batch_size": 20000     // Was 50000
-}
+**Solution:**
+Run validation first:
+```bash
+python scripts/lambda_handler.py validate_config
 ```
 
-**Long-term:** Tier 3 error handling auto-reduces batch size
-
-**Tune based on Lambda memory:**
-| Memory | Threads | Batch Size |
-|--------|---------|------------|
-| 2GB | 1 | 10,000 |
-| 4GB | 2 | 25,000 |
-| 8GB | 3-4 | 35,000 |
-| 10GB | 4-6 | 50,000 |
+Fix errors shown in output.
 
 ---
 
-### 8. **Lambda Timeout (15 minutes)**
+### Table Not Found
+
+**Symptoms:**
+```
+Error: Table SOURCE_TABLE does not exist
+```
+
+**Diagnosis:**
+- Check case sensitivity (Snowflake uses uppercase)
+- Verify table exists in specified schema
+- Check permissions
+
+**Solution:**
+```sql
+-- Verify table exists
+SHOW TABLES LIKE 'SOURCE_TABLE' IN SCHEMA schema_name;
+
+-- Check permissions
+SHOW GRANTS ON TABLE schema_name.SOURCE_TABLE;
+```
+
+---
+
+### Column Type Mismatch
+
+**Symptoms:**
+```
+Error: column "date_column" is of type timestamp without time zone but expression is of type text
+```
+
+**Solution:**
+Check column types match between source and target:
+```sql
+-- Snowflake
+DESC TABLE schema_name.table_name;
+
+-- PostgreSQL
+\d schema_name.table_name
+```
+
+Fix mismatches in PostgreSQL schema.
+
+---
+
+## AWS/Lambda Issues
+
+### Lambda Timeout
 
 **Symptoms:**
 ```
 Task timed out after 900.00 seconds
 ```
 
-**This is NORMAL for large tables!**
+**Expected Behavior:**
+- This is NORMAL for large migrations
+- Lambda times out every 15 minutes
+- Step Functions automatically retries
+- Migration resumes from checkpoint
 
-**Solution:** Step Functions auto-resumes
+**Only a Problem If:**
+- No progress after multiple timeouts
+- Same chunks fail repeatedly
+- No status updates in database
 
-**Verify resume configuration:**
-```json
-// In Step Functions:
-{
-  "resume_max_age": "12h",
-  "CheckResumeAttempts": "< 100"
-}
-```
-
-**Check resume status:**
-```sql
-SELECT 
-    run_id, 
-    status, 
-    attempt_count,
-    EXTRACT(EPOCH FROM (NOW() - started_at))/3600 as hours_running
-FROM migration_status.migration_runs
-WHERE status = 'running'
-ORDER BY started_at DESC;
-```
+**Solutions:**
+- ✅ Check CloudWatch for actual errors
+- ✅ Verify chunks completing before timeout:
+  ```sql
+  SELECT 
+      completed_chunks,
+      EXTRACT(EPOCH FROM (COALESCE(completed_at, CURRENT_TIMESTAMP) - started_at))/60 as minutes
+  FROM migration_status.migration_table_status
+  WHERE status = 'in_progress';
+  ```
+- ✅ If no progress, check for stuck chunks
 
 ---
 
-### 9. **Column Not Found**
+### Step Functions Quota Exceeded
 
 **Symptoms:**
 ```
-ERROR: column "payer_id" does not exist
-HINT: Perhaps you meant to reference column "Payer Id"
+Error: ExecutionLimitExceeded
 ```
 
-**Root Cause:** Incorrect casing in config
+**Cause:**
+Too many concurrent Step Function executions
 
-**Fix:** Use exact casing from PostgreSQL
-```json
-{
-  "chunking_columns": ["Payer Id"],      // ✅ Correct
-  "uniqueness_columns": ["Payer Id"],    // ✅ Correct
-  
-  "chunking_columns": ["payer_id"]       // ❌ Wrong
-}
+**Solution:**
+- Request quota increase from AWS
+- Or wait for other executions to complete
+
+---
+
+### VPC Issues
+
+**Symptoms:**
+```
+Error: Task timed out after 30.00 seconds
+Error: Unable to connect to database
 ```
 
-**Check PostgreSQL casing:**
-```sql
-SELECT column_name 
-FROM information_schema.columns 
-WHERE table_name = 'dimpayer';
+**Diagnosis:**
+1. Lambda in VPC but no NAT gateway
+2. Security group doesn't allow outbound
+3. Route table missing routes
+
+**Solution:**
+```bash
+# Check Lambda VPC config
+aws lambda get-function-configuration \
+  --function-name snowflake-postgres-migration \
+  --query 'VpcConfig'
+
+# Verify:
+# - SubnetIds are private subnets with NAT
+# - SecurityGroupIds allow outbound 5432, 443
 ```
 
 ---
 
-### 10. **Connection Errors**
+## When to Check Historical Issues
 
-**Snowflake:**
-```
-ERROR: Failed to connect to Snowflake
-```
+### Check `.context/HISTORICAL_ISSUES.md` if:
 
-**Check:**
-- RSA key path/content in `.env`
-- Snowflake account format: `account.region` (e.g., `IKB38126.us-east-1`)
-- User has warehouse access
-- Firewall/VPN not blocking
+1. **Missing rows after completed migration**
+   → See Issue #5 (Sparse ID distribution)
 
-**PostgreSQL:**
-```
-ERROR: FATAL: database "xxx" does not exist
-```
+2. **Migration "completed" but row counts don't match**
+   → See Issue #5 (Numeric chunking problems)
 
-**Check:**
-- Database exists: `\l` in psql
-- User has access: `GRANT ALL ON DATABASE xxx TO user;`
-- Correct credentials in `.env`
+3. **Run status stuck in "running"**
+   → See Issue #4 (Status persistence bug) - Fixed in v2.1
 
----
+4. **Every log entry appears twice**
+   → See Issue #1 (Duplicate logging) - Fixed in v2.3
 
-## 🔍 **Diagnostic Queries**
+5. **Chunking taking 10+ minutes**
+   → See Issue #2 (Chunking optimization) - Fixed in v2.2/2.3
 
-### Check Migration Progress
-
-```sql
--- Overall status
-SELECT * FROM migration_status.v_active_migrations;
-
--- Table-level progress
-SELECT * FROM migration_status.v_table_progress;
-
--- Chunk-level details
-SELECT 
-    chunk_id,
-    status,
-    rows_copied,
-    attempt_count,
-    error_message
-FROM migration_status.migration_chunk_status
-WHERE run_id = 'your-run-id'
-ORDER BY chunk_id;
-```
-
-### Find Stuck Chunks
-
-```sql
-SELECT 
-    chunk_id,
-    status,
-    started_at,
-    NOW() - started_at as duration
-FROM migration_status.migration_chunk_status
-WHERE status = 'in_progress'
-  AND NOW() - started_at > interval '30 minutes';
-```
-
-### Verify Row Counts
-
-```sql
--- Source (Snowflake):
-SELECT COUNT(*) FROM HHAX_NYPROD.PUBLIC.CONFLICTS;
-
--- Target (PostgreSQL):
-SELECT COUNT(*) FROM conflict_dev.conflicts;
-
--- Difference:
-SELECT 
-    (SELECT COUNT(*) FROM HHAX_NYPROD.PUBLIC.CONFLICTS) as source_count,
-    (SELECT COUNT(*) FROM conflict_dev.conflicts) as target_count,
-    (SELECT COUNT(*) FROM HHAX_NYPROD.PUBLIC.CONFLICTS) - 
-    (SELECT COUNT(*) FROM conflict_dev.conflicts) as difference;
-```
+6. **Out of memory with 15 threads**
+   → See Issue #3 (Memory tuning) - Fixed in v2.2
 
 ---
 
-## 🛠️ **Quick Fixes**
+## Getting More Help
 
-### Reset Stuck Migration
+### Diagnostic Checklist
 
-```sql
--- Option 1: Reset stuck chunks only
-UPDATE migration_status.migration_chunk_status
-SET status = 'pending',
-    started_at = NULL,
-    completed_at = NULL
-WHERE run_id = 'your-run-id'
-  AND status = 'in_progress';
+Before asking for help, gather:
+- [ ] CloudWatch logs (last 1-2 hours)
+- [ ] Lambda memory usage (REPORT lines)
+- [ ] Current configuration (config.json snippet)
+- [ ] Migration status query results
+- [ ] Row count comparison (source vs target)
+- [ ] Failed chunks (if any)
 
--- Option 2: Reset entire run
-DELETE FROM migration_status.migration_chunk_status WHERE run_id = 'your-run-id';
-DELETE FROM migration_status.migration_table_status WHERE run_id = 'your-run-id';
-DELETE FROM migration_status.migration_runs WHERE run_id = 'your-run-id';
-```
+### Useful Debug Queries
 
-### Force Fresh Start
+**See `sql/diagnose_stuck_migration.sql` for:**
+- Run status and progress
+- Failed chunks with errors
+- Performance metrics
+- Chunk distribution analysis
 
-```sql
--- Clear all status (keeps data):
-TRUNCATE TABLE migration_status.migration_chunk_status;
-TRUNCATE TABLE migration_status.migration_table_status;
-TRUNCATE TABLE migration_status.migration_runs;
-
--- Or via Step Functions:
-{
-  "source_name": "analytics",
-  "no_resume": true
-}
-```
-
-### Clear Data and Status
-
-```sql
--- ⚠️ DESTRUCTIVE: Clears all data and status
-\i sql/truncate_all_tables.sql
--- Follow instructions in file (uncomment sections)
-```
+**See [MONITORING.md](MONITORING.md) for:**
+- Real-time progress tracking
+- Performance dashboards
+- CloudWatch analysis
 
 ---
 
-## 📚 **Additional Resources**
-
-- **`sql/diagnose_stuck_migration.sql`** - Comprehensive diagnostic tool
-- **`BUG_FIX_ROW_TRACKING.md`** - Row tracking accuracy fix
-- **`BUG_FIX_TYPE_CONVERSION.md`** - Type conversion error fix
-- **`VARCHAR_NUMERIC_CHUNKING.md`** - VARCHAR as numeric IDs
-- **`MIGRATION_ISSUES_RESOLVED.md`** - Known issues and resolutions
-- **`FEATURES.md`** - Complete feature documentation
-
----
-
-## 🆘 **Still Stuck?**
-
-1. ✅ Run `sql/diagnose_stuck_migration.sql`
-2. ✅ Check CloudWatch logs (if using Lambda)
-3. ✅ Review error messages (designed to be helpful)
-4. ✅ Check this guide for similar issues
-5. ✅ Review config.json for typos/casing
-
-**Common mistakes:**
-- Column name casing (`"Payer Id"` vs `"payer_id"`)
-- Conflicting filters (`source_filter` + `target_watermark`)
-- Missing `source_filter` with `insert_only_mode`
-- Wrong `chunking_column_types` for VARCHAR IDs
-
----
-
-**Version:** 2.0  
-**Last Updated:** December 11, 2025  
-**Status:** ✅ Covers all known issues
-
+**For performance optimization, see [OPTIMIZATION.md](OPTIMIZATION.md)**  
+**For monitoring progress, see [MONITORING.md](MONITORING.md)**  
+**For deployment issues, see [DEPLOYMENT.md](DEPLOYMENT.md)**
