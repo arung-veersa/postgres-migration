@@ -33,7 +33,7 @@ See [.context/PROJECT_CONTEXT.md](.context/PROJECT_CONTEXT.md) for current state
 - ✅ **Insert-only mode** - Skip duplicates for fast catch-up/resume scenarios
 
 ### Reliability & Safety
-- ✅ **Resume capability** - Granular status tracking enables resuming failed migrations
+- ✅ **Resume capability** - Granular status tracking enables resuming failed migrations (7-day window, extendable)
 - ✅ **Concurrent execution isolation** - Multiple migrations run safely without interference
 - ✅ **Truncation protection** - Dual-layer safety prevents accidental data loss
 - ✅ **Tiered error handling** - Auto-retry, auto-fallback, adaptive batch sizing

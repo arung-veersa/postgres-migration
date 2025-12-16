@@ -37,18 +37,28 @@ Migrating large fact tables from Snowflake to PostgreSQL with focus on:
 
 ## Recent Changes (Last 7 Days)
 
-### 2025-12-16: v2.3 - Logging & Performance Fixes
+### 2025-12-16: v2.3.1 - Resume Window & Performance Fixes
 **Files Modified:**
 - `lib/utils.py` - Fixed duplicate CloudWatch logs (Lambda env detection)
 - `lib/connections.py` - Added PostgreSQL session optimizations
 - `lib/chunking.py` - Aggregated date query (already deployed earlier)
 - `config.json` - Adjusted to 20 threads, 25K batch
+- **`scripts/lambda_handler.py`** - Increased resume_max_age: 12h → 168h (7 days)
+- **`scripts/migration_orchestrator.py`** - Updated default resume window
+- **`aws/step_functions/*.json`** - Updated Step Function defaults
+- **Documentation** - Added runtime parameters reference
 
 **Key Improvements:**
 - Duplicate logs eliminated (75% CloudWatch cost reduction)
 - PostgreSQL COPY operations faster (synchronous_commit=off)
 - Created comprehensive monitoring queries
 - Fixed schema issues in queries (updated_at → completed_at)
+- **Resume window extended from 12h → 7 days** (prevents unexpected new run_id creation)
+
+**Critical Bug Fixed:**
+- **12-hour resume window was too short** for large migrations
+- Caused new run_id creation after 12h, losing progress
+- Now supports migrations up to 7 days (extendable to 1 year)
 
 **Status:** Ready to deploy
 

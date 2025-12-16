@@ -45,7 +45,101 @@ else:
 
 ---
 
-## Issue #2: Chunking Slowness (Fixed v2.2/2.3, Dec 2025)
+## Issue #2: Resume Window Too Short (Fixed v2.3.1, Dec 2025)
+
+### Problem
+Migration running for > 12 hours would:
+- Create a NEW `run_id` unexpectedly
+- Start from scratch despite partial data in table
+- Lose all progress from previous run
+- Logs show "NO RESUMABLE RUN FOUND" with same config_hash
+
+**Example from analytics_dev migration:**
+```
+Run 1 (cc20f58d): Started Dec 15, 4:48 PM, ran for 12 hours
+Run 2 (8e37281d): Created Dec 16, 4:52 AM (12h 4min later)
+  ❌ Lost all progress from Run 1
+  ❌ Re-created chunks (10,770 → 10,976)
+  ❌ Hit duplicate key errors on existing data
+```
+
+### Root Cause
+- Default `resume_max_age` was 12 hours
+- Large migrations (272M rows) take days, not hours
+- After 12 hours, resume detection filters out the old run
+- Creates new run_id even though old run still valid
+- Truncation protection prevents data loss but causes duplicates
+
+**Code location:** 
+```python
+# lambda_handler.py, migration_orchestrator.py, migrate.py
+resume_max_age = defaults.get('resume_max_age', 12)  # Too short!
+```
+
+### Fix Applied
+**Files Modified:**
+- `scripts/lambda_handler.py` - Default: 12 → 168
+- `scripts/migration_orchestrator.py` - Default: 12 → 168  
+- `migrate.py` - Default: 12 → 168
+- `aws/step_functions/*.json` - Step Function default: 12 → 168
+
+**New Default:** 168 hours (7 days)
+
+**Runtime Override Available:**
+```json
+{
+  "source_name": "analytics",
+  "resume_max_age": 8760
+}
+```
+
+### Why 7 Days?
+- Most large migrations complete within 7 days
+- Provides safety (won't resume year-old abandoned runs)
+- Can be extended to 1 year (8760h) if needed
+- Balance between operational hygiene and practicality
+
+### Impact
+- ✅ Prevents unexpected new run_id creation
+- ✅ Large migrations can run for days/weeks without issues
+- ✅ No more progress loss for long-running operations
+- ✅ Still provides safety against resuming very old runs
+- ✅ Configurable per-execution if needed
+
+### Detection Query
+```sql
+-- Check if your run is close to expiring
+SELECT 
+    run_id,
+    metadata->>'source_names' as sources,
+    status,
+    started_at,
+    NOW() - started_at as age,
+    EXTRACT(EPOCH FROM (NOW() - started_at))/3600 as hours_old,
+    CASE 
+        WHEN EXTRACT(EPOCH FROM (NOW() - started_at))/3600 < 168 
+        THEN '✅ Safe'
+        ELSE '⚠️  Near expiration'
+    END as status
+FROM migration_status.migration_runs
+WHERE status = 'running'
+ORDER BY started_at DESC;
+```
+
+### Emergency Fix (If Already Expired)
+```sql
+-- Reset clock if > 7 days old
+UPDATE migration_status.migration_runs
+SET started_at = NOW()
+WHERE status = 'running'
+  AND NOW() - started_at > INTERVAL '7 days'
+  AND metadata->>'source_names' LIKE '%analytics%'
+RETURNING run_id, 'Clock reset' as message;
+```
+
+---
+
+## Issue #3: Chunking Slowness (Fixed v2.2/2.3, Dec 2025)
 
 ### Problem
 Date-based chunking taking 11 minutes before migration could start.

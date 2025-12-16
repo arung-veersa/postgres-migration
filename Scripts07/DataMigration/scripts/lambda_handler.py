@@ -9,7 +9,7 @@ Usage in Lambda:
         OR
         "source_name": "analytics,aggregator",   # Multiple sources (comma-separated)
         "no_resume": false,
-        "resume_max_age": 24,
+        "resume_max_age": 168,
         "resume_run_id": "uuid"
     }
 
@@ -68,7 +68,7 @@ def lambda_handler(event: Dict[str, Any], context: Optional[Any]) -> Dict[str, A
     
     # Extract optional parameters, checking defaults if not in input
     defaults = event.get('defaults', {})
-    resume_max_age = input_data.get('resume_max_age') or defaults.get('resume_max_age', 12)
+    resume_max_age = input_data.get('resume_max_age') or defaults.get('resume_max_age', 168)
     
     logger.info(f"Lambda invoked with action: {action}, source: {source_name}")
     logger.debug(f"Event structure - has 'input': {'input' in event}, keys: {list(event.keys())}")

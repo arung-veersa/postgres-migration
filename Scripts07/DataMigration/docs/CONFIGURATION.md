@@ -981,6 +981,84 @@ Total memory: 10 × 125MB (after optimization) = 1.25 GB
 
 ---
 
+## Runtime Parameters
+
+These parameters are passed at execution time (not in `config.json`) when invoking Lambda or Step Functions.
+
+### Step Function / Lambda Input
+
+```json
+{
+  "action": "migrate",
+  "source_name": "analytics",
+  "resume_max_age": 168,
+  "no_resume": false,
+  "resume_run_id": "uuid-optional"
+}
+```
+
+### Runtime Settings Reference
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `action` | string | `"migrate"` | Action: `migrate`, `validate_config`, `test_connections` |
+| `source_name` | string | required | Source(s) to migrate (single or comma-separated) |
+| `resume_max_age` | integer | `168` | Max age (hours) for auto-resume. **Default changed from 12h to 168h (7 days) in v2.3** |
+| `no_resume` | boolean | `false` | Force fresh start (ignore incomplete runs) |
+| `resume_run_id` | string | `null` | Resume specific run by ID (bypasses auto-detection) |
+
+### Resume Behavior
+
+**Auto-Resume (Default):**
+- Searches for incomplete runs with matching config within last 168 hours
+- Resumes from last completed chunk
+- Safe for long-running migrations (7-day window)
+
+**Explicit Resume:**
+```json
+{
+  "source_name": "analytics",
+  "resume_run_id": "ad27ffdc-d104-4ccf-a2bc-9bc31e93d43c"
+}
+```
+- Bypasses age check
+- Bypasses config hash check
+- Directly resumes specified run
+
+**Force Fresh Start:**
+```json
+{
+  "source_name": "analytics",
+  "no_resume": true
+}
+```
+- Creates new run_id
+- Ignores incomplete runs
+- May truncate tables if `truncate_onstart: true`
+
+### Resume Window Extension
+
+For very large migrations that exceed 7 days:
+
+```json
+{
+  "source_name": "analytics",
+  "resume_max_age": 8760
+}
+```
+
+**Common Values:**
+- `168` hours = 7 days (default)
+- `720` hours = 30 days
+- `8760` hours = 1 year (effectively infinite)
+
+**Why 168 hours?**
+- Previous default of 12 hours was too short for large migrations
+- Changed in v2.3 to accommodate multi-day migrations
+- Provides safety while allowing long-running operations
+
+---
+
 ## Setting Precedence
 
 **Override Order (highest to lowest priority):**

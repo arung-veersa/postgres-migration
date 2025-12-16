@@ -30,6 +30,60 @@ This document tracks key decisions made during the project, including rationale 
 
 ---
 
+### Decision: Increase Resume Window from 12h to 7 Days
+**Context:** Large migrations (272M rows) take > 12 hours, causing unexpected new run_id creation
+
+**Problem:**
+- Migration running for 12h 4min exceeded default `resume_max_age: 12` hours
+- Resume detection failed, created new run_id
+- Lost all progress (10,770 chunks completed)
+- Duplicate key errors when new run tried to insert existing data
+
+**Decision:**
+Change default `resume_max_age` from **12 hours → 168 hours (7 days)**
+
+**Files Modified:**
+- `scripts/lambda_handler.py` - Default parameter
+- `scripts/migration_orchestrator.py` - Function signature
+- `migrate.py` - Fallback default
+- `aws/step_functions/*.json` - Step Function defaults
+
+**Rationale:**
+- **12 hours is insufficient** for multi-day migrations
+- Real-world example: 272M rows takes 8-12 hours with optimizations
+- Slower Snowflake warehouses could take 2-3 days
+- **7 days provides safety** while allowing long operations
+- Still prevents resuming abandoned/old runs
+- **Extendable to 1 year** via runtime parameter if needed
+
+**Alternatives Considered:**
+1. **24 hours** - Still too short for slow migrations
+2. **30 days** - Could work, but less operationally clean
+3. **1 year (8760h)** - Effectively infinite, but loses safety check
+4. **No limit** - Bad practice, could resume ancient failed runs
+
+**Why 7 Days Won:**
+- Covers 99% of realistic migration scenarios
+- Provides operational hygiene (week-old failures shouldn't auto-resume)
+- Easy to extend for edge cases: `{"resume_max_age": 8760}`
+- Industry standard (many systems use 7-day retention)
+
+**Runtime Override:**
+```json
+{
+  "source_name": "analytics",
+  "resume_max_age": 8760
+}
+```
+
+**Impact:**
+- ✅ No more unexpected run_id creation for long migrations
+- ✅ Progress preserved across multi-day operations
+- ✅ Still safe (won't resume year-old runs)
+- ✅ Configurable per execution if needed
+
+---
+
 ### Decision: Lambda Environment Detection for Logging
 **Context:** Duplicate log entries in CloudWatch (every entry appeared twice)
 

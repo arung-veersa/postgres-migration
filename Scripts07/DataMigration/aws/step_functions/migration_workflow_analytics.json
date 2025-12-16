@@ -8,11 +8,11 @@
       "Parameters": {
         "action": "migrate",
         "input.$": "$",
-        "defaults": {
-          "resume_attempt_count": 0,
-          "resume_max_age": 12,
-          "no_resume": false
-        }
+      "defaults": {
+        "resume_attempt_count": 0,
+        "resume_max_age": 168,
+        "no_resume": false
+      }
       },
       "Next": "ValidateConfig"
     },

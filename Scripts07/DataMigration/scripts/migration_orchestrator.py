@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 def run_migration(
     source_name: str,
     no_resume: bool = False,
-    resume_max_age: int = 12,
+    resume_max_age: int = 168,
     resume_run_id: Optional[str] = None,
     lambda_context: Optional[Any] = None
 ) -> Dict[str, Any]:

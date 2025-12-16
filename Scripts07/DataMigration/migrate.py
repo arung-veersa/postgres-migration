@@ -149,7 +149,7 @@ class MigrationOrchestrator:
                 self.logger.info(f"Resuming specified run: {self.run_id}")
             elif not (self.args and self.args.no_resume):
                 # Auto-detect resumable run
-                max_age = self.args.resume_max_age if self.args else 12
+                max_age = self.args.resume_max_age if self.args else 168
                 self.logger.info(f"Checking for resumable run (sources={source_names}, max_age={max_age}h)")
                 resumable_run = self.status_tracker.find_resumable_run(config_hash, source_names, max_age)
                 

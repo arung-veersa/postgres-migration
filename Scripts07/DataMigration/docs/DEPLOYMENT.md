@@ -320,11 +320,36 @@ aws stepfunctions create-state-machine \
 
 ### Step 2: Test Execution
 
-**Start execution:**
+**Start execution (Basic):**
 ```bash
 aws stepfunctions start-execution \
   --state-machine-arn arn:aws:states:REGION:ACCOUNT_ID:stateMachine:snowflake-postgres-migration-analytics \
-  --input '{"action":"validate_config","source_name":"analytics"}' \
+  --input '{"source_name":"analytics"}' \
+  --region us-east-1
+```
+
+**Start execution (Extended resume window):**
+```bash
+# For migrations expected to run > 7 days
+aws stepfunctions start-execution \
+  --state-machine-arn arn:aws:states:REGION:ACCOUNT_ID:stateMachine:snowflake-postgres-migration-analytics \
+  --input '{"source_name":"analytics","resume_max_age":8760}' \
+  --region us-east-1
+```
+
+**Start execution (Force fresh start):**
+```bash
+aws stepfunctions start-execution \
+  --state-machine-arn arn:aws:states:REGION:ACCOUNT_ID:stateMachine:snowflake-postgres-migration-analytics \
+  --input '{"source_name":"analytics","no_resume":true}' \
+  --region us-east-1
+```
+
+**Resume specific run:**
+```bash
+aws stepfunctions start-execution \
+  --state-machine-arn arn:aws:states:REGION:ACCOUNT_ID:stateMachine:snowflake-postgres-migration-analytics \
+  --input '{"source_name":"analytics","resume_run_id":"ad27ffdc-d104-4ccf-a2bc-9bc31e93d43c"}' \
   --region us-east-1
 ```
 

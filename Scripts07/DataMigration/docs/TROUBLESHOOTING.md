@@ -407,6 +407,61 @@ See [.context/HISTORICAL_ISSUES.md](../.context/HISTORICAL_ISSUES.md) Issue #5 f
 
 ## Resume Problems
 
+### Resume Window Expired (New Run Created)
+
+**Symptoms:**
+- Migration was running for > 7 days
+- New `run_id` created unexpectedly
+- Logs show "NO RESUMABLE RUN FOUND"
+- Migration starts from scratch despite partial data
+
+**Cause:**
+Default `resume_max_age` is 168 hours (7 days). Runs older than this are not auto-resumed.
+
+**Solution:**
+
+**Option 1: Start with extended window (before migration):**
+```bash
+aws stepfunctions start-execution \
+  --state-machine-arn arn:aws:states:REGION:ACCOUNT_ID:stateMachine:migration-analytics \
+  --input '{"source_name":"analytics","resume_max_age":8760}' \
+  --region us-east-1
+```
+
+**Option 2: Resume specific run (if already expired):**
+```bash
+# Find your run_id
+psql -d conflict_management -c "
+  SELECT run_id, started_at, status 
+  FROM migration_status.migration_runs 
+  WHERE status = 'running' 
+  ORDER BY started_at DESC LIMIT 5;
+"
+
+# Resume it explicitly
+aws stepfunctions start-execution \
+  --state-machine-arn arn:aws:states:REGION:ACCOUNT_ID:stateMachine:migration-analytics \
+  --input '{"source_name":"analytics","resume_run_id":"your-run-id-here"}' \
+  --region us-east-1
+```
+
+**Option 3: Extend expiration for running migration (emergency fix):**
+```sql
+-- Reset the clock (only if > 7 days old)
+UPDATE migration_status.migration_runs
+SET started_at = NOW()
+WHERE status = 'running'
+  AND NOW() - started_at > INTERVAL '7 days'
+  AND metadata->>'source_names' LIKE '%analytics%'
+RETURNING run_id, 'Clock reset' as message;
+```
+
+**Prevention:**
+- For large migrations (> 7 days), start with `resume_max_age: 8760` (1 year)
+- Monitor run age using: `SELECT NOW() - started_at FROM migration_status.migration_runs WHERE status = 'running'`
+
+---
+
 ### Won't Resume After Config Change
 
 **Symptoms:**
