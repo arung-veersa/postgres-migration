@@ -1,0 +1,268 @@
+{
+  "Comment": "Snowflake to PostgreSQL Migration Workflow for Conflict - INPUT OPTIONAL: {\"source_name\": \"conflict\"} or {} to use default",
+  "StartAt": "InitializeDefaults",
+  "States": {
+    "InitializeDefaults": {
+      "Type": "Pass",
+      "Comment": "Add action field and defaults to state",
+      "Parameters": {
+        "action": "migrate",
+        "input.$": "$",
+      "defaults": {
+        "resume_attempt_count": 0,
+        "resume_max_age": 168,
+        "no_resume": false
+      }
+      },
+      "Next": "ValidateConfig"
+    },
+    "ValidateConfig": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Validate configuration and connections",
+      "Parameters": {
+        "action": "validate_config",
+        "input.$": "$.input"
+      },
+      "ResultPath": "$.validateResult",
+      "TimeoutSeconds": 60,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "ConfigValidationFailed"
+        }
+      ],
+      "Next": "TestConnections"
+    },
+    "ConfigValidationFailed": {
+      "Type": "Fail",
+      "Error": "ConfigValidationError",
+      "Cause": "Configuration validation failed. Check config.json and environment variables."
+    },
+    "TestConnections": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Test Snowflake and PostgreSQL connections",
+      "Parameters": {
+        "action": "test_connections"
+      },
+      "ResultPath": "$.connectionResult",
+      "TimeoutSeconds": 60,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "ConnectionTestFailed"
+        }
+      ],
+      "Next": "ExecuteMigration"
+    },
+    "ConnectionTestFailed": {
+      "Type": "Fail",
+      "Error": "ConnectionTestError",
+      "Cause": "Database connection test failed. Check network, VPC, security groups, and credentials."
+    },
+    "ExecuteMigration": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Execute migration for conflict source. Auto-resumes if incomplete run found.",
+      "ResultPath": "$.migrationResult",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 1,
+          "BackoffRate": 2.0,
+          "Comment": "Retry transient failures only once"
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.Timeout",
+            "Lambda.TooManyRequestsException",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.Unknown"
+          ],
+          "ResultPath": "$.error",
+          "Comment": "Treat timeouts and Lambda errors as partial completion - will resume",
+          "Next": "HandleTimeout"
+        },
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "MigrationFailed"
+        }
+      ],
+      "Next": "CheckMigrationStatus"
+    },
+    "HandleTimeout": {
+      "Type": "Pass",
+      "Comment": "Lambda timed out - treat as partial completion and prepare for resume",
+      "Parameters": {
+        "action": "migrate",
+        "input.$": "$.input",
+        "defaults.$": "$.defaults",
+        "migrationResult": {
+          "body": {
+            "status": "partial",
+            "message": "Lambda timeout - will auto-resume"
+          }
+        },
+        "error.$": "$.error"
+      },
+      "Next": "WaitBeforeResume"
+    },
+    "MigrationFailed": {
+      "Type": "Fail",
+      "Error": "MigrationExecutionError",
+      "Cause": "Migration execution failed. Check CloudWatch logs for details. Can be safely retried (idempotent)."
+    },
+    "CheckMigrationStatus": {
+      "Type": "Choice",
+      "Comment": "Check if migration completed, partially completed, or failed",
+      "Choices": [
+        {
+          "Variable": "$.migrationResult.body.status",
+          "StringEquals": "completed",
+          "Next": "MigrationSuccess"
+        },
+        {
+          "Variable": "$.migrationResult.body.status",
+          "StringEquals": "partial",
+          "Next": "WaitBeforeResume"
+        }
+      ],
+      "Default": "MigrationFailed"
+    },
+    "WaitBeforeResume": {
+      "Type": "Wait",
+      "Comment": "Wait 5 seconds before resuming (status already committed to PostgreSQL)",
+      "Seconds": 5,
+      "Next": "ResumeMigration"
+    },
+    "ResumeMigration": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Resume migration - will automatically find incomplete run from status tables",
+      "ResultPath": "$.migrationResult",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 1,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.Timeout",
+            "Lambda.TooManyRequestsException",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.Unknown"
+          ],
+          "ResultPath": "$.error",
+          "Comment": "Treat timeouts and Lambda errors as partial completion - will resume again",
+          "Next": "CheckResumeAttempts"
+        },
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "MigrationFailed"
+        }
+      ],
+      "Next": "CheckResumeStatus"
+    },
+    "CheckResumeStatus": {
+      "Type": "Choice",
+      "Comment": "Check if resumed migration completed or needs another iteration",
+      "Choices": [
+        {
+          "Variable": "$.migrationResult.body.status",
+          "StringEquals": "completed",
+          "Next": "MigrationSuccess"
+        },
+        {
+          "Variable": "$.migrationResult.body.status",
+          "StringEquals": "partial",
+          "Next": "CheckResumeAttempts"
+        }
+      ],
+      "Default": "MigrationFailed"
+    },
+    "CheckResumeAttempts": {
+      "Type": "Choice",
+      "Comment": "Prevent infinite loops - limit resume attempts to 100",
+      "Choices": [
+        {
+          "Variable": "$.defaults.resume_attempt_count",
+          "NumericLessThan": 100,
+          "Next": "IncrementResumeCount"
+        }
+      ],
+      "Default": "TooManyResumeAttempts"
+    },
+    "IncrementResumeCount": {
+      "Type": "Pass",
+      "Comment": "Increment resume attempt counter",
+      "Parameters": {
+        "action": "migrate",
+        "input.$": "$.input",
+        "defaults": {
+          "resume_attempt_count.$": "States.MathAdd($.defaults.resume_attempt_count, 1)",
+          "resume_max_age.$": "$.defaults.resume_max_age",
+          "no_resume.$": "$.defaults.no_resume"
+        }
+      },
+      "Next": "WaitBeforeResume"
+    },
+    "TooManyResumeAttempts": {
+      "Type": "Fail",
+      "Error": "TooManyResumeAttemptsError",
+      "Cause": "Migration did not complete after 100 resume attempts. Check for stuck chunks, memory issues, or performance problems. Query migration_status.migration_chunk_status for failed/in_progress chunks."
+    },
+    "MigrationSuccess": {
+      "Type": "Succeed",
+      "Comment": "Migration completed successfully"
+    }
+  }
+}
+

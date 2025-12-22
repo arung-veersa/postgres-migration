@@ -1,0 +1,91 @@
+{
+  "snowflake": {
+    "account": "${SNOWFLAKE_ACCOUNT}",
+    "user": "${SNOWFLAKE_USER}",
+    "warehouse": "${SNOWFLAKE_WAREHOUSE}",
+    "rsa_key": "${SNOWFLAKE_PRIVATE_KEY}"
+  },
+  "postgres": {
+    "host": "${POSTGRES_HOST}",
+    "user": "${POSTGRES_USER}",
+    "password": "${POSTGRES_PASSWORD}"
+  },
+  "aws": {
+    "access_key_id": "${AWS_ACCESS_KEY_ID:-DUMMY}",
+    "secret_access_key": "${AWS_SECRET_ACCESS_KEY:-DUMMY}",
+    "region": "${AWS_REGION}",
+    "s3_bucket": "${AWS_S3_BUCKET}",
+    "note": "Used by Python S3Manager only. Snowflake UNLOAD uses storage integration (IAM role)."
+  },
+  "s3_staging": {
+    "bucket": "${AWS_S3_BUCKET}",
+    "region": "${AWS_REGION}",
+    "prefix_pattern": "{source_database}/{source_schema}/{source_table}/",
+    "file_format": "parquet",
+    "compression": "snappy",
+    "cleanup_after_load": false,
+    "max_file_size_mb": 100
+  },
+  "snowflake_unload": {
+    "storage_integration": "${SNOWFLAKE_STORAGE_INTEGRATION}",
+    "stage_name": "${SNOWFLAKE_STAGE_NAME}",
+    "stage_database": "${SNOWFLAKE_STAGE_DATABASE}",
+    "stage_schema": "${SNOWFLAKE_STAGE_SCHEMA}",
+    "aws_role_arn": "${SNOWFLAKE_AWS_ROLE_ARN}",
+    "warehouse_size": "MEDIUM",
+    "max_file_size_bytes": 104857600,
+    "include_query_id": true,
+    "overwrite": true,
+    "note": "Snowflake authenticates to S3 using storage_integration (IAM role), not AWS access keys"
+  },
+  "migration": {
+    "parallel_chunks": 6,
+    "batch_size": 100000,
+    "max_retry_attempts": 3,
+    "lambda_timeout_buffer_seconds": 90
+  },
+  "status_tracking": {
+    "database": "conflict_management",
+    "schema": "migration_status"
+  },
+  "sources": [
+    {
+      "source_name": "analytics",
+      "enabled": true,
+      "source_sf_database": "ANALYTICS",
+      "source_sf_schema": "BI",
+      "target_pg_database": "conflict_management",
+      "target_pg_schema": "analytics_dev2",
+      "tables": [
+        {
+          "enabled": true,
+          "source": "DIMPAYER",
+          "target": "dimpayer",
+          "source_filter": "\"Is Active\" = TRUE AND \"Is Demo\" = FALSE AND \"Source System\" = 'hha'",
+          "chunking_columns": ["Payer Id"],
+          "chunking_column_types": ["varchar"],
+          "uniqueness_columns": ["Payer Id"],
+          "truncate_onstart": false,
+          "disable_index": true,
+          "s3_prefix_override": null,
+          "estimated_rows": 160
+        },
+        {
+          "enabled": false,
+          "source": "FACTVISITCALLPERFORMANCE_CR",
+          "target": "factvisitcallperformance_cr",
+          "source_filter": null,
+          "chunking_columns": ["Visit Updated Timestamp"],
+          "chunking_column_types": ["timestamp"],
+          "uniqueness_columns": ["Visit Id"],
+          "truncate_onstart": true,
+          "disable_index": true,
+          "s3_prefix_override": null,
+          "estimated_rows": 272000000
+        }
+      ]
+    }
+  ]
+}
+
+
