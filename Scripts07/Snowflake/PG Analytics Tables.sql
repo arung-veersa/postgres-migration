@@ -1,3 +1,4 @@
+
 -- =====================================================
 -- Analytics Schema Tables DDL Script
 -- =====================================================
@@ -9,12 +10,12 @@ DROP TABLE IF EXISTS dimcaregiver;
 CREATE TABLE dimcaregiver (
     "Caregiver Id" VARCHAR(50) PRIMARY KEY,
     "Application Caregiver Id" NUMERIC(38,0),
-    "Caregiver Code" VARCHAR(50),
+    "Caregiver Code" VARCHAR(100),
     "Caregiver Firstname" VARCHAR(50),
     "Caregiver Lastname" VARCHAR(50),
     "Caregiver Fullname" VARCHAR(101),
     "SSN" VARCHAR(50),
-    "Status" VARCHAR(50),
+    "Status" VARCHAR(500),
     "Updated Datatimestamp" TIMESTAMPTZ
 );
 
@@ -24,23 +25,27 @@ CREATE TABLE dimcaregiver (
 DROP TABLE IF EXISTS dimcontract;
 CREATE TABLE dimcontract (
     "Contract Id" VARCHAR(50) PRIMARY KEY,
-    "Application Contract Id" NUMERIC(38,0),
+    "Application Contract Id" VARCHAR(100),
     "Contract Name" VARCHAR(250),
     "Is Active" BOOLEAN,
     "Updated Datatimestamp" TIMESTAMPTZ
 );
 
 -- =====================================================
--- 3. DIMOFFICE TABLE
+-- 3. DIMOFFICE TABLE 
 -- =====================================================
 DROP TABLE IF EXISTS dimoffice;
 CREATE TABLE dimoffice (
     "Office Id" VARCHAR(50) PRIMARY KEY,
-    "Application Office Id" NUMERIC(38,0),
+    "Application Office Id" VARCHAR(50),
     "Office Name" VARCHAR(100),
     "Is Active" BOOLEAN,
-    "Updated Datatimestamp" TIMESTAMPTZ
+    "Updated Datatimestamp" TIMESTAMPTZ,
+    "Federal Tax Number"  VARCHAR(100),
+    "NPI"  VARCHAR(100),
 );
+
+
 
 -- =====================================================
 -- 4. DIMPATIENT TABLE
@@ -48,6 +53,7 @@ CREATE TABLE dimoffice (
 DROP TABLE IF EXISTS dimpatient;
 CREATE TABLE dimpatient (
     "Patient Id" VARCHAR(50) PRIMARY KEY,
+    "Payer Id" VARCHAR(50),
     "Application Patient Id" NUMERIC(38,0),
     "Patient Firstname" VARCHAR(100),
     "Patient Lastname" VARCHAR(100),
@@ -55,7 +61,9 @@ CREATE TABLE dimpatient (
     "Admission Id" VARCHAR(500),
     "Medicaid Number" VARCHAR(100),
     "Status" VARCHAR(50),
-    "Updated Datatimestamp" TIMESTAMPTZ
+    "Has Visit" BOOLEAN,
+    "Updated Datatimestamp" TIMESTAMPTZ,
+    "Conflict Report Hash" NUMERIC(19,0)
 );
 
 -- =====================================================
@@ -66,7 +74,7 @@ CREATE TABLE dimpatientaddress (
     "Patient Address Id" VARCHAR(50) PRIMARY KEY,
     "Application Patient Address Id" NUMERIC(38,0),
     "Patient Id" VARCHAR(50),
-    "Application Patient Id" NUMERIC(38,0),
+    "Application Patient Id" NUMERIC(38,5),
     "Address Type" VARCHAR(100),
     "Address Line 1" VARCHAR(500),
     "Address Line 2" VARCHAR(100),
@@ -87,8 +95,8 @@ CREATE TABLE dimpatientaddress (
 DROP TABLE IF EXISTS dimpayer;
 CREATE TABLE dimpayer (
     "Payer Id" VARCHAR(50) PRIMARY KEY,
-    "Application Payer Id" NUMERIC(38,0),
-    "Payer Name" VARCHAR(50),
+    "Application Payer Id" VARCHAR(50),
+    "Payer Name" VARCHAR(201),
     "Payer State" VARCHAR(100),
     "Is Active" BOOLEAN,
     "Is Demo" BOOLEAN,
@@ -101,10 +109,11 @@ CREATE TABLE dimpayer (
 DROP TABLE IF EXISTS dimpayerprovider;
 CREATE TABLE dimpayerprovider (
     "Payer Id" VARCHAR(50),
-    "Application Payer Id" NUMERIC(38,0),
+    "Application Payer Id" VARCHAR(50),
     "Provider Id" VARCHAR(50),
-    "Application Provider Id" NUMERIC(38,0),
-    PRIMARY KEY ("Provider Id", "Payer Id")
+    "Application Provider Id" VARCHAR(50),
+    PRIMARY KEY ("Provider Id", "Payer Id"),
+    "Conflict Report Hash" NUMERIC(19,0)
 );
 
 -- =====================================================
@@ -113,7 +122,7 @@ CREATE TABLE dimpayerprovider (
 DROP TABLE IF EXISTS dimprovider;
 CREATE TABLE dimprovider (
     "Provider Id" VARCHAR(50) PRIMARY KEY,
-    "Application Provider Id" NUMERIC(38,0),
+    "Application Provider Id" VARCHAR(50),
     "Provider Name" VARCHAR(200),
     "Address State" VARCHAR(100),
     "Federal Tax Number" VARCHAR(100),
@@ -129,7 +138,7 @@ CREATE TABLE dimprovider (
 DROP TABLE IF EXISTS dimservicecode;
 CREATE TABLE dimservicecode (
     "Service Code Id" VARCHAR(50) PRIMARY KEY,
-    "Application Service Code Id" NUMERIC(38,0),
+    "Application Service Code Id" VARCHAR(50),
     "Service Code" VARCHAR(50),
     "Updated Datatimestamp" TIMESTAMPTZ
 );
@@ -140,12 +149,15 @@ CREATE TABLE dimservicecode (
 DROP TABLE IF EXISTS dimuser;
 CREATE TABLE dimuser (
     "User Id" VARCHAR(50) PRIMARY KEY,
-    "Application User Id" NUMERIC(38,0),
+    "Application User Id" VARCHAR(50),
     "User Fullname" VARCHAR(511),
     "User Email Address" VARCHAR(320),
     "Vendor Id" VARCHAR(50),
-    "Application Vendor Id" NUMERIC(38,0)
+    "Application Vendor Id" VARCHAR(50),
+    "Aggregator Database Name"  VARCHAR(50),
+    "Conflict Report Hash" NUMERIC(19,0)
 );
+
 
 -- =====================================================
 -- 11. DIMUSEROFFICES TABLE
@@ -156,7 +168,8 @@ CREATE TABLE dimuseroffices (
     "Office Id" VARCHAR(50),
     "Vendor Id" VARCHAR(50),
     "Vendor Type" VARCHAR(50),
-    PRIMARY KEY ("User Id", "Office Id")
+    PRIMARY KEY ("User Id", "Office Id"),
+    "Conflict Report Hash" NUMERIC(19,0)
 );
 
 -- =====================================================
@@ -196,26 +209,26 @@ CREATE TABLE factcaregiverinservice (
 -- =====================================================
 DROP TABLE IF EXISTS factvisitcallperformance_cr;
 CREATE TABLE factvisitcallperformance_cr (
-    "Visit Id" VARCHAR(50) PRIMARY KEY,
+    "Visit Id" VARCHAR(100) PRIMARY KEY,
     "Application Visit Id" VARCHAR(50),
-    "Visit Date" TIMESTAMPTZ,
+	"Visit Date" TIMESTAMPTZ,
     "Scheduled Start Time" TIMESTAMPTZ,
     "Scheduled End Time" TIMESTAMPTZ,
-    "Visit Start Time" TIMESTAMPTZ,
+	"Visit Start Time" TIMESTAMPTZ,
     "Visit End Time" TIMESTAMPTZ,
-    "Is Missed" BOOLEAN,
-    "Bill Type" VARCHAR(50),
-    "Call In Time" TIMESTAMPTZ,
+	"Is Missed" BOOLEAN,
+	"Bill Type" VARCHAR(50),
+	"Call In Time" TIMESTAMPTZ,
     "Call In GPS Coordinates" VARCHAR(100),
-    "Call Out Device Type" VARCHAR(50),
+	"Call Out Device Type" VARCHAR(100),
     "Call Out Time" TIMESTAMPTZ,
     "Call Out GPS Coordinates" VARCHAR(100),
     "Payer Id" VARCHAR(50),
     "Application Payer Id" NUMERIC(38,0),
     "Provider Id" VARCHAR(50),
-    "Application Provider Id" NUMERIC(38,0),
+    "Application Provider Id" VARCHAR(50),
     "Office Id" VARCHAR(50),
-    "Application Office Id" NUMERIC(38,0),
+    "Application Office Id" VARCHAR(50),
     "Patient Id" VARCHAR(50),
     "Application Patient Id" NUMERIC(38,0),
     "Caregiver Id" VARCHAR(50),
@@ -223,21 +236,22 @@ CREATE TABLE factvisitcallperformance_cr (
     "Service Code Id" VARCHAR(50),
     "Application Service Code Id" NUMERIC(38,0),
     "Contract Id" VARCHAR(50),
-    "Application Contract Id" NUMERIC(38,0),
+    "Application Contract Id" VARCHAR(50),
     "Payer Patient Id" VARCHAR(50),
     "Application Payer Patient Id" NUMERIC(38,0),
     "Provider Patient Id" VARCHAR(50),
     "Application Provider Patient Id" NUMERIC(38,0),
-    "Billed Hours" NUMERIC(8,2),
-    "Billed Rate" NUMERIC(8,2),
-    "Total Billed Amount" NUMERIC(10,2),
-    "Billed" VARCHAR(3),
-    "Invoice Date" TIMESTAMPTZ,
+    "Billed Hours" NUMERIC(38, 6),
+    "Billed Rate" NUMERIC(19, 3),
+    "Total Billed Amount" NUMERIC(19, 3),
+	"Billed" VARCHAR(3),
+	"Invoice Date" TIMESTAMPTZ,    
     "Missed Visit Reason" VARCHAR(500),
-    "Visit Updated Timestamp" TIMESTAMPTZ,
-    "Visit Updated User Id" VARCHAR(50),
-    "Application Visit Updated User Id" NUMERIC(38,0),
-    "Bill Rate Non-Billed" NUMERIC(38,0)
+	"Visit Updated Timestamp" TIMESTAMPTZ,
+	"Visit Updated User Id" VARCHAR(50),
+    "Application Visit Updated User Id" VARCHAR(50),
+    "Bill Rate Non-Billed" NUMERIC(18, 6),
+    "Conflict Report Hash" NUMERIC(19,0)
 );
 
 -- =====================================================
@@ -245,20 +259,20 @@ CREATE TABLE factvisitcallperformance_cr (
 -- =====================================================
 DROP TABLE IF EXISTS factvisitcallperformance_deleted_cr;
 CREATE TABLE factvisitcallperformance_deleted_cr (
-    "Visit Id" VARCHAR(50) PRIMARY KEY,
-    "Application Visit Id" NUMERIC(38,0),
+    "Visit Id" VARCHAR(100) PRIMARY KEY,
+    "Application Visit Id" VARCHAR(50),
     "Patient Id" VARCHAR(50),
     "Application Patient Id" NUMERIC(38,0),
     "Caregiver Id" VARCHAR(50),
     "Application Caregiver Id" NUMERIC(38,0),
     "Provider Id" VARCHAR(50),
-    "Application Provider Id" NUMERIC(38,0),
+    "Application Provider Id" VARCHAR(50),
     "Office Id" VARCHAR(50),
-    "Application Office Id" NUMERIC(38,0),
+    "Application Office Id" VARCHAR(50),
     "Payer Id" VARCHAR(50),
     "Application Payer Id" NUMERIC(38,0),
     "Contract Id" VARCHAR(50),
-    "Application Contract Id" NUMERIC(38,0),
+    "Application Contract Id" VARCHAR(50),
     "Service Code Id" VARCHAR(50),
     "Application Service Code Id" NUMERIC(38,0),
     "Payer Patient Id" VARCHAR(50),
@@ -277,15 +291,25 @@ CREATE TABLE factvisitcallperformance_deleted_cr (
     "Call Out Device Type" VARCHAR(100),
     "Bill Type" VARCHAR(50),
     "Billed" VARCHAR(3),
-    "Billed Hours" NUMERIC(8, 2),
+    "Billed Hours" NUMERIC(38, 6),
     "Billed Rate" NUMERIC(19, 3),
     "Total Billed Amount" NUMERIC(19, 3),
-    "Bill Rate Non-Billed" NUMERIC(12, 2),
+    "Bill Rate Non-Billed" NUMERIC(18, 6),
     "Invoice Date" DATE,
     "Is Missed" BOOLEAN,
     "Missed Visit Reason" VARCHAR(500),
     "Visit Updated User Id" VARCHAR(50),
-    "Application Visit Updated User Id" NUMERIC(38,0),
+    "Application Visit Updated User Id" VARCHAR(50),
     "Visit Updated Timestamp" TIMESTAMPTZ,
-    "Updated Datatimestamp" TIMESTAMPTZ
+    "Conflict Report Hash" NUMERIC(19,0)
+);
+
+-- =====================================================
+-- 16. aggnyprod TABLE
+-- =====================================================
+DROP TABLE IF EXISTS aggnyprod;
+CREATE TABLE aggnyprod (
+    "payerid" NUMERIC(38,0) PRIMARY KEY,
+    "payername" VARCHAR(50),
+    "Global Payer ID" VARCHAR(50)
 );

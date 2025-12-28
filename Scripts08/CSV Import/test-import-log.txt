@@ -1,0 +1,266 @@
+[2025-12-27 14:41:39] [INFO] 
+[2025-12-27 14:41:39] [INFO] ========================================================
+[2025-12-27 14:41:39] [INFO]    LOCAL TEST - PostgreSQL CSV Import
+[2025-12-27 14:41:39] [INFO] ========================================================
+[2025-12-27 14:41:39] [INFO] 
+[2025-12-27 14:41:39] [INFO] Configuration:
+[2025-12-27 14:41:39] [INFO]   Database: postgres @ localhost
+[2025-12-27 14:41:39] [INFO]   Table: analytics_dev2.factvisitcallperformance_cr
+[2025-12-27 14:41:39] [INFO]   CSV File: test_sample.csv
+[2025-12-27 14:41:39] [INFO] 
+[2025-12-27 14:41:39] [ERROR] ERROR: psql command not found!
+[2025-12-27 14:41:39] [ERROR] Please install PostgreSQL client tools
+[2025-12-27 14:43:17] [INFO] 
+[2025-12-27 14:43:17] [INFO] ========================================================
+[2025-12-27 14:43:17] [INFO]    LOCAL TEST - PostgreSQL CSV Import
+[2025-12-27 14:43:17] [INFO] ========================================================
+[2025-12-27 14:43:17] [INFO] 
+[2025-12-27 14:43:17] [INFO] Configuration:
+[2025-12-27 14:43:17] [INFO]   Database: postgres @ localhost
+[2025-12-27 14:43:17] [INFO]   Table: analytics_dev2.factvisitcallperformance_cr
+[2025-12-27 14:43:17] [INFO]   CSV File: test_sample.csv
+[2025-12-27 14:43:17] [INFO] 
+[2025-12-27 14:43:17] [ERROR] ERROR: psql command not found!
+[2025-12-27 14:43:17] [ERROR] Please install PostgreSQL client tools
+[2025-12-27 14:48:30] [INFO] 
+[2025-12-27 14:48:30] [INFO] ========================================================
+[2025-12-27 14:48:30] [INFO]    LOCAL TEST - PostgreSQL CSV Import
+[2025-12-27 14:48:30] [INFO] ========================================================
+[2025-12-27 14:48:30] [INFO] 
+[2025-12-27 14:48:30] [INFO] Configuration:
+[2025-12-27 14:48:30] [INFO]   Database: postgres @ localhost
+[2025-12-27 14:48:30] [INFO]   Table: analytics_dev2.factvisitcallperformance_cr
+[2025-12-27 14:48:30] [INFO]   CSV File: test_sample.csv
+[2025-12-27 14:48:30] [INFO] 
+[2025-12-27 14:48:30] [DEBUG]   Added PostgreSQL bin to PATH: C:\Program Files\PostgreSQL\18\bin
+[2025-12-27 14:48:30] [SUCCESS] [OK] psql found
+[2025-12-27 14:48:30] [SUCCESS] [OK] CSV file found
+[2025-12-27 14:48:30] [INFO]   File size: 18.88 KB
+[2025-12-27 14:48:30] [INFO] 
+[2025-12-27 14:48:30] [INFO]   Rows to import: 20
+[2025-12-27 14:48:30] [INFO] 
+[2025-12-27 14:48:30] [INFO] Testing database connection...
+[2025-12-27 14:48:31] [SUCCESS] [OK] Database connection successful
+[2025-12-27 14:48:31] [INFO] 
+[2025-12-27 14:48:31] [INFO] Truncating table analytics_dev2.factvisitcallperformance_cr...
+[2025-12-27 14:48:31] [SUCCESS] [OK] Table truncated
+[2025-12-27 14:48:31] [INFO] 
+[2025-12-27 14:48:31] [INFO] Starting import...
+[2025-12-27 14:48:31] [DEBUG]   Command: \copy analytics_dev2.factvisitcallperformance_cr FROM 'C:\Users\ArunGupta\Repos\postgres-migration\Scripts08\CSV Import\test_sample.csv' WITH (FORMAT csv, HEADER true, ENCODING 'UTF8')
+[2025-12-27 14:48:31] [INFO] 
+[2025-12-27 14:48:31] [INFO] 
+[2025-12-27 14:48:31] [INFO] ========================================================
+[2025-12-27 14:48:31] [ERROR]    FAILED!
+[2025-12-27 14:48:31] [INFO] ========================================================
+[2025-12-27 14:48:31] [ERROR] Error: ERROR:  invalid input syntax for type timestamp with time zone: "\N" CONTEXT:  COPY factvisitcallperformance_cr, line 12, column Call Out Time: "\N"
+[2025-12-27 14:48:31] [INFO] 
+[2025-12-27 14:49:45] [INFO] 
+[2025-12-27 14:49:45] [INFO] ========================================================
+[2025-12-27 14:49:45] [INFO]    LOCAL TEST - PostgreSQL CSV Import
+[2025-12-27 14:49:45] [INFO] ========================================================
+[2025-12-27 14:49:45] [INFO] 
+[2025-12-27 14:49:45] [INFO] Configuration:
+[2025-12-27 14:49:45] [INFO]   Database: postgres @ localhost
+[2025-12-27 14:49:45] [INFO]   Table: analytics_dev2.factvisitcallperformance_cr
+[2025-12-27 14:49:45] [INFO]   CSV File: test_sample.csv
+[2025-12-27 14:49:45] [INFO] 
+[2025-12-27 14:49:45] [DEBUG]   Added PostgreSQL bin to PATH: C:\Program Files\PostgreSQL\18\bin
+[2025-12-27 14:49:45] [SUCCESS] [OK] psql found
+[2025-12-27 14:49:45] [SUCCESS] [OK] CSV file found
+[2025-12-27 14:49:45] [INFO]   File size: 18.88 KB
+[2025-12-27 14:49:45] [INFO] 
+[2025-12-27 14:49:45] [INFO]   Rows to import: 20
+[2025-12-27 14:49:45] [INFO] 
+[2025-12-27 14:49:45] [INFO] Testing database connection...
+[2025-12-27 14:49:45] [SUCCESS] [OK] Database connection successful
+[2025-12-27 14:49:45] [INFO] 
+[2025-12-27 14:49:45] [INFO] Truncating table analytics_dev2.factvisitcallperformance_cr...
+[2025-12-27 14:49:45] [SUCCESS] [OK] Table truncated
+[2025-12-27 14:49:45] [INFO] 
+[2025-12-27 14:49:45] [INFO] Starting import...
+[2025-12-27 14:49:45] [DEBUG]   Command: \copy analytics_dev2.factvisitcallperformance_cr FROM 'C:\Users\ArunGupta\Repos\postgres-migration\Scripts08\CSV Import\test_sample.csv' WITH (FORMAT csv, HEADER true, NULL '\\N', ENCODING 'UTF8')
+[2025-12-27 14:49:45] [INFO] 
+[2025-12-27 14:49:46] [INFO] 
+[2025-12-27 14:49:46] [INFO] ========================================================
+[2025-12-27 14:49:46] [ERROR]    FAILED!
+[2025-12-27 14:49:46] [INFO] ========================================================
+[2025-12-27 14:49:46] [ERROR] Error: ERROR:  invalid input syntax for type timestamp with time zone: "\N" CONTEXT:  COPY factvisitcallperformance_cr, line 12, column Call Out Time: "\N"
+[2025-12-27 14:49:46] [INFO] 
+[2025-12-27 14:51:36] [INFO] 
+[2025-12-27 14:51:36] [INFO] ========================================================
+[2025-12-27 14:51:36] [INFO]    LOCAL TEST - PostgreSQL CSV Import
+[2025-12-27 14:51:36] [INFO] ========================================================
+[2025-12-27 14:51:36] [INFO] 
+[2025-12-27 14:51:36] [INFO] Configuration:
+[2025-12-27 14:51:36] [INFO]   Database: postgres @ localhost
+[2025-12-27 14:51:36] [INFO]   Table: analytics_dev2.factvisitcallperformance_cr
+[2025-12-27 14:51:36] [INFO]   CSV File: test_sample.csv
+[2025-12-27 14:51:36] [INFO] 
+[2025-12-27 14:51:36] [DEBUG]   Added PostgreSQL bin to PATH: C:\Program Files\PostgreSQL\18\bin
+[2025-12-27 14:51:36] [SUCCESS] [OK] psql found
+[2025-12-27 14:51:36] [SUCCESS] [OK] CSV file found
+[2025-12-27 14:51:36] [INFO]   File size: 18.88 KB
+[2025-12-27 14:51:36] [INFO] 
+[2025-12-27 14:51:36] [INFO]   Rows to import: 20
+[2025-12-27 14:51:36] [INFO] 
+[2025-12-27 14:51:36] [INFO] Testing database connection...
+[2025-12-27 14:51:36] [SUCCESS] [OK] Database connection successful
+[2025-12-27 14:51:36] [INFO] 
+[2025-12-27 14:51:36] [INFO] Truncating table analytics_dev2.factvisitcallperformance_cr...
+[2025-12-27 14:51:36] [SUCCESS] [OK] Table truncated
+[2025-12-27 14:51:36] [INFO] 
+[2025-12-27 14:51:36] [INFO] Preprocessing CSV to handle NULL values...
+[2025-12-27 14:51:36] [INFO]   CSV preprocessed successfully
+[2025-12-27 14:51:36] [INFO] Starting import...
+[2025-12-27 14:51:36] [DEBUG]   Command: \copy analytics_dev2.factvisitcallperformance_cr FROM 'C:\Users\ArunGupta\AppData\Local\Temp\tmpfsulcl.csv' WITH (FORMAT csv, HEADER true, ENCODING 'UTF8')
+[2025-12-27 14:51:37] [INFO] 
+[2025-12-27 14:51:37] [INFO] 
+[2025-12-27 14:51:37] [INFO] ========================================================
+[2025-12-27 14:51:37] [ERROR]    FAILED!
+[2025-12-27 14:51:37] [INFO] ========================================================
+[2025-12-27 14:51:37] [ERROR] Error: ERROR:  invalid input syntax for type timestamp with time zone: "\N" CONTEXT:  COPY factvisitcallperformance_cr, line 12, column Call Out Time: "\N"
+[2025-12-27 14:51:37] [INFO] 
+[2025-12-27 14:53:27] [INFO] 
+[2025-12-27 14:53:27] [INFO] ========================================================
+[2025-12-27 14:53:27] [INFO]    LOCAL TEST - PostgreSQL CSV Import
+[2025-12-27 14:53:27] [INFO] ========================================================
+[2025-12-27 14:53:27] [INFO] 
+[2025-12-27 14:53:27] [INFO] Configuration:
+[2025-12-27 14:53:27] [INFO]   Database: postgres @ localhost
+[2025-12-27 14:53:27] [INFO]   Table: analytics_dev2.factvisitcallperformance_cr
+[2025-12-27 14:53:27] [INFO]   CSV File: test_sample.csv
+[2025-12-27 14:53:27] [INFO] 
+[2025-12-27 14:53:27] [DEBUG]   Added PostgreSQL bin to PATH: C:\Program Files\PostgreSQL\18\bin
+[2025-12-27 14:53:27] [SUCCESS] [OK] psql found
+[2025-12-27 14:53:28] [SUCCESS] [OK] CSV file found
+[2025-12-27 14:53:28] [INFO]   File size: 18.88 KB
+[2025-12-27 14:53:28] [INFO] 
+[2025-12-27 14:53:28] [INFO]   Rows to import: 20
+[2025-12-27 14:53:28] [INFO] 
+[2025-12-27 14:53:28] [INFO] Testing database connection...
+[2025-12-27 14:53:28] [SUCCESS] [OK] Database connection successful
+[2025-12-27 14:53:28] [INFO] 
+[2025-12-27 14:53:28] [INFO] Truncating table analytics_dev2.factvisitcallperformance_cr...
+[2025-12-27 14:53:28] [SUCCESS] [OK] Table truncated
+[2025-12-27 14:53:28] [INFO] 
+[2025-12-27 14:53:28] [INFO] Preprocessing CSV to handle NULL values...
+[2025-12-27 14:53:28] [INFO]   Processed 21 lines
+[2025-12-27 14:53:28] [INFO] Starting import...
+[2025-12-27 14:53:28] [DEBUG]   Command: \copy analytics_dev2.factvisitcallperformance_cr FROM 'C:\Users\ArunGupta\AppData\Local\Temp\tmpg5mnvm.csv' WITH (FORMAT csv, HEADER true, ENCODING 'UTF8')
+[2025-12-27 14:53:28] [INFO] 
+[2025-12-27 14:53:28] [INFO] 
+[2025-12-27 14:53:28] [INFO] ========================================================
+[2025-12-27 14:53:28] [ERROR]    FAILED!
+[2025-12-27 14:53:28] [INFO] ========================================================
+[2025-12-27 14:53:28] [ERROR] Error: ERROR:  invalid input syntax for type timestamp with time zone: "\N" CONTEXT:  COPY factvisitcallperformance_cr, line 12, column Call Out Time: "\N"
+[2025-12-27 14:53:28] [INFO] 
+[2025-12-27 14:55:48] [INFO] 
+[2025-12-27 14:55:48] [INFO] ========================================================
+[2025-12-27 14:55:48] [INFO]    LOCAL TEST - PostgreSQL CSV Import
+[2025-12-27 14:55:48] [INFO] ========================================================
+[2025-12-27 14:55:48] [INFO] 
+[2025-12-27 14:55:48] [INFO] Configuration:
+[2025-12-27 14:55:48] [INFO]   Database: postgres @ localhost
+[2025-12-27 14:55:48] [INFO]   Table: analytics_dev2.factvisitcallperformance_cr
+[2025-12-27 14:55:48] [INFO]   CSV File: test_sample.csv
+[2025-12-27 14:55:48] [INFO] 
+[2025-12-27 14:55:48] [DEBUG]   Added PostgreSQL bin to PATH: C:\Program Files\PostgreSQL\18\bin
+[2025-12-27 14:55:48] [SUCCESS] [OK] psql found
+[2025-12-27 14:55:48] [SUCCESS] [OK] CSV file found
+[2025-12-27 14:55:48] [INFO]   File size: 18.88 KB
+[2025-12-27 14:55:48] [INFO] 
+[2025-12-27 14:55:48] [INFO]   Rows to import: 20
+[2025-12-27 14:55:48] [INFO] 
+[2025-12-27 14:55:48] [INFO] Testing database connection...
+[2025-12-27 14:55:49] [SUCCESS] [OK] Database connection successful
+[2025-12-27 14:55:49] [INFO] 
+[2025-12-27 14:55:49] [INFO] Truncating table analytics_dev2.factvisitcallperformance_cr...
+[2025-12-27 14:55:49] [SUCCESS] [OK] Table truncated
+[2025-12-27 14:55:49] [INFO] 
+[2025-12-27 14:55:49] [INFO] Preprocessing CSV to handle NULL values...
+[2025-12-27 14:55:49] [INFO]   Processed 21 lines
+[2025-12-27 14:55:49] [INFO] Starting import...
+[2025-12-27 14:55:49] [DEBUG]   Command: \copy analytics_dev2.factvisitcallperformance_cr FROM 'C:\Users\ArunGupta\AppData\Local\Temp\tmp5kkcgl.csv' WITH (FORMAT csv, HEADER true, ENCODING 'UTF8')
+[2025-12-27 14:55:49] [INFO] 
+[2025-12-27 14:55:49] [INFO] 
+[2025-12-27 14:55:49] [INFO] ========================================================
+[2025-12-27 14:55:49] [ERROR]    FAILED!
+[2025-12-27 14:55:49] [INFO] ========================================================
+[2025-12-27 14:55:49] [ERROR] Error: ERROR:  invalid input syntax for type timestamp with time zone: "\N" CONTEXT:  COPY factvisitcallperformance_cr, line 12, column Call Out Time: "\N"
+[2025-12-27 14:55:49] [INFO] 
+[2025-12-27 14:58:19] [INFO] 
+[2025-12-27 14:58:19] [INFO] ========================================================
+[2025-12-27 14:58:19] [INFO]    LOCAL TEST - PostgreSQL CSV Import
+[2025-12-27 14:58:19] [INFO] ========================================================
+[2025-12-27 14:58:19] [INFO] 
+[2025-12-27 14:58:19] [INFO] Configuration:
+[2025-12-27 14:58:19] [INFO]   Database: postgres @ localhost
+[2025-12-27 14:58:19] [INFO]   Table: analytics_dev2.factvisitcallperformance_cr
+[2025-12-27 14:58:19] [INFO]   CSV File: test_sample.csv
+[2025-12-27 14:58:19] [INFO] 
+[2025-12-27 14:58:19] [DEBUG]   Added PostgreSQL bin to PATH: C:\Program Files\PostgreSQL\18\bin
+[2025-12-27 14:58:19] [SUCCESS] [OK] psql found
+[2025-12-27 14:58:19] [SUCCESS] [OK] CSV file found
+[2025-12-27 14:58:19] [INFO]   File size: 18.88 KB
+[2025-12-27 14:58:19] [INFO] 
+[2025-12-27 14:58:19] [INFO]   Rows to import: 20
+[2025-12-27 14:58:19] [INFO] 
+[2025-12-27 14:58:19] [INFO] Testing database connection...
+[2025-12-27 14:58:19] [SUCCESS] [OK] Database connection successful
+[2025-12-27 14:58:19] [INFO] 
+[2025-12-27 14:58:19] [INFO] Truncating table analytics_dev2.factvisitcallperformance_cr...
+[2025-12-27 14:58:19] [SUCCESS] [OK] Table truncated
+[2025-12-27 14:58:19] [INFO] 
+[2025-12-27 14:58:19] [INFO] Preprocessing CSV to handle NULL values...
+[2025-12-27 14:58:19] [INFO]   Processed 21 lines
+[2025-12-27 14:58:19] [INFO] Starting import...
+[2025-12-27 14:58:19] [DEBUG]   Command: \copy analytics_dev2.factvisitcallperformance_cr FROM 'C:\Users\ArunGupta\AppData\Local\Temp\tmp2pvgob.csv' WITH (FORMAT csv, HEADER true, ENCODING 'UTF8')
+[2025-12-27 14:58:19] [INFO] 
+[2025-12-27 14:58:20] [INFO] 
+[2025-12-27 14:58:20] [INFO] ========================================================
+[2025-12-27 14:58:20] [ERROR]    FAILED!
+[2025-12-27 14:58:20] [INFO] ========================================================
+[2025-12-27 14:58:20] [ERROR] Error: ERROR:  invalid input syntax for type timestamp with time zone: "" CONTEXT:  COPY factvisitcallperformance_cr, line 12, column Call Out Time: ""
+[2025-12-27 14:58:20] [INFO] 
+[2025-12-27 15:00:24] [INFO] 
+[2025-12-27 15:00:24] [INFO] ========================================================
+[2025-12-27 15:00:24] [INFO]    LOCAL TEST - PostgreSQL CSV Import
+[2025-12-27 15:00:24] [INFO] ========================================================
+[2025-12-27 15:00:24] [INFO] 
+[2025-12-27 15:00:24] [INFO] Configuration:
+[2025-12-27 15:00:24] [INFO]   Database: postgres @ localhost
+[2025-12-27 15:00:24] [INFO]   Table: analytics_dev2.factvisitcallperformance_cr
+[2025-12-27 15:00:24] [INFO]   CSV File: test_sample.csv
+[2025-12-27 15:00:24] [INFO] 
+[2025-12-27 15:00:24] [DEBUG]   Added PostgreSQL bin to PATH: C:\Program Files\PostgreSQL\18\bin
+[2025-12-27 15:00:24] [SUCCESS] [OK] psql found
+[2025-12-27 15:00:24] [SUCCESS] [OK] CSV file found
+[2025-12-27 15:00:24] [INFO]   File size: 18.88 KB
+[2025-12-27 15:00:24] [INFO] 
+[2025-12-27 15:00:24] [INFO]   Rows to import: 20
+[2025-12-27 15:00:24] [INFO] 
+[2025-12-27 15:00:24] [INFO] Testing database connection...
+[2025-12-27 15:00:24] [SUCCESS] [OK] Database connection successful
+[2025-12-27 15:00:24] [INFO] 
+[2025-12-27 15:00:25] [INFO] Truncating table analytics_dev2.factvisitcallperformance_cr...
+[2025-12-27 15:00:25] [SUCCESS] [OK] Table truncated
+[2025-12-27 15:00:25] [INFO] 
+[2025-12-27 15:00:25] [INFO] Preprocessing CSV to handle NULL values...
+[2025-12-27 15:00:25] [INFO]   Processed 21 lines, replaced NULL markers
+[2025-12-27 15:00:25] [INFO] Starting import...
+[2025-12-27 15:00:25] [DEBUG]   Command: \copy analytics_dev2.factvisitcallperformance_cr FROM 'C:\Users\ArunGupta\AppData\Local\Temp\tmpkf0lj4.csv' WITH (FORMAT csv, HEADER true, ENCODING 'UTF8')
+[2025-12-27 15:00:25] [INFO] 
+[2025-12-27 15:00:25] [INFO] 
+[2025-12-27 15:00:25] [INFO] ========================================================
+[2025-12-27 15:00:25] [SUCCESS]    SUCCESS!
+[2025-12-27 15:00:25] [INFO] ========================================================
+[2025-12-27 15:00:25] [SUCCESS] Rows imported: 20
+[2025-12-27 15:00:25] [SUCCESS] Duration: 0.12 seconds
+[2025-12-27 15:00:25] [INFO] 
+[2025-12-27 15:00:25] [INFO] Verifying import...
+[2025-12-27 15:00:25] [SUCCESS] Table row count: 20 
+[2025-12-27 15:00:25] [INFO] 
+[2025-12-27 15:00:25] [INFO] Sample data (first 3 rows):
+[2025-12-27 15:00:25] [INFO] 
+[2025-12-27 15:00:25] [SUCCESS] Test import completed successfully!
+[2025-12-27 15:00:25] [INFO] Log file: test-import-log.txt
