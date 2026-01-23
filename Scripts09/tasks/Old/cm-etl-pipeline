@@ -1,0 +1,1078 @@
+{
+  "Comment": "ETL Pipeline - Complete: Chunked Parallel Execution with Task 02_02 Finalization",
+  "StartAt": "ValidateConfig",
+  "States": {
+    "ValidateConfig": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Parameters": {
+        "action": "validate_config"
+      },
+      "ResultPath": "$.validateResult",
+      "TimeoutSeconds": 120,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "ConfigValidationFailed"
+        }
+      ],
+      "Next": "Task01Prepare"
+    },
+    "ConfigValidationFailed": {
+      "Type": "Fail",
+      "Error": "ConfigValidationError",
+      "Cause": "Configuration validation failed. Check environment variables and database connectivity."
+    },
+    "Task01Prepare": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Task 01: Prepare (Sync reminders, truncate temp)",
+      "Parameters": {
+        "action": "task_01_prepare"
+      },
+      "ResultPath": "$.task01Prepare",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task01PrepareFailed"
+        }
+      ],
+      "Next": "GetTask01Chunks"
+    },
+    "Task01PrepareFailed": {
+      "Type": "Fail",
+      "Error": "Task01PrepareError",
+      "Cause": "Task 01 prepare failed. Check CloudWatch logs for details."
+    },
+    "GetTask01Chunks": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Query database and create balanced chunks for Task 01 parallel processing",
+      "Parameters": {
+        "action": "get_task01_chunks"
+      },
+      "ResultPath": "$.task01_chunks",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "GetTask01ChunksFailed"
+        }
+      ],
+      "Next": "CheckIfTask01ChunksExist"
+    },
+    "GetTask01ChunksFailed": {
+      "Type": "Fail",
+      "Error": "GetTask01ChunksError",
+      "Cause": "Failed to generate chunks for Task 01. Check CloudWatch logs."
+    },
+    "CheckIfTask01ChunksExist": {
+      "Type": "Choice",
+      "Comment": "Check if there are any Task 01 chunks to process",
+      "Choices": [
+        {
+          "Variable": "$.task01_chunks.num_chunks",
+          "NumericGreaterThan": 0,
+          "Next": "ProcessTask01Chunks"
+        }
+      ],
+      "Default": "NoTask01ChunksToProcess"
+    },
+    "NoTask01ChunksToProcess": {
+      "Type": "Pass",
+      "Comment": "No Task 01 data to process",
+      "Next": "Task01Finalize"
+    },
+    "ProcessTask01Chunks": {
+      "Type": "Map",
+      "Comment": "Process Task 01 chunks in parallel",
+      "ItemsPath": "$.task01_chunks.chunk_ids",
+      "MaxConcurrency": 5,
+      "ResultSelector": {
+        "status": "completed"
+      },
+      "ResultPath": "$.task01_chunk_results",
+      "Parameters": {
+        "chunk_id.$": "$$.Map.Item.Value",
+        "min_id.$": "$.task01_chunks.min_id",
+        "max_id.$": "$.task01_chunks.max_id",
+        "target_ids_per_chunk.$": "$.task01_chunks.target_ids_per_chunk"
+      },
+      "Iterator": {
+        "StartAt": "ProcessSingleTask01Chunk",
+        "States": {
+          "ProcessSingleTask01Chunk": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+            "Comment": "Process individual Task 01 chunk - computes ID range from chunk_id and parameters",
+            "Parameters": {
+              "action": "process_task01_chunk",
+              "chunk_id.$": "$.chunk_id",
+              "min_id.$": "$.min_id",
+              "max_id.$": "$.max_id",
+              "target_ids_per_chunk.$": "$.target_ids_per_chunk"
+            },
+            "TimeoutSeconds": 900,
+            "Retry": [
+              {
+                "ErrorEquals": [
+                  "States.TaskFailed",
+                  "Lambda.ServiceException",
+                  "Lambda.AWSLambdaException",
+                  "Lambda.SdkClientException"
+                ],
+                "IntervalSeconds": 10,
+                "MaxAttempts": 2,
+                "BackoffRate": 2
+              }
+            ],
+            "Catch": [
+              {
+                "ErrorEquals": [
+                  "States.Timeout"
+                ],
+                "ResultPath": "$.error",
+                "Next": "Task01ChunkTimeout"
+              },
+              {
+                "ErrorEquals": [
+                  "States.ALL"
+                ],
+                "ResultPath": "$.error",
+                "Next": "Task01ChunkFailed"
+              }
+            ],
+            "End": true
+          },
+          "Task01ChunkTimeout": {
+            "Type": "Fail",
+            "Error": "Task01ChunkTimeoutError",
+            "Cause": "Individual Task 01 chunk processing exceeded 14-minute timeout. Checkpoint saved - pipeline can be resumed."
+          },
+          "Task01ChunkFailed": {
+            "Type": "Fail",
+            "Error": "Task01ChunkProcessingFailed",
+            "Cause": "Individual Task 01 chunk processing failed. Check CloudWatch logs for specific chunk_id."
+          }
+        }
+      },
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.task01_map_error",
+          "Next": "Task01ChunkedProcessingFailed"
+        }
+      ],
+      "Next": "Task01Finalize"
+    },
+    "Task01ChunkedProcessingFailed": {
+      "Type": "Fail",
+      "Error": "Task01ChunkedProcessingError",
+      "Cause": "One or more Task 01 chunks failed processing. Checkpoint saved - pipeline can be safely re-run to resume from last successful chunk."
+    },
+    "Task01Finalize": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Task 01: Finalize (Update settings)",
+      "Parameters": {
+        "action": "task_01_finalize"
+      },
+      "ResultPath": "$.task01Finalize",
+      "TimeoutSeconds": 300,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task01FinalizeFailed"
+        }
+      ],
+      "Next": "GetTask0200Chunks"
+    },
+    "Task01FinalizeFailed": {
+      "Type": "Fail",
+      "Error": "Task01FinalizeError",
+      "Cause": "Task 01 finalize failed. Check CloudWatch logs for details."
+    },
+    "GetTask0200Chunks": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Get all chunks for Task 02_00 - Update Conflicts from Snowflake (high-parallelism mode)",
+      "Parameters": {
+        "action": "get_task0200_chunks"
+      },
+      "ResultPath": "$.task0200_chunks",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "GetTask0200ChunksFailed"
+        }
+      ],
+      "Next": "CheckIfTask0200ChunksExist"
+    },
+    "GetTask0200ChunksFailed": {
+      "Type": "Fail",
+      "Error": "GetTask0200ChunksError",
+      "Cause": "Failed to generate chunks for Task 02_00. Check CloudWatch logs."
+    },
+    "CheckIfTask0200ChunksExist": {
+      "Type": "Choice",
+      "Comment": "Check if there are any Task 02_00 chunks to process",
+      "Choices": [
+        {
+          "Variable": "$.task0200_chunks.num_chunks",
+          "NumericGreaterThan": 0,
+          "Next": "ProcessAllTask0200Chunks"
+        }
+      ],
+      "Default": "NoTask0200ChunksToProcess"
+    },
+    "NoTask0200ChunksToProcess": {
+      "Type": "Pass",
+      "Comment": "No Task 02_00 data to process",
+      "Next": "GetTask0201Chunks"
+    },
+    "ProcessAllTask0200Chunks": {
+      "Type": "Map",
+      "Comment": "Process all Task 02_00 chunks in parallel (reduced concurrency to prevent DB OOM)",
+      "ItemsPath": "$.task0200_chunks.chunk_ids",
+      "MaxConcurrency": 10,
+      "ToleratedFailurePercentage": 20,
+      "ResultSelector": {
+        "status": "completed"
+      },
+      "ResultPath": "$.task0200_result",
+      "Parameters": {
+        "chunk_id.$": "$$.Map.Item.Value",
+        "run_id.$": "$.task0200_chunks.run_id"
+      },
+      "Iterator": {
+        "StartAt": "ProcessSingleTask0200Chunk",
+        "States": {
+          "ProcessSingleTask0200Chunk": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+            "Comment": "Process individual Task 02_00 chunk - loads keys from task0200_chunk_keys table using run_id",
+            "Parameters": {
+              "action": "process_task0200_chunk",
+              "chunk_id.$": "$.chunk_id",
+              "run_id.$": "$.run_id"
+            },
+            "TimeoutSeconds": 900,
+            "Retry": [
+              {
+                "ErrorEquals": [
+                  "States.TaskFailed",
+                  "Lambda.ServiceException",
+                  "Lambda.AWSLambdaException",
+                  "Lambda.SdkClientException"
+                ],
+                "IntervalSeconds": 10,
+                "MaxAttempts": 2,
+                "BackoffRate": 2
+              }
+            ],
+            "Catch": [
+              {
+                "ErrorEquals": [
+                  "States.Timeout"
+                ],
+                "ResultPath": "$.error",
+                "Next": "Task0200ChunkTimeout"
+              },
+              {
+                "ErrorEquals": [
+                  "States.ALL"
+                ],
+                "ResultPath": "$.error",
+                "Next": "Task0200ChunkFailed"
+              }
+            ],
+            "End": true
+          },
+          "Task0200ChunkTimeout": {
+            "Type": "Fail",
+            "Error": "Task0200ChunkTimeoutError",
+            "Cause": "Individual Task 02_00 chunk processing exceeded 15-minute timeout."
+          },
+          "Task0200ChunkFailed": {
+            "Type": "Fail",
+            "Error": "Task0200ChunkProcessingFailed",
+            "Cause": "Individual Task 02_00 chunk processing failed."
+          }
+        }
+      },
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.task0200_map_error",
+          "Next": "Task0200ChunkedProcessingFailed"
+        }
+      ],
+      "Next": "Task0200Complete"
+    },
+    "Task0200ChunkedProcessingFailed": {
+      "Type": "Fail",
+      "Error": "Task0200ChunkedProcessingError",
+      "Cause": "One or more Task 02_00 chunks failed processing."
+    },
+    "Task0200Complete": {
+      "Type": "Pass",
+      "Comment": "Task 02_00 processing completed",
+      "Next": "GetTask0201Chunks"
+    },
+    "GetTask0201Chunks": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Query database and create balanced chunks for Task 02_01 - InService Conflicts",
+      "Parameters": {
+        "action": "get_task0201_chunks"
+      },
+      "ResultPath": "$.task0201_chunks",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "GetTask0201ChunksFailed"
+        }
+      ],
+      "Next": "CheckIfTask0201ChunksExist"
+    },
+    "GetTask0201ChunksFailed": {
+      "Type": "Fail",
+      "Error": "GetTask0201ChunksError",
+      "Cause": "Failed to generate chunks for Task 02_01. Check CloudWatch logs."
+    },
+    "CheckIfTask0201ChunksExist": {
+      "Type": "Choice",
+      "Comment": "Check if there are any Task 02_01 chunks to process",
+      "Choices": [
+        {
+          "Variable": "$.task0201_chunks.num_chunks",
+          "NumericGreaterThan": 0,
+          "Next": "ProcessTask0201Chunks"
+        }
+      ],
+      "Default": "NoTask0201ChunksToProcess"
+    },
+    "NoTask0201ChunksToProcess": {
+      "Type": "Pass",
+      "Comment": "No Task 02_01 data to process - all rows already completed",
+      "Next": "Task0203Step1"
+    },
+    "ProcessTask0201Chunks": {
+      "Type": "Map",
+      "Comment": "Process Task 02_01 chunks in parallel with configurable concurrency",
+      "ItemsPath": "$.task0201_chunks.chunk_ids",
+      "MaxConcurrency": 50,
+      "ResultSelector": {
+        "status": "completed"
+      },
+      "ResultPath": "$.task0201_chunk_results",
+      "Parameters": {
+        "chunk_id.$": "$$.Map.Item.Value",
+        "run_id.$": "$.task0201_chunks.run_id"
+      },
+      "Iterator": {
+        "StartAt": "ProcessSingleTask0201Chunk",
+        "States": {
+          "ProcessSingleTask0201Chunk": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+            "Comment": "Process individual Task 02_01 chunk - loads keys from task0201_chunk_keys table using run_id",
+            "Parameters": {
+              "action": "process_task0201_chunk",
+              "chunk_id.$": "$.chunk_id",
+              "run_id.$": "$.run_id"
+            },
+            "TimeoutSeconds": 900,
+            "Retry": [
+              {
+                "ErrorEquals": [
+                  "States.TaskFailed",
+                  "Lambda.ServiceException",
+                  "Lambda.AWSLambdaException",
+                  "Lambda.SdkClientException"
+                ],
+                "IntervalSeconds": 10,
+                "MaxAttempts": 2,
+                "BackoffRate": 2
+              }
+            ],
+            "Catch": [
+              {
+                "ErrorEquals": [
+                  "States.Timeout"
+                ],
+                "ResultPath": "$.error",
+                "Next": "Task0201ChunkTimeout"
+              },
+              {
+                "ErrorEquals": [
+                  "States.ALL"
+                ],
+                "ResultPath": "$.error",
+                "Next": "Task0201ChunkFailed"
+              }
+            ],
+            "End": true
+          },
+          "Task0201ChunkTimeout": {
+            "Type": "Fail",
+            "Error": "Task0201ChunkTimeoutError",
+            "Cause": "Individual Task 02_01 chunk processing exceeded 15-minute timeout. Consider reducing chunk size."
+          },
+          "Task0201ChunkFailed": {
+            "Type": "Fail",
+            "Error": "Task0201ChunkProcessingFailed",
+            "Cause": "Individual Task 02_01 chunk processing failed. Check CloudWatch logs for specific chunk_id."
+          }
+        }
+      },
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.task0201_map_error",
+          "Next": "Task0201ChunkedProcessingFailed"
+        }
+      ],
+      "Next": "VerifyAllTask0201Chunks"
+    },
+    "Task0201ChunkedProcessingFailed": {
+      "Type": "Fail",
+      "Error": "Task0201ChunkedProcessingError",
+      "Cause": "One or more Task 02_01 chunks failed processing. Pipeline can be safely re-run (idempotent)."
+    },
+    "VerifyAllTask0201Chunks": {
+      "Type": "Pass",
+      "Comment": "All Task 02_01 chunks processed successfully",
+      "ResultPath": "$.task0201_verification",
+      "Next": "Task0203Step1"
+    },
+    "Task0203Step1": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Task 02_02 Step 1: Handle deleted visits",
+      "Parameters": {
+        "action": "task_0203_step1"
+      },
+      "ResultPath": "$.task0203_step1",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task0203Failed"
+        }
+      ],
+      "Next": "Task0203Step2a"
+    },
+    "Task0203Step2a": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Task 02_02 Step 2a: Update CONFLICTS based on IsMissed flags",
+      "Parameters": {
+        "action": "task_0203_step2a"
+      },
+      "ResultPath": "$.task0203_step2a",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task0203Failed"
+        }
+      ],
+      "Next": "GetTask0203Step2bChunks"
+    },
+    "GetTask0203Step2bChunks": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Generate date range chunks for parallel processing of Step 2B+2C",
+      "Parameters": {
+        "action": "get_task0203_step2b_chunks",
+        "chunk_size_days": 30
+      },
+      "ResultPath": "$.task0203_step2b_chunks",
+      "TimeoutSeconds": 120,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task0203Failed"
+        }
+      ],
+      "Next": "ProcessTask0203Step2bChunks"
+    },
+    "ProcessTask0203Step2bChunks": {
+      "Type": "Map",
+      "Comment": "Process Step 2B+2C in parallel by date range chunks (monthly)",
+      "ItemsPath": "$.task0203_step2b_chunks.chunks",
+      "MaxConcurrency": 10,
+      "ResultSelector": {
+        "status": "completed"
+      },
+      "ResultPath": "$.task0203_step2b_results",
+      "ItemSelector": {
+        "action": "process_task0203_step2b_chunk",
+        "chunk_id.$": "$$.Map.Item.Value.chunk_id",
+        "start_date.$": "$$.Map.Item.Value.start_date",
+        "end_date.$": "$$.Map.Item.Value.end_date"
+      },
+      "Iterator": {
+        "StartAt": "ProcessSingleStep2bChunk",
+        "States": {
+          "ProcessSingleStep2bChunk": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+            "Comment": "Process individual date range chunk for Step 2B+2C",
+            "Parameters": {
+              "action.$": "$.action",
+              "chunk_id.$": "$.chunk_id",
+              "start_date.$": "$.start_date",
+              "end_date.$": "$.end_date"
+            },
+            "TimeoutSeconds": 900,
+            "Retry": [
+              {
+                "ErrorEquals": [
+                  "States.TaskFailed",
+                  "Lambda.ServiceException",
+                  "Lambda.AWSLambdaException",
+                  "Lambda.SdkClientException"
+                ],
+                "IntervalSeconds": 10,
+                "MaxAttempts": 2,
+                "BackoffRate": 2
+              }
+            ],
+            "Catch": [
+              {
+                "ErrorEquals": [
+                  "States.Timeout"
+                ],
+                "ResultPath": "$.error",
+                "Next": "Step2bChunkTimeout"
+              },
+              {
+                "ErrorEquals": [
+                  "States.ALL"
+                ],
+                "ResultPath": "$.error",
+                "Next": "Step2bChunkFailed"
+              }
+            ],
+            "End": true
+          },
+          "Step2bChunkTimeout": {
+            "Type": "Fail",
+            "Error": "Step2bChunkTimeoutError",
+            "Cause": "Individual Step 2B chunk processing exceeded 15-minute timeout."
+          },
+          "Step2bChunkFailed": {
+            "Type": "Fail",
+            "Error": "Step2bChunkProcessingFailed",
+            "Cause": "Individual Step 2B chunk processing failed."
+          }
+        }
+      },
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.task0203_step2b_error",
+          "Next": "Task0203Failed"
+        }
+      ],
+      "Next": "Task0203Step3a"
+    },
+    "Task0203Step3a": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Task 02_02 Step 3A: Set UpdatedRFlag on CONFLICTS",
+      "Parameters": {
+        "action": "task_0203_step3a"
+      },
+      "ResultPath": "$.task0203_step3a",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task0203Failed"
+        }
+      ],
+      "Next": "Task0203Step3b"
+    },
+    "Task0203Step3b": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Task 02_02 Step 3B: Reopen CONFLICTS to 'U'",
+      "Parameters": {
+        "action": "task_0203_step3b"
+      },
+      "ResultPath": "$.task0203_step3b",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task0203Failed"
+        }
+      ],
+      "Next": "Task0203Step3c"
+    },
+    "Task0203Step3c": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Task 02_02 Step 3C: Resolve single-visit CVMs",
+      "Parameters": {
+        "action": "task_0203_step3c"
+      },
+      "ResultPath": "$.task0203_step3c",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task0203Failed"
+        }
+      ],
+      "Next": "Task0203Step3d"
+    },
+    "Task0203Step3d": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Task 02_02 Step 3D: Resolve single-visit CONFLICTS",
+      "Parameters": {
+        "action": "task_0203_step3d"
+      },
+      "ResultPath": "$.task0203_step3d",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task0203Failed"
+        }
+      ],
+      "Next": "Task0203Step3e"
+    },
+    "Task0203Step3e": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Task 02_02 Step 3E: Resolve all-resolved CVMs",
+      "Parameters": {
+        "action": "task_0203_step3e"
+      },
+      "ResultPath": "$.task0203_step3e",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task0203Failed"
+        }
+      ],
+      "Next": "Task0203Step3f"
+    },
+    "Task0203Step3f": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Task 02_02 Step 3F: Resolve all-or-most CVMs",
+      "Parameters": {
+        "action": "task_0203_step3f"
+      },
+      "ResultPath": "$.task0203_step3f",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task0203Failed"
+        }
+      ],
+      "Next": "Task0203Step3g"
+    },
+    "Task0203Step3g": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Task 02_02 Step 3G: Resolve all-resolved CONFLICTS",
+      "Parameters": {
+        "action": "task_0203_step3g"
+      },
+      "ResultPath": "$.task0203_step3g",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task0203Failed"
+        }
+      ],
+      "Next": "Task0203Step4"
+    },
+    "Task0203Step4": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Task 02_02 Step 4: Handle no-response cases",
+      "Parameters": {
+        "action": "task_0203_step4"
+      },
+      "ResultPath": "$.task0203_step4",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task0203Failed"
+        }
+      ],
+      "Next": "Task0203Step5"
+    },
+    "Task0203Step5": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Task 02_02 Step 5: Update calculated fields (time, billed rate)",
+      "Parameters": {
+        "action": "task_0203_step5"
+      },
+      "ResultPath": "$.task0203_step5",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task0203Failed"
+        }
+      ],
+      "Next": "Task0203Step6"
+    },
+    "Task0203Step6": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Task 02_02 Step 6: Refresh primary visit data from analytics",
+      "Parameters": {
+        "action": "task_0203_step6"
+      },
+      "ResultPath": "$.task0203_step6",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task0203Failed"
+        }
+      ],
+      "Next": "Task0203Step7"
+    },
+    "Task0203Step7": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:354073143602:function:cm-datacopy-test01",
+      "Comment": "Task 02_02 Step 7: Refresh conflict visit data from analytics",
+      "Parameters": {
+        "action": "task_0203_step7"
+      },
+      "ResultPath": "$.task0203_step7",
+      "TimeoutSeconds": 900,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Task0203Failed"
+        }
+      ],
+      "Next": "PipelineSuccess"
+    },
+    "Task0203Failed": {
+      "Type": "Fail",
+      "Error": "Task0203Error",
+      "Cause": "Task 02_02 (Finalize Conflicts) failed. Check CloudWatch logs for details."
+    },
+    "PipelineSuccess": {
+      "Type": "Succeed",
+      "Comment": "ETL Pipeline completed successfully with chunked parallel processing for Task 01, Task 02_00, Task 02_01, and Task 02_02 finalization"
+    }
+  }
+}

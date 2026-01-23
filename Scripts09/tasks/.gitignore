@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.pytest_cache/
+.coverage
+htmlcov/
+
+# AWS Lambda Build Artifacts
+deploy/build_code/
+deploy/build_layer_psycopg2/
+deploy/build_layer_common/
+deploy/*.zip
+
+# Logs
+logs/
+*.log

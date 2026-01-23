@@ -1,0 +1,51 @@
+TASK_01_COPY_DATA_FROM_CONFLICTVISITMAPS_TO_TEMP.sql
+corresponds to:
+task_01_step01_prepare.py
+task_01_step02_get_chunks.py
+task_01_step03_process_chunk.py
+which invoke following sql queries:
+task_01_step01_prepare.sql
+task_01_step03_process_chunk.sql
+
+TASK_02_UPDATE_DATA_CONFLICTVISITMAPS_0.sql
+corresponds to:
+task_02_00_step01_get_chunks.py
+task_02_00_step02_process_chunk.py
+which invoke following sql queries:
+task_02_00_update_conflicts_chunked.sql
+
+TASK_02_UPDATE_DATA_CONFLICTVISITMAPS_1.sql
+corresponds to:
+task_02_01_step01_get_chunks.py
+task_02_01_step02_process_chunk.py
+which invoke following sql queries:
+task_02_01_update_inservice_conflicts.sql
+task_02_01_update_inservice_conflicts_part1.sql
+task_02_01_update_inservice_conflicts_part2.sql
+
+TASK_02_UPDATE_DATA_CONFLICTVISITMAPS_3.sql
+corresponds to:
+task_02_03_finalize_conflicts.py
+which invoke following sql queries:
+task_02_03_step1_handle_deleted.sql
+task_02_03_step2a_status_resolution.sql
+task_02_03_step2b_chunked.sql
+task_02_03_step3_propagation.sql
+task_02_03_step3a_set_flag.sql
+task_02_03_step3b_reopen.sql
+task_02_03_step3c_single_cvm.sql
+task_02_03_step3d_single_conflict.sql
+task_02_03_step3e_all_cvm.sql
+task_02_03_step3f_most_cvm.sql
+task_02_03_step3g_all_conflict.sql
+task_02_03_step4_no_response.sql
+task_02_03_step5_calculated_fields.sql
+task_02_03_step6_refresh_primary.sql
+task_02_03_step7_refresh_conflict.sql
+
+TASK_03_INSERT_DATA_FROM_MAIN_TO_CONFLICTVISITMAPS_0.sql
+corresponds to:
+task_03_00_step01_get_chunks.py
+task_03_00_step02_process_chunk.py
+which invoke following sql queries:
+task_03_00_insert_conflicts_chunked.sql

@@ -1,0 +1,182 @@
+"""
+Postgres database connector.
+Handles connections and data operations for ConflictReport database.
+"""
+
+from __future__ import annotations
+from contextlib import contextmanager
+from typing import Optional, Dict, Any, TYPE_CHECKING
+import psycopg2
+from psycopg2 import sql
+from psycopg2.extras import execute_batch
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+class PostgresConnector:
+    """Manages connection to the Postgres database."""
+    
+    def __init__(self, host: str, port: int, database: str, 
+                 user: str, password: str, schema: Optional[str] = None):
+        """
+        Initialize Postgres connector.
+        
+        Args:
+            host: Database host
+            port: Database port
+            database: Database name
+            user: Username
+            password: Password
+            schema: Database schema
+        """
+        self.logger = get_logger(__name__)
+        self.config = {
+            'host': host,
+            'port': port,
+            'dbname': database,
+            'user': user,
+            'password': password
+        }
+        self.schema = schema
+        self.conn = None
+        
+        self.logger.info(
+            f"Postgres connector initialized for db '{database}'"
+        )
+        if self.schema:
+            self.logger.info(f"Default schema: '{self.schema}'")
+    
+    @contextmanager
+    def get_connection(self):
+        """
+        Context manager for Postgres connection.
+        
+        Args:
+            autocommit: If True, enable autocommit mode
+        """
+        try:
+            self.logger.debug("Opening Postgres connection")
+            self.conn = psycopg2.connect(**self.config)
+
+            # If a default schema is set, apply it for the session
+            if self.schema:
+                with self.conn.cursor() as cur:
+                    cur.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(self.schema)))
+
+            yield self.conn
+            self.conn.commit()
+            self.logger.debug("Transaction committed")
+
+        except Exception as e:
+            if self.conn:
+                self.conn.rollback()
+                self.logger.warning("Transaction rolled back due to error.")
+            self.logger.error(f"Postgres error: {str(e)}")
+            raise
+        finally:
+            if self.conn:
+                self.conn.close()
+                self.logger.debug("Postgres connection closed")
+    
+    def execute(self, query: str, 
+                params: Optional[Dict[str, Any]] = None) -> int:
+        """
+        Execute a query and return rows affected.
+        
+        Args:
+            query: SQL query
+            params: Optional parameters
+            
+        Returns:
+            Number of rows affected
+        """
+        # Avoid converting composed SQL using a live connection just for logging
+        if isinstance(query, sql.Composed):
+            self.logger.debug("Executing composed SQL (logging omitted)")
+        else:
+            self.logger.debug(f"Executing: {str(query)[:100]}...")
+        
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                if params:
+                    cursor.execute(query, params)
+                else:
+                    cursor.execute(query)
+                rowcount = cursor.rowcount
+                self.logger.info(f"Query affected {rowcount} rows")
+                return rowcount
+    
+    def truncate_table(self, table_name: str) -> None:
+        """
+        Truncate a table.
+        
+        Args:
+            table_name: Table to truncate
+        """
+        self.logger.info(f"Truncating {self.schema}.{table_name}")
+        
+        query = sql.SQL('TRUNCATE TABLE {}.{}').format(
+            sql.Identifier(self.schema),
+            sql.Identifier(table_name)
+        )
+        self.execute(query)
+    
+    def table_exists(self, table_name: str, schema: str) -> bool:
+        """
+        Check if table exists.
+        
+        Args:
+            table_name: Table name
+            
+        Returns:
+            True if table exists
+        """
+        query = """
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = %s
+                AND lower(table_name) = lower(%s)
+            )
+        """
+        
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(query, (schema, table_name))
+                return cursor.fetchone()[0]
+    
+    def get_row_count(self, table_name: str, schema: str) -> int:
+        """
+        Get row count of a table.
+        
+        Args:
+            table_name: Table name
+            
+        Returns:
+            Number of rows
+        """
+        query = f'SELECT COUNT(*) FROM "{schema}"."{table_name}"'
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(query)
+                return cursor.fetchone()[0]
+    
+    def test_connection(self) -> bool:
+        """
+        Test the Postgres connection.
+        
+        Returns:
+            True if connection successful
+        """
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+                cursor.close()
+                self.logger.info("Postgres connection successful")
+                return True
+        except Exception as e:
+            self.logger.error(f"Postgres connection failed: {str(e)}")
+            return False
+
