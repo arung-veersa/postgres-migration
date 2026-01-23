@@ -15,9 +15,9 @@ SET
     "ProviderName" = DP."Provider Name"
 FROM {analytics_schema}.dimprovider AS DP
 INNER JOIN {analytics_schema}.dimpayerprovider AS DPP 
-    ON DPP."Provider Id"::varchar = DP."Provider Id"::varchar
+    ON DPP."Provider Id" = DP."Provider Id"
 INNER JOIN {analytics_schema}.dimpayer AS DPA 
-    ON DPA."Payer Id"::varchar = DPP."Payer Id"::varchar
+    ON DPA."Payer Id" = DPP."Payer Id"
 WHERE 
     PPR."PayerID" = DPP."Payer Id"::uuid
     AND PPR."ProviderID" = DPP."Provider Id"::uuid;

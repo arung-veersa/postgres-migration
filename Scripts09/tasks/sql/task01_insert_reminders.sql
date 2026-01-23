@@ -29,9 +29,9 @@ SELECT DISTINCT
     CAST(NULL AS INTEGER) AS "NumberOfDays"
 FROM {analytics_schema}.dimprovider AS DP
 INNER JOIN {analytics_schema}.dimpayerprovider AS DPP 
-    ON DPP."Provider Id"::varchar = DP."Provider Id"::varchar
+    ON DPP."Provider Id" = DP."Provider Id"
 INNER JOIN {analytics_schema}.dimpayer AS DPA 
-    ON DPA."Payer Id"::varchar = DPP."Payer Id"::varchar
+    ON DPA."Payer Id" = DPP."Payer Id"
 WHERE NOT EXISTS (
     SELECT 1 
     FROM {conflict_schema}.payer_provider_reminders AS PPR_N 
