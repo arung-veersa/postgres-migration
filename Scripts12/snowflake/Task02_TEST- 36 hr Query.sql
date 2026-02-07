@@ -1,0 +1,1230 @@
+UPDATE 
+  CONFLICTREPORT_SANDBOX.PUBLIC.CONFLICTVISITMAPS AS CVM 
+SET 
+  CVM.CONFLICTID = ALLDATA.CONFLICTID, 
+  CVM.SSN = ALLDATA.SSN, 
+  CVM."ProviderID" = ALLDATA."ProviderID", 
+  CVM."AppProviderID" = ALLDATA."AppProviderID", 
+  CVM."ProviderName" = ALLDATA."ProviderName", 
+  CVM."VisitID" = ALLDATA."VisitID", 
+  CVM."AppVisitID" = ALLDATA."AppVisitID", 
+  CVM."ConProviderID" = ALLDATA."ConProviderID", 
+  CVM."ConAppProviderID" = ALLDATA."ConAppProviderID", 
+  CVM."ConProviderName" = ALLDATA."ConProviderName", 
+  CVM."ConVisitID" = ALLDATA."ConVisitID", 
+  CVM."ConAppVisitID" = ALLDATA."ConAppVisitID", 
+  CVM."VisitDate" = ALLDATA."VisitDate", 
+  CVM."SchStartTime" = ALLDATA."SchStartTime", 
+  CVM."SchEndTime" = ALLDATA."SchEndTime", 
+  CVM."ConSchStartTime" = ALLDATA."ConSchStartTime", 
+  CVM."ConSchEndTime" = ALLDATA."ConSchEndTime", 
+  CVM."VisitStartTime" = ALLDATA."VisitStartTime", 
+  CVM."VisitEndTime" = ALLDATA."VisitEndTime", 
+  CVM."ConVisitStartTime" = ALLDATA."ConVisitStartTime", 
+  CVM."ConVisitEndTime" = ALLDATA."ConVisitEndTime", 
+  CVM."EVVStartTime" = ALLDATA."EVVStartTime", 
+  CVM."EVVEndTime" = ALLDATA."EVVEndTime", 
+  CVM."ConEVVStartTime" = ALLDATA."ConEVVStartTime", 
+  CVM."ConEVVEndTime" = ALLDATA."ConEVVEndTime", 
+  CVM."CaregiverID" = ALLDATA."CaregiverID", 
+  CVM."AppCaregiverID" = ALLDATA."AppCaregiverID", 
+  CVM."AideCode" = ALLDATA."AideCode", 
+  CVM."AideName" = ALLDATA."AideName", 
+  CVM."AideSSN" = ALLDATA."AideSSN", 
+  CVM."ConCaregiverID" = ALLDATA."ConCaregiverID", 
+  CVM."ConAppCaregiverID" = ALLDATA."ConAppCaregiverID", 
+  CVM."ConAideCode" = ALLDATA."ConAideCode", 
+  CVM."ConAideName" = ALLDATA."ConAideName", 
+  CVM."ConAideSSN" = ALLDATA."ConAideSSN", 
+  CVM."OfficeID" = ALLDATA."OfficeID", 
+  CVM."AppOfficeID" = ALLDATA."AppOfficeID", 
+  CVM."Office" = ALLDATA."Office", 
+  CVM."ConOfficeID" = ALLDATA."ConOfficeID", 
+  CVM."ConAppOfficeID" = ALLDATA."ConAppOfficeID", 
+  CVM."ConOffice" = ALLDATA."ConOffice", 
+  CVM."PatientID" = ALLDATA."PatientID", 
+  CVM."AppPatientID" = ALLDATA."AppPatientID", 
+  CVM."PAdmissionID" = ALLDATA."PAdmissionID", 
+  CVM."PName" = ALLDATA."PName", 
+  CVM."PAddressID" = ALLDATA."PAddressID", 
+  CVM."PAppAddressID" = ALLDATA."PAppAddressID", 
+  CVM."PAddressL1" = ALLDATA."PAddressL1", 
+  CVM."PAddressL2" = ALLDATA."PAddressL2", 
+  CVM."PCity" = ALLDATA."PCity", 
+  CVM."PAddressState" = ALLDATA."PAddressState", 
+  CVM."PZipCode" = ALLDATA."PZipCode", 
+  CVM."PCounty" = ALLDATA."PCounty", 
+  CVM."PLongitude" = ALLDATA."PLongitude", 
+  CVM."PLatitude" = ALLDATA."PLatitude", 
+  CVM."ConPatientID" = ALLDATA."ConPatientID", 
+  CVM."ConAppPatientID" = ALLDATA."ConAppPatientID", 
+  CVM."ConPAdmissionID" = ALLDATA."ConPAdmissionID", 
+  CVM."ConPName" = ALLDATA."ConPName", 
+  CVM."ConPAddressID" = ALLDATA."ConPAddressID", 
+  CVM."ConPAppAddressID" = ALLDATA."ConPAppAddressID", 
+  CVM."ConPAddressL1" = ALLDATA."ConPAddressL1", 
+  CVM."ConPAddressL2" = ALLDATA."ConPAddressL2", 
+  CVM."ConPCity" = ALLDATA."ConPCity", 
+  CVM."ConPAddressState" = ALLDATA."ConPAddressState", 
+  CVM."ConPZipCode" = ALLDATA."ConPZipCode", 
+  CVM."ConPCounty" = ALLDATA."ConPCounty", 
+  CVM."ConPLongitude" = ALLDATA."ConPLongitude", 
+  CVM."ConPLatitude" = ALLDATA."ConPLatitude", 
+  CVM."PayerID" = ALLDATA."PayerID", 
+  CVM."AppPayerID" = ALLDATA."AppPayerID", 
+  CVM."Contract" = ALLDATA."Contract", 
+  CVM."ConPayerID" = ALLDATA."ConPayerID", 
+  CVM."ConAppPayerID" = ALLDATA."ConAppPayerID", 
+  CVM."ConContract" = ALLDATA."ConContract", 
+  CVM."BilledDate" = ALLDATA."BilledDate", 
+  CVM."ConBilledDate" = ALLDATA."ConBilledDate", 
+  CVM."BilledHours" = ALLDATA."BilledHours", 
+  CVM."ConBilledHours" = ALLDATA."ConBilledHours", 
+  CVM."Billed" = ALLDATA."Billed", 
+  CVM."ConBilled" = ALLDATA."ConBilled", 
+  CVM."MinuteDiffBetweenSch" = ALLDATA."MinuteDiffBetweenSch", 
+  CVM."DistanceMilesFromLatLng" = ALLDATA."DistanceMilesFromLatLng", 
+  CVM."AverageMilesPerHour" = ALLDATA."AverageMilesPerHour", 
+  CVM."ETATravleMinutes" = ALLDATA."ETATravleMinutes", 
+  CVM."ServiceCodeID" = ALLDATA."ServiceCodeID", 
+  CVM."AppServiceCodeID" = ALLDATA."AppServiceCodeID", 
+  CVM."RateType" = ALLDATA."RateType", 
+  CVM."ServiceCode" = ALLDATA."ServiceCode", 
+  CVM."ConServiceCodeID" = ALLDATA."ConServiceCodeID", 
+  CVM."ConAppServiceCodeID" = ALLDATA."ConAppServiceCodeID", 
+  CVM."ConRateType" = ALLDATA."ConRateType", 
+  CVM."ConServiceCode" = ALLDATA."ConServiceCode", 
+  CVM."UpdateFlag" = NULL, 
+  CVM."UpdatedDate" = CURRENT_TIMESTAMP(), 
+  CVM."StatusFlag" = CASE WHEN CVM."StatusFlag" NOT IN ('W', 'I') THEN 'U' ELSE CVM."StatusFlag" END, 
+  CVM."ResolveDate" = NULL, 
+  CVM."AideFName" = ALLDATA."AideFName", 
+  CVM."AideLName" = ALLDATA."AideLName", 
+  CVM."ConAideFName" = ALLDATA."ConAideFName", 
+  CVM."ConAideLName" = ALLDATA."ConAideLName", 
+  CVM."PFName" = ALLDATA."PFName", 
+  CVM."PLName" = ALLDATA."PLName", 
+  CVM."ConPFName" = ALLDATA."ConPFName", 
+  CVM."ConPLName" = ALLDATA."ConPLName", 
+  CVM."PMedicaidNumber" = ALLDATA."PMedicaidNumber", 
+  CVM."ConPMedicaidNumber" = ALLDATA."ConPMedicaidNumber", 
+  CVM."PayerState" = ALLDATA."PayerState", 
+  CVM."ConPayerState" = ALLDATA."ConPayerState", 
+  CVM."LastUpdatedBy" = ALLDATA."LastUpdatedBy", 
+  CVM."ConLastUpdatedBy" = ALLDATA."ConLastUpdatedBy", 
+  CVM."LastUpdatedDate" = ALLDATA."LastUpdatedDate", 
+  CVM."ConLastUpdatedDate" = ALLDATA."ConLastUpdatedDate", 
+  CVM."BilledRate" = ALLDATA."BilledRate", 
+  CVM."TotalBilledAmount" = ALLDATA."TotalBilledAmount", 
+  CVM."ConBilledRate" = ALLDATA."ConBilledRate", 
+  CVM."ConTotalBilledAmount" = ALLDATA."ConTotalBilledAmount", 
+  CVM."IsMissed" = ALLDATA."IsMissed", 
+  CVM."MissedVisitReason" = ALLDATA."MissedVisitReason", 
+  CVM."EVVType" = ALLDATA."EVVType", 
+  CVM."ConIsMissed" = ALLDATA."ConIsMissed", 
+  CVM."ConMissedVisitReason" = ALLDATA."ConMissedVisitReason", 
+  CVM."ConEVVType" = ALLDATA."ConEVVType", 
+  CVM."PStatus" = ALLDATA."PStatus", 
+  CVM."ConPStatus" = ALLDATA."ConPStatus", 
+  CVM."AideStatus" = ALLDATA."AideStatus", 
+  CVM."ConAideStatus" = ALLDATA."ConAideStatus", 
+  CVM."P_PatientID" = ALLDATA."P_PatientID", 
+  CVM."P_AppPatientID" = ALLDATA."P_AppPatientID", 
+  CVM."ConP_PatientID" = ALLDATA."ConP_PatientID", 
+  CVM."ConP_AppPatientID" = ALLDATA."ConP_AppPatientID", 
+  CVM."PA_PatientID" = ALLDATA."PA_PatientID", 
+  CVM."PA_AppPatientID" = ALLDATA."PA_AppPatientID", 
+  CVM."ConPA_PatientID" = ALLDATA."ConPA_PatientID", 
+  CVM."ConPA_AppPatientID" = ALLDATA."ConPA_AppPatientID", 
+  CVM."P_PAdmissionID" = ALLDATA."P_PAdmissionID", 
+  CVM."P_PName" = ALLDATA."P_PName", 
+  CVM."P_PAddressID" = ALLDATA."P_PAddressID", 
+  CVM."P_PAppAddressID" = ALLDATA."P_PAppAddressID", 
+  CVM."P_PAddressL1" = ALLDATA."P_PAddressL1", 
+  CVM."P_PAddressL2" = ALLDATA."P_PAddressL2", 
+  CVM."P_PCity" = ALLDATA."P_PCity", 
+  CVM."P_PAddressState" = ALLDATA."P_PAddressState", 
+  CVM."P_PZipCode" = ALLDATA."P_PZipCode", 
+  CVM."P_PCounty" = ALLDATA."P_PCounty", 
+  CVM."P_PFName" = ALLDATA."P_PFName", 
+  CVM."P_PLName" = ALLDATA."P_PLName", 
+  CVM."P_PMedicaidNumber" = ALLDATA."P_PMedicaidNumber", 
+  CVM."ConP_PAdmissionID" = ALLDATA."ConP_PAdmissionID", 
+  CVM."ConP_PName" = ALLDATA."ConP_PName", 
+  CVM."ConP_PAddressID" = ALLDATA."ConP_PAddressID", 
+  CVM."ConP_PAppAddressID" = ALLDATA."ConP_PAppAddressID", 
+  CVM."ConP_PAddressL1" = ALLDATA."ConP_PAddressL1", 
+  CVM."ConP_PAddressL2" = ALLDATA."ConP_PAddressL2", 
+  CVM."ConP_PCity" = ALLDATA."ConP_PCity", 
+  CVM."ConP_PAddressState" = ALLDATA."ConP_PAddressState", 
+  CVM."ConP_PZipCode" = ALLDATA."ConP_PZipCode", 
+  CVM."ConP_PCounty" = ALLDATA."ConP_PCounty", 
+  CVM."ConP_PFName" = ALLDATA."ConP_PFName", 
+  CVM."ConP_PLName" = ALLDATA."ConP_PLName", 
+  CVM."ConP_PMedicaidNumber" = ALLDATA."ConP_PMedicaidNumber", 
+  CVM."PA_PAdmissionID" = ALLDATA."PA_PAdmissionID", 
+  CVM."PA_PName" = ALLDATA."PA_PName", 
+  CVM."PA_PAddressID" = ALLDATA."PA_PAddressID", 
+  CVM."PA_PAppAddressID" = ALLDATA."PA_PAppAddressID", 
+  CVM."PA_PAddressL1" = ALLDATA."PA_PAddressL1", 
+  CVM."PA_PAddressL2" = ALLDATA."PA_PAddressL2", 
+  CVM."PA_PCity" = ALLDATA."PA_PCity", 
+  CVM."PA_PAddressState" = ALLDATA."PA_PAddressState", 
+  CVM."PA_PZipCode" = ALLDATA."PA_PZipCode", 
+  CVM."PA_PCounty" = ALLDATA."PA_PCounty", 
+  CVM."PA_PFName" = ALLDATA."PA_PFName", 
+  CVM."PA_PLName" = ALLDATA."PA_PLName", 
+  CVM."PA_PMedicaidNumber" = ALLDATA."PA_PMedicaidNumber", 
+  CVM."ConPA_PAdmissionID" = ALLDATA."ConPA_PAdmissionID", 
+  CVM."ConPA_PName" = ALLDATA."ConPA_PName", 
+  CVM."ConPA_PAddressID" = ALLDATA."ConPA_PAddressID", 
+  CVM."ConPA_PAppAddressID" = ALLDATA."ConPA_PAppAddressID", 
+  CVM."ConPA_PAddressL1" = ALLDATA."ConPA_PAddressL1", 
+  CVM."ConPA_PAddressL2" = ALLDATA."ConPA_PAddressL2", 
+  CVM."ConPA_PCity" = ALLDATA."ConPA_PCity", 
+  CVM."ConPA_PAddressState" = ALLDATA."ConPA_PAddressState", 
+  CVM."ConPA_PZipCode" = ALLDATA."ConPA_PZipCode", 
+  CVM."ConPA_PCounty" = ALLDATA."ConPA_PCounty", 
+  CVM."ConPA_PFName" = ALLDATA."ConPA_PFName", 
+  CVM."ConPA_PLName" = ALLDATA."ConPA_PLName", 
+  CVM."ConPA_PMedicaidNumber" = ALLDATA."ConPA_PMedicaidNumber", 
+  CVM."ContractType" = ALLDATA."ContractType", 
+  CVM."ConContractType" = ALLDATA."ConContractType", 
+  CVM."SameSchTimeFlag" = CASE WHEN CVM."SameSchTimeFlag" = 'N' THEN ALLDATA."SameSchTimeFlag" ELSE CVM."SameSchTimeFlag" END, 
+  CVM."SameVisitTimeFlag" = CASE WHEN CVM."SameVisitTimeFlag" = 'N' THEN ALLDATA."SameVisitTimeFlag" ELSE CVM."SameVisitTimeFlag" END, 
+  CVM."SchAndVisitTimeSameFlag" = CASE WHEN CVM."SchAndVisitTimeSameFlag" = 'N' THEN ALLDATA."SchVisitTimeSame" ELSE CVM."SchAndVisitTimeSameFlag" END, 
+  CVM."SchOverAnotherSchTimeFlag" = CASE WHEN CVM."SchOverAnotherSchTimeFlag" = 'N' THEN ALLDATA."SchOverAnotherSchTimeFlag" ELSE CVM."SchOverAnotherSchTimeFlag" END, 
+  CVM."VisitTimeOverAnotherVisitTimeFlag" = CASE WHEN CVM."VisitTimeOverAnotherVisitTimeFlag" = 'N' THEN ALLDATA."VisitTimeOverAnotherVisitTimeFlag" ELSE CVM."VisitTimeOverAnotherVisitTimeFlag" END, 
+  CVM."SchTimeOverVisitTimeFlag" = CASE WHEN CVM."SchTimeOverVisitTimeFlag" = 'N' THEN ALLDATA."SchTimeOverVisitTimeFlag" ELSE CVM."SchTimeOverVisitTimeFlag" END, 
+  CVM."DistanceFlag" = CASE WHEN CVM."DistanceFlag" = 'N' THEN ALLDATA."DistanceFlag" ELSE CVM."DistanceFlag" END, 
+  CVM."BillRateNonBilled" = ALLDATA."BillRateNonBilled", 
+  CVM."ConBillRateNonBilled" = ALLDATA."ConBillRateNonBilled", 
+  CVM."BillRateBoth" = ALLDATA."BillRateBoth", 
+  CVM."ConBillRateBoth" = ALLDATA."ConBillRateBoth", 
+  CVM."FederalTaxNumber" = ALLDATA."FederalTaxNumber", 
+  CVM."ConFederalTaxNumber" = ALLDATA."ConFederalTaxNumber" 
+FROM 
+  (
+    SELECT 
+      DISTINCT V1."CONFLICTID", 
+      V1."SSN", 
+      V1."ProviderID" AS "ProviderID", 
+      V1."AppProviderID" AS "AppProviderID", 
+      V1."ProviderName" AS "ProviderName", 
+      V1."VisitID" AS "VisitID", 
+      V1."AppVisitID" AS "AppVisitID", 
+      V2."ProviderID" AS "ConProviderID", 
+      V2."AppProviderID" AS "ConAppProviderID", 
+      V2."ProviderName" AS "ConProviderName", 
+      V2."VisitID" AS "ConVisitID", 
+      V2."AppVisitID" AS "ConAppVisitID", 
+      V1."VisitDate" AS "VisitDate", 
+      V1."SchStartTime" AS "SchStartTime", 
+      V1."SchEndTime" AS "SchEndTime", 
+      V2."SchStartTime" AS "ConSchStartTime", 
+      V2."SchEndTime" AS "ConSchEndTime", 
+      V1."VisitStartTime" AS "VisitStartTime", 
+      V1."VisitEndTime" AS "VisitEndTime", 
+      V2."VisitStartTime" AS "ConVisitStartTime", 
+      V2."VisitEndTime" AS "ConVisitEndTime", 
+      V1."EVVStartTime" AS "EVVStartTime", 
+      V1."EVVEndTime" AS "EVVEndTime", 
+      V2."EVVStartTime" AS "ConEVVStartTime", 
+      V2."EVVEndTime" AS "ConEVVEndTime", 
+      V1."CaregiverID" AS "CaregiverID", 
+      V1."AppCaregiverID" AS "AppCaregiverID", 
+      V1."AideCode" AS "AideCode", 
+      V1."AideName" AS "AideName", 
+      V1."AideSSN" AS "AideSSN", 
+      V2."CaregiverID" AS "ConCaregiverID", 
+      V2."AppCaregiverID" AS "ConAppCaregiverID", 
+      V2."AideCode" AS "ConAideCode", 
+      V2."AideName" AS "ConAideName", 
+      V2."AideSSN" AS "ConAideSSN", 
+      V1."OfficeID" AS "OfficeID", 
+      V1."AppOfficeID" AS "AppOfficeID", 
+      V1."Office" AS "Office", 
+      V2."OfficeID" AS "ConOfficeID", 
+      V2."AppOfficeID" AS "ConAppOfficeID", 
+      V2."Office" AS "ConOffice", 
+      V1."PatientID" AS "PatientID", 
+      V1."AppPatientID" AS "AppPatientID", 
+      V1."PAdmissionID" AS "PAdmissionID", 
+      V1."PName" AS "PName", 
+      V1."PAddressID" AS "PAddressID", 
+      V1."PAppAddressID" AS "PAppAddressID", 
+      V1."PAddressL1" AS "PAddressL1", 
+      V1."PAddressL2" AS "PAddressL2", 
+      V1."PCity" AS "PCity", 
+      V1."PAddressState" AS "PAddressState", 
+      V1."PZipCode" AS "PZipCode", 
+      V1."PCounty" AS "PCounty", 
+      V1."Longitude" AS "PLongitude", 
+      V1."Latitude" AS "PLatitude", 
+      V2."PatientID" AS "ConPatientID", 
+      V2."AppPatientID" AS "ConAppPatientID", 
+      V2."PAdmissionID" AS "ConPAdmissionID", 
+      V2."PName" AS "ConPName", 
+      V2."PAddressID" AS "ConPAddressID", 
+      V2."PAppAddressID" AS "ConPAppAddressID", 
+      V2."PAddressL1" AS "ConPAddressL1", 
+      V2."PAddressL2" AS "ConPAddressL2", 
+      V2."PCity" AS "ConPCity", 
+      V2."PAddressState" AS "ConPAddressState", 
+      V2."PZipCode" AS "ConPZipCode", 
+      V2."PCounty" AS "ConPCounty", 
+      V2."Longitude" AS "ConPLongitude", 
+      V2."Latitude" AS "ConPLatitude", 
+      V1."PayerID" AS "PayerID", 
+      V1."AppPayerID" AS "AppPayerID", 
+      V1."Contract" AS "Contract", 
+      V2."PayerID" AS "ConPayerID", 
+      V2."AppPayerID" AS "ConAppPayerID", 
+      V2."Contract" AS "ConContract", 
+      V1."BilledDate" AS "BilledDate", 
+      V2."BilledDate" AS "ConBilledDate", 
+      V1."BilledHours" AS "BilledHours", 
+      V2."BilledHours" AS "ConBilledHours", 
+      V1."Billed" AS "Billed", 
+      V2."Billed" AS "ConBilled", 
+      ABS(
+        DATEDIFF(
+          MINUTE, V1."VisitEndTime", V2."VisitStartTime"
+        )
+      ) AS "MinuteDiffBetweenSch", 
+      ROUND(
+        (
+          ST_DISTANCE(
+            ST_MAKEPOINT(V1."Longitude", V1."Latitude"), 
+            ST_MAKEPOINT(V2."Longitude", V2."Latitude")
+          ) / 1609
+        )* SETT."ExtraDistancePer", 
+        2
+      ) AS "DistanceMilesFromLatLng", 
+      MPH."AverageMilesPerHour", 
+      ROUND(
+        (
+          (
+            ROUND(
+              (
+                ST_DISTANCE(
+                  ST_MAKEPOINT(V1."Longitude", V1."Latitude"), 
+                  ST_MAKEPOINT(V2."Longitude", V2."Latitude")
+                ) / 1609
+              )* SETT."ExtraDistancePer"
+            )/ MPH."AverageMilesPerHour"
+          )* 60
+        ), 
+        2
+      ) AS "ETATravleMinutes", 
+      V1."ServiceCodeID" AS "ServiceCodeID", 
+      V1."AppServiceCodeID" AS "AppServiceCodeID", 
+      V1."RateType" AS "RateType", 
+      V1."ServiceCode" AS "ServiceCode", 
+      V2."ServiceCodeID" AS "ConServiceCodeID", 
+      V2."AppServiceCodeID" AS "ConAppServiceCodeID", 
+      V2."RateType" AS "ConRateType", 
+      V2."ServiceCode" AS "ConServiceCode", 
+      CASE WHEN V1."ProviderID" != V2."ProviderID" 
+      AND V1."VisitStartTime" IS NULL 
+      AND V1."VisitEndTime" IS NULL 
+      AND V2."VisitStartTime" IS NULL 
+      AND V2."VisitEndTime" IS NULL 
+      AND CONCAT(
+        V1."SchStartTime", '~', V1."SchEndTime"
+      ) = CONCAT(
+        V2."SchStartTime", '~', V2."SchEndTime"
+      ) THEN 'Y' ELSE 'N' END AS "SameSchTimeFlag", 
+      CASE WHEN V1."ProviderID" != V2."ProviderID" 
+      AND V1."VisitStartTime" IS NOT NULL 
+      AND V1."VisitEndTime" IS NOT NULL 
+      AND V2."VisitStartTime" IS NOT NULL 
+      AND V2."VisitEndTime" IS NOT NULL 
+      AND CONCAT(
+        V1."VisitStartTime", '~', V1."VisitEndTime"
+      ) = CONCAT(
+        V2."VisitStartTime", '~', V2."VisitEndTime"
+      ) THEN 'Y' ELSE 'N' END AS "SameVisitTimeFlag", 
+      CASE WHEN V1."ProviderID" != V2."ProviderID" 
+      AND V1."VisitStartTime" IS NULL 
+      AND V1."VisitEndTime" IS NULL 
+      AND V2."VisitStartTime" IS NOT NULL 
+      AND V2."VisitEndTime" IS NOT NULL 
+      AND CONCAT(
+        V1."SchStartTime", '~', V1."SchEndTime"
+      ) = CONCAT(
+        V2."VisitStartTime", '~', V2."VisitEndTime"
+      ) THEN 'Y' ELSE 'N' END AS "SchVisitTimeSame", 
+      CASE WHEN V1."ProviderID" != V2."ProviderID" 
+      AND V1."VisitStartTime" IS NULL 
+      AND V1."VisitEndTime" IS NULL 
+      AND V2."VisitStartTime" IS NULL 
+      AND V2."VisitEndTime" IS NULL 
+      AND (
+        V1."SchStartTime" < V2."SchEndTime" 
+        AND V1."SchEndTime" > V2."SchStartTime"
+      ) 
+      AND CONCAT(
+        V1."SchStartTime", '~', V1."SchEndTime"
+      ) != CONCAT(
+        V2."SchStartTime", '~', V2."SchEndTime"
+      ) THEN 'Y' ELSE 'N' END AS "SchOverAnotherSchTimeFlag", 
+      CASE WHEN V1."ProviderID" != V2."ProviderID" 
+      AND V1."VisitStartTime" IS NOT NULL 
+      AND V1."VisitEndTime" IS NOT NULL 
+      AND V2."VisitStartTime" IS NOT NULL 
+      AND V2."VisitEndTime" IS NOT NULL 
+      AND (
+        V1."VisitStartTime" < V2."VisitEndTime" 
+        AND V1."VisitEndTime" > V2."VisitStartTime"
+      ) 
+      AND CONCAT(
+        V1."VisitStartTime", '~', V1."VisitEndTime"
+      ) != CONCAT(
+        V2."VisitStartTime", '~', V2."VisitEndTime"
+      ) THEN 'Y' ELSE 'N' END AS "VisitTimeOverAnotherVisitTimeFlag", 
+      CASE WHEN V1."ProviderID" != V2."ProviderID" 
+      AND V1."VisitStartTime" IS NULL 
+      AND V1."VisitEndTime" IS NULL 
+      AND V2."VisitStartTime" IS NOT NULL 
+      AND V2."VisitEndTime" IS NOT NULL 
+      AND (
+        V1."SchStartTime" < V2."VisitEndTime" 
+        AND V1."SchEndTime" > V2."VisitStartTime"
+      ) 
+      AND CONCAT(
+        V1."SchStartTime", '~', V1."SchEndTime"
+      ) != CONCAT(
+        V2."VisitStartTime", '~', V2."VisitEndTime"
+      ) THEN 'Y' ELSE 'N' END AS "SchTimeOverVisitTimeFlag", 
+      CASE WHEN V1."ProviderID" != V2."ProviderID" 
+      AND V1."Longitude" IS NOT NULL 
+      AND V1."Latitude" IS NOT NULL 
+      AND V2."Longitude" IS NOT NULL 
+      AND V2."Latitude" IS NOT NULL 
+      AND V1."VisitStartTime" IS NOT NULL 
+      AND V1."VisitEndTime" IS NOT NULL 
+      AND V2."VisitStartTime" IS NOT NULL 
+      AND V2."VisitEndTime" IS NOT NULL 
+      AND (
+        (
+          V1."PZipCode" IS NOT NULL 
+          AND V2."PZipCode" IS NOT NULL 
+          AND V1."PZipCode" != V2."PZipCode"
+        ) 
+        OR (
+          V1."PZipCode" IS NULL 
+          OR V2."PZipCode" IS NULL
+        )
+      ) 
+      AND MPH."AverageMilesPerHour" IS NOT NULL 
+      AND ABS(
+        DATEDIFF(
+          MINUTE, V1."VisitEndTime", V2."VisitStartTime"
+        )
+      ) >= 0 
+      AND (
+        ROUND(
+          (
+            (
+              ROUND(
+                (
+                  ST_DISTANCE(
+                    ST_MAKEPOINT(V1."Longitude", V1."Latitude"), 
+                    ST_MAKEPOINT(V2."Longitude", V2."Latitude")
+                  ) / 1609
+                )* SETT."ExtraDistancePer"
+              )/ MPH."AverageMilesPerHour"
+            )* 60
+          ), 
+          2
+        ) > ABS(
+          DATEDIFF(
+            MINUTE, V1."VisitEndTime", V2."VisitStartTime"
+          )
+        )
+      ) THEN 'Y' ELSE 'N' END AS "DistanceFlag", 
+      V1."AideFName" AS "AideFName", 
+      V1."AideLName" AS "AideLName", 
+      V2."AideFName" AS "ConAideFName", 
+      V2."AideLName" AS "ConAideLName", 
+      V1."PFName" AS "PFName", 
+      V1."PLName" AS "PLName", 
+      V2."PFName" AS "ConPFName", 
+      V2."PLName" AS "ConPLName", 
+      V1."PMedicaidNumber" AS "PMedicaidNumber", 
+      V2."PMedicaidNumber" AS "ConPMedicaidNumber", 
+      V1."PayerState" AS "PayerState", 
+      V2."PayerState" AS "ConPayerState", 
+      V1."AgencyContact" AS "AgencyContact", 
+      V2."AgencyContact" AS "ConAgencyContact", 
+      V1."AgencyPhone" AS "AgencyPhone", 
+      V2."AgencyPhone" AS "ConAgencyPhone", 
+      V1."LastUpdatedBy" AS "LastUpdatedBy", 
+      V2."LastUpdatedBy" AS "ConLastUpdatedBy", 
+      V1."LastUpdatedDate" AS "LastUpdatedDate", 
+      V2."LastUpdatedDate" AS "ConLastUpdatedDate", 
+      V1."BilledRate" AS "BilledRate", 
+      V1."TotalBilledAmount" AS "TotalBilledAmount", 
+      V2."BilledRate" AS "ConBilledRate", 
+      V2."TotalBilledAmount" AS "ConTotalBilledAmount", 
+      V1."IsMissed" AS "IsMissed", 
+      V1."MissedVisitReason" AS "MissedVisitReason", 
+      V1."EVVType" AS "EVVType", 
+      V2."IsMissed" AS "ConIsMissed", 
+      V2."MissedVisitReason" AS "ConMissedVisitReason", 
+      V2."EVVType" AS "ConEVVType", 
+      V1."PStatus" AS "PStatus", 
+      V2."PStatus" AS "ConPStatus", 
+      V1."AideStatus" AS "AideStatus", 
+      V2."AideStatus" AS "ConAideStatus", 
+      V1."P_PatientID" AS "P_PatientID", 
+      V1."P_AppPatientID" AS "P_AppPatientID", 
+      V2."P_PatientID" AS "ConP_PatientID", 
+      V2."P_AppPatientID" AS "ConP_AppPatientID", 
+      V1."PA_PatientID" AS "PA_PatientID", 
+      V1."PA_AppPatientID" AS "PA_AppPatientID", 
+      V2."PA_PatientID" AS "ConPA_PatientID", 
+      V2."PA_AppPatientID" AS "ConPA_AppPatientID", 
+      V1."P_PAdmissionID" AS "P_PAdmissionID", 
+      V1."P_PName" AS "P_PName", 
+      V1."P_PAddressID" AS "P_PAddressID", 
+      V1."P_PAppAddressID" AS "P_PAppAddressID", 
+      V1."P_PAddressL1" AS "P_PAddressL1", 
+      V1."P_PAddressL2" AS "P_PAddressL2", 
+      V1."P_PCity" AS "P_PCity", 
+      V1."P_PAddressState" AS "P_PAddressState", 
+      V1."P_PZipCode" AS "P_PZipCode", 
+      V1."P_PCounty" AS "P_PCounty", 
+      V1."P_PFName" AS "P_PFName", 
+      V1."P_PLName" AS "P_PLName", 
+      V1."P_PMedicaidNumber" AS "P_PMedicaidNumber", 
+      V2."P_PAdmissionID" AS "ConP_PAdmissionID", 
+      V2."P_PName" AS "ConP_PName", 
+      V2."P_PAddressID" AS "ConP_PAddressID", 
+      V2."P_PAppAddressID" AS "ConP_PAppAddressID", 
+      V2."P_PAddressL1" AS "ConP_PAddressL1", 
+      V2."P_PAddressL2" AS "ConP_PAddressL2", 
+      V2."P_PCity" AS "ConP_PCity", 
+      V2."P_PAddressState" AS "ConP_PAddressState", 
+      V2."P_PZipCode" AS "ConP_PZipCode", 
+      V2."P_PCounty" AS "ConP_PCounty", 
+      V2."P_PFName" AS "ConP_PFName", 
+      V2."P_PLName" AS "ConP_PLName", 
+      V2."P_PMedicaidNumber" AS "ConP_PMedicaidNumber", 
+      V1."PA_PAdmissionID" AS "PA_PAdmissionID", 
+      V1."PA_PName" AS "PA_PName", 
+      V1."PA_PAddressID" AS "PA_PAddressID", 
+      V1."PA_PAppAddressID" AS "PA_PAppAddressID", 
+      V1."PA_PAddressL1" AS "PA_PAddressL1", 
+      V1."PA_PAddressL2" AS "PA_PAddressL2", 
+      V1."PA_PCity" AS "PA_PCity", 
+      V1."PA_PAddressState" AS "PA_PAddressState", 
+      V1."PA_PZipCode" AS "PA_PZipCode", 
+      V1."PA_PCounty" AS "PA_PCounty", 
+      V1."PA_PFName" AS "PA_PFName", 
+      V1."PA_PLName" AS "PA_PLName", 
+      V1."PA_PMedicaidNumber" AS "PA_PMedicaidNumber", 
+      V2."PA_PAdmissionID" AS "ConPA_PAdmissionID", 
+      V2."PA_PName" AS "ConPA_PName", 
+      V2."PA_PAddressID" AS "ConPA_PAddressID", 
+      V2."PA_PAppAddressID" AS "ConPA_PAppAddressID", 
+      V2."PA_PAddressL1" AS "ConPA_PAddressL1", 
+      V2."PA_PAddressL2" AS "ConPA_PAddressL2", 
+      V2."PA_PCity" AS "ConPA_PCity", 
+      V2."PA_PAddressState" AS "ConPA_PAddressState", 
+      V2."PA_PZipCode" AS "ConPA_PZipCode", 
+      V2."PA_PCounty" AS "ConPA_PCounty", 
+      V2."PA_PFName" AS "ConPA_PFName", 
+      V2."PA_PLName" AS "ConPA_PLName", 
+      V2."PA_PMedicaidNumber" AS "ConPA_PMedicaidNumber", 
+      V1."ContractType" AS "ContractType", 
+      V2."ContractType" AS "ConContractType", 
+      V1."P_PStatus" AS "P_PStatus", 
+      V2."P_PStatus" AS "ConP_PStatus", 
+      V1."PA_PStatus" AS "PA_PStatus", 
+      V2."PA_PStatus" AS "ConPA_PStatus", 
+      V1."BillRateNonBilled" AS "BillRateNonBilled", 
+      V2."BillRateNonBilled" AS "ConBillRateNonBilled", 
+      V1."BillRateBoth" AS "BillRateBoth", 
+      V2."BillRateBoth" AS "ConBillRateBoth", 
+      V1."FederalTaxNumber" AS "FederalTaxNumber", 
+      V2."FederalTaxNumber" AS "ConFederalTaxNumber" 
+    FROM 
+      (
+        SELECT 
+          DISTINCT CVM1."CONFLICTID" AS "CONFLICTID", 
+          CR1."Bill Rate Non-Billed" AS "BillRateNonBilled", 
+          CASE WHEN CR1."Billed" = 'yes' THEN CR1."Billed Rate" ELSE CR1."Bill Rate Non-Billed" END AS "BillRateBoth", 
+          TRIM(CAR."SSN") AS "SSN", 
+          CAST(NULL AS STRING) "PStatus", 
+          CAR."Status" AS "AideStatus", 
+          CR1."Missed Visit Reason" AS "MissedVisitReason", 
+          CR1."Is Missed" AS "IsMissed", 
+          CR1."Call Out Device Type" AS "EVVType", 
+          CR1."Billed Rate" AS "BilledRate", 
+          CR1."Total Billed Amount" AS "TotalBilledAmount", 
+          CR1."Provider Id" AS "ProviderID", 
+          CR1."Application Provider Id" AS "AppProviderID", 
+          DPR."Provider Name" AS "ProviderName", 
+          CAST(NULL AS STRING) "AgencyContact", 
+          DPR."Phone Number 1" AS "AgencyPhone", 
+          DPR."Federal Tax Number" AS "FederalTaxNumber", 
+          CR1."Visit Id" AS "VisitID", 
+          CR1."Application Visit Id" AS "AppVisitID", 
+          DATE(CR1."Visit Date") AS "VisitDate", 
+          CAST(
+            CR1."Scheduled Start Time" AS timestamp
+          ) AS "SchStartTime", 
+          CAST(
+            CR1."Scheduled End Time" AS timestamp
+          ) AS "SchEndTime", 
+          CAST(
+            CR1."Visit Start Time" AS timestamp
+          ) AS "VisitStartTime", 
+          CAST(
+            CR1."Visit End Time" AS timestamp
+          ) AS "VisitEndTime", 
+          CAST(CR1."Call In Time" AS timestamp) AS "EVVStartTime", 
+          CAST(CR1."Call Out Time" AS timestamp) AS "EVVEndTime", 
+          CR1."Caregiver Id" AS "CaregiverID", 
+          CR1."Application Caregiver Id" AS "AppCaregiverID", 
+          CAR."Caregiver Code" AS "AideCode", 
+          CAR."Caregiver Fullname" AS "AideName", 
+          CAR."Caregiver Firstname" AS "AideFName", 
+          CAR."Caregiver Lastname" AS "AideLName", 
+          TRIM(CAR."SSN") AS "AideSSN", 
+          CR1."Office Id" AS "OfficeID", 
+          CR1."Application Office Id" AS "AppOfficeID", 
+          DOF."Office Name" AS "Office", 
+          CR1."Payer Patient Id" AS "PA_PatientID", 
+          CR1."Application Payer Patient Id" AS "PA_AppPatientID", 
+          CR1."Provider Patient Id" AS "P_PatientID", 
+          CR1."Application Provider Patient Id" AS "P_AppPatientID", 
+          CR1."Patient Id" AS "PatientID", 
+          CR1."Application Patient Id" AS "AppPatientID", 
+          CAST(NULL AS STRING) "PAdmissionID", 
+          CAST(NULL AS STRING) "PName", 
+          CAST(NULL AS STRING) "PFName", 
+          CAST(NULL AS STRING) "PLName", 
+          CAST(NULL AS STRING) "PMedicaidNumber", 
+          CAST(NULL AS STRING) "PAddressID", 
+          CAST(NULL AS STRING) "PAppAddressID", 
+          CAST(NULL AS STRING) "PAddressL1", 
+          CAST(NULL AS STRING) "PAddressL2", 
+          CAST(NULL AS STRING) "PCity", 
+          CAST(NULL AS STRING) "PAddressState", 
+          CAST(NULL AS STRING) "PZipCode", 
+          CAST(NULL AS STRING) "PCounty", 
+          CASE WHEN CR1."Call Out GPS Coordinates" IS NOT NULL 
+          AND CR1."Call Out GPS Coordinates" != ',' THEN REPLACE(
+            SPLIT(
+              CR1."Call Out GPS Coordinates", 
+              ','
+            ) [1], 
+            '"', 
+            CAST(NULL AS NUMBER)
+          ) WHEN CR1."Call In GPS Coordinates" IS NOT NULL 
+          AND CR1."Call In GPS Coordinates" != ',' THEN REPLACE(
+            SPLIT(
+              CR1."Call In GPS Coordinates", ','
+            ) [1], 
+            '"', 
+            CAST(NULL AS NUMBER)
+          ) ELSE DPAD_P."Provider_Longitude" END AS "Longitude", 
+          CASE WHEN CR1."Call Out GPS Coordinates" IS NOT NULL 
+          AND CR1."Call Out GPS Coordinates" != ',' THEN REPLACE(
+            SPLIT(
+              CR1."Call Out GPS Coordinates", 
+              ','
+            ) [0], 
+            '"', 
+            CAST(NULL AS NUMBER)
+          ) WHEN CR1."Call In GPS Coordinates" IS NOT NULL 
+          AND CR1."Call In GPS Coordinates" != ',' THEN REPLACE(
+            SPLIT(
+              CR1."Call In GPS Coordinates", ','
+            ) [0], 
+            '"', 
+            CAST(NULL AS NUMBER)
+          ) ELSE DPAD_P."Provider_Latitude" END AS "Latitude", 
+          CR1."Payer Id" AS "PayerID", 
+          CR1."Application Payer Id" AS "AppPayerID", 
+          COALESCE(
+            SPA."Payer Name", DCON."Contract Name"
+          ) AS "Contract", 
+          SPA."Payer State" AS "PayerState", 
+          CAST(CR1."Invoice Date" AS timestamp) AS "BilledDate", 
+          CR1."Billed Hours" AS "BilledHours", 
+          CR1."Billed" AS "Billed", 
+          DSC."Service Code Id" AS "ServiceCodeID", 
+          DSC."Application Service Code Id" AS "AppServiceCodeID", 
+          CR1."Bill Type" AS "RateType", 
+          DSC."Service Code" AS "ServiceCode", 
+          CAST(
+            CR1."Visit Updated Timestamp" AS timestamp
+          ) AS "LastUpdatedDate", 
+          DUSR."User Fullname" AS "LastUpdatedBy", 
+          DPA_P."Admission Id" AS "P_PAdmissionID", 
+          DPA_P."Patient Name" AS "P_PName", 
+          DPA_P."Patient Firstname" AS "P_PFName", 
+          DPA_P."Patient Lastname" AS "P_PLName", 
+          DPA_P."Medicaid Number" AS "P_PMedicaidNumber", 
+          DPA_P."Status" AS "P_PStatus", 
+          DPAD_P."Patient Address Id" AS "P_PAddressID", 
+          DPAD_P."Application Patient Address Id" AS "P_PAppAddressID", 
+          DPAD_P."Address Line 1" AS "P_PAddressL1", 
+          DPAD_P."Address Line 2" AS "P_PAddressL2", 
+          DPAD_P."City" AS "P_PCity", 
+          DPAD_P."Address State" AS "P_PAddressState", 
+          DPAD_P."Zip Code" AS "P_PZipCode", 
+          DPAD_P."County" AS "P_PCounty", 
+          DPA_PA."Admission Id" AS "PA_PAdmissionID", 
+          DPA_PA."Patient Name" AS "PA_PName", 
+          DPA_PA."Patient Firstname" AS "PA_PFName", 
+          DPA_PA."Patient Lastname" AS "PA_PLName", 
+          DPA_PA."Medicaid Number" AS "PA_PMedicaidNumber", 
+          DPA_PA."Status" AS "PA_PStatus", 
+          DPAD_PA."Patient Address Id" AS "PA_PAddressID", 
+          DPAD_PA."Application Patient Address Id" AS "PA_PAppAddressID", 
+          DPAD_PA."Address Line 1" AS "PA_PAddressL1", 
+          DPAD_PA."Address Line 2" AS "PA_PAddressL2", 
+          DPAD_PA."City" AS "PA_PCity", 
+          DPAD_PA."Address State" AS "PA_PAddressState", 
+          DPAD_PA."Zip Code" AS "PA_PZipCode", 
+          DPAD_PA."County" AS "PA_PCounty", 
+          CASE WHEN (
+            CR1."Application Payer Id" = '0' 
+            AND CR1."Application Contract Id" != '0'
+          ) THEN 'Internal' WHEN (
+            CR1."Application Payer Id" != '0' 
+            AND CR1."Application Contract Id" != '0'
+          ) THEN 'UPR' WHEN (
+            CR1."Application Payer Id" != '0' 
+            AND CR1."Application Contract Id" = '0'
+          ) THEN 'Payer' END AS "ContractType" 
+        FROM 
+          ANALYTICS_SANDBOX.BI.FACTVISITCALLPERFORMANCE_CR AS CR1 
+          INNER JOIN ANALYTICS_SANDBOX.BI.DIMCAREGIVER AS CAR ON CAR."Caregiver Id" = CR1."Caregiver Id" 
+          AND TRIM(CAR."SSN") IS NOT NULL 
+          AND TRIM(CAR."SSN")!= '' 
+          LEFT JOIN ANALYTICS_SANDBOX.BI.DIMOFFICE AS DOF ON DOF."Office Id" = CR1."Office Id" 
+          AND DOF."Is Active" = TRUE 
+          LEFT JOIN ANALYTICS_SANDBOX.BI.DIMPATIENT AS DPA_P ON DPA_P."Patient Id" = CR1."Provider Patient Id" 
+          LEFT JOIN (
+            SELECT 
+              DDD."Patient Address Id", 
+              DDD."Application Patient Address Id", 
+              DDD."Address Line 1", 
+              DDD."Address Line 2", 
+              DDD."City", 
+              DDD."Address State", 
+              DDD."Zip Code", 
+              DDD."County", 
+              DDD."Patient Id", 
+              DDD."Application Patient Id", 
+              DDD."Longitude" AS "Provider_Longitude", 
+              DDD."Latitude" AS "Provider_Latitude", 
+              ROW_NUMBER() OVER (
+                PARTITION BY DDD."Patient Id" 
+                ORDER BY 
+                  DDD."Application Created UTC Timestamp" DESC
+              ) AS rn 
+            FROM 
+              ANALYTICS_SANDBOX.BI.DIMPATIENTADDRESS AS DDD 
+            WHERE 
+              DDD."Primary Address" = TRUE 
+              AND DDD."Address Type" LIKE '%GPS%'
+          ) AS DPAD_P ON DPAD_P."Patient Id" = DPA_P."Patient Id" 
+          AND DPAD_P."RN" = 1 
+          LEFT JOIN ANALYTICS_SANDBOX.BI.DIMPATIENT AS DPA_PA ON DPA_PA."Patient Id" = CR1."Payer Patient Id" 
+          LEFT JOIN (
+            SELECT 
+              DDD."Patient Address Id", 
+              DDD."Application Patient Address Id", 
+              DDD."Address Line 1", 
+              DDD."Address Line 2", 
+              DDD."City", 
+              DDD."Address State", 
+              DDD."Zip Code", 
+              DDD."County", 
+              DDD."Patient Id", 
+              DDD."Application Patient Id", 
+              ROW_NUMBER() OVER (
+                PARTITION BY DDD."Patient Id" 
+                ORDER BY 
+                  DDD."Application Created UTC Timestamp" DESC
+              ) AS rn 
+            FROM 
+              ANALYTICS_SANDBOX.BI.DIMPATIENTADDRESS AS DDD 
+            WHERE 
+              DDD."Primary Address" = TRUE 
+              AND DDD."Address Type" LIKE '%GPS%'
+          ) AS DPAD_PA ON DPAD_PA."Patient Id" = DPA_PA."Patient Id" 
+          AND DPAD_PA."RN" = 1 
+          LEFT JOIN ANALYTICS_SANDBOX.BI.DIMPAYER AS SPA ON SPA."Payer Id" = CR1."Payer Id" 
+          AND SPA."Is Active" = TRUE 
+          AND SPA."Is Demo" = FALSE 
+          LEFT JOIN ANALYTICS_SANDBOX.BI.DIMCONTRACT AS DCON ON DCON."Contract Id" = CR1."Contract Id" 
+          AND DCON."Is Active" = TRUE 
+          INNER JOIN ANALYTICS_SANDBOX.BI.DIMPROVIDER AS DPR ON DPR."Provider Id" = CR1."Provider Id" 
+          AND DPR."Is Active" = TRUE 
+          AND DPR."Is Demo" = FALSE 
+          LEFT JOIN CONFLICTREPORT_SANDBOX.PUBLIC.CONFLICTVISITMAPS AS CVM1 ON CVM1."VisitID" = CR1."Visit Id" 
+          AND CVM1."AppVisitID" = CR1."Application Visit Id" 
+          AND CVM1."CONFLICTID" IS NOT NULL 
+          LEFT JOIN ANALYTICS_SANDBOX.BI.DIMSERVICECODE AS DSC ON DSC."Service Code Id" = CR1."Service Code Id" 
+          LEFT JOIN ANALYTICS_SANDBOX.BI.DIMUSER AS DUSR ON DUSR."User Id" = CR1."Visit Updated User Id" 
+        WHERE 
+          DATE(CR1."Visit Date") BETWEEN DATE(
+            DATEADD(
+              YEAR, 
+              -2, 
+              GETDATE()
+            )
+          ) 
+          AND DATE(
+            DATEADD(
+              DAY, 
+              45, 
+              GETDATE()
+            )
+          ) 
+          AND CR1."Visit Updated Timestamp" >= DATEADD(HOUR, -36, GETDATE()) 
+          AND CR1."Provider Id" NOT IN (
+            SELECT 
+              "ProviderID" AS PAID 
+            FROM 
+              CONFLICTREPORT_SANDBOX.PUBLIC.EXCLUDED_AGENCY
+          ) 
+          AND NOT EXISTS (
+            SELECT 
+              1 
+            FROM 
+              CONFLICTREPORT_SANDBOX.PUBLIC.EXCLUDED_SSN AS SSN 
+            WHERE 
+              TRIM(CAR."SSN") = SSN.SSN
+          )
+      ) AS V1 
+      LEFT JOIN (
+        SELECT 
+          DISTINCT CAST(NULL AS NUMBER) "CONFLICTID", 
+          CR1."Bill Rate Non-Billed" AS "BillRateNonBilled", 
+          CASE WHEN CR1."Billed" = 'yes' THEN CR1."Billed Rate" ELSE CR1."Bill Rate Non-Billed" END AS "BillRateBoth", 
+          TRIM(CAR."SSN") AS "SSN", 
+          CAST(NULL AS STRING) "PStatus", 
+          CAR."Status" AS "AideStatus", 
+          CR1."Missed Visit Reason" AS "MissedVisitReason", 
+          CR1."Is Missed" AS "IsMissed", 
+          CR1."Call Out Device Type" AS "EVVType", 
+          CR1."Billed Rate" AS "BilledRate", 
+          CR1."Total Billed Amount" AS "TotalBilledAmount", 
+          CR1."Provider Id" AS "ProviderID", 
+          CR1."Application Provider Id" AS "AppProviderID", 
+          DPR."Provider Name" AS "ProviderName", 
+          CAST(NULL AS STRING) "AgencyContact", 
+          DPR."Phone Number 1" AS "AgencyPhone", 
+          DPR."Federal Tax Number" AS "FederalTaxNumber", 
+          CR1."Visit Id" AS "VisitID", 
+          CR1."Application Visit Id" AS "AppVisitID", 
+          DATE(CR1."Visit Date") AS "VisitDate", 
+          CAST(
+            CR1."Scheduled Start Time" AS timestamp
+          ) AS "SchStartTime", 
+          CAST(
+            CR1."Scheduled End Time" AS timestamp
+          ) AS "SchEndTime", 
+          CAST(
+            CR1."Visit Start Time" AS timestamp
+          ) AS "VisitStartTime", 
+          CAST(
+            CR1."Visit End Time" AS timestamp
+          ) AS "VisitEndTime", 
+          CAST(CR1."Call In Time" AS timestamp) AS "EVVStartTime", 
+          CAST(CR1."Call Out Time" AS timestamp) AS "EVVEndTime", 
+          CR1."Caregiver Id" AS "CaregiverID", 
+          CR1."Application Caregiver Id" AS "AppCaregiverID", 
+          CAR."Caregiver Code" AS "AideCode", 
+          CAR."Caregiver Fullname" AS "AideName", 
+          CAR."Caregiver Firstname" AS "AideFName", 
+          CAR."Caregiver Lastname" AS "AideLName", 
+          TRIM(CAR."SSN") AS "AideSSN", 
+          CR1."Office Id" AS "OfficeID", 
+          CR1."Application Office Id" AS "AppOfficeID", 
+          DOF."Office Name" AS "Office", 
+          CR1."Payer Patient Id" AS "PA_PatientID", 
+          CR1."Application Payer Patient Id" AS "PA_AppPatientID", 
+          CR1."Provider Patient Id" AS "P_PatientID", 
+          CR1."Application Provider Patient Id" AS "P_AppPatientID", 
+          CR1."Patient Id" AS "PatientID", 
+          CR1."Application Patient Id" AS "AppPatientID", 
+          CAST(NULL AS STRING) "PAdmissionID", 
+          CAST(NULL AS STRING) "PName", 
+          CAST(NULL AS STRING) "PFName", 
+          CAST(NULL AS STRING) "PLName", 
+          CAST(NULL AS STRING) "PMedicaidNumber", 
+          CAST(NULL AS STRING) "PAddressID", 
+          CAST(NULL AS STRING) "PAppAddressID", 
+          CAST(NULL AS STRING) "PAddressL1", 
+          CAST(NULL AS STRING) "PAddressL2", 
+          CAST(NULL AS STRING) "PCity", 
+          CAST(NULL AS STRING) "PAddressState", 
+          CAST(NULL AS STRING) "PZipCode", 
+          CAST(NULL AS STRING) "PCounty", 
+          CASE WHEN CR1."Call In GPS Coordinates" IS NOT NULL 
+          AND CR1."Call In GPS Coordinates" != ',' THEN REPLACE(
+            SPLIT(
+              CR1."Call In GPS Coordinates", ','
+            ) [1], 
+            '"', 
+            CAST(NULL AS NUMBER)
+          ) WHEN CR1."Call Out GPS Coordinates" IS NOT NULL 
+          AND CR1."Call Out GPS Coordinates" != ',' THEN REPLACE(
+            SPLIT(
+              CR1."Call Out GPS Coordinates", 
+              ','
+            ) [1], 
+            '"', 
+            CAST(NULL AS NUMBER)
+          ) ELSE DPAD_P."Provider_Longitude" END AS "Longitude", 
+          CASE WHEN CR1."Call In GPS Coordinates" IS NOT NULL 
+          AND CR1."Call In GPS Coordinates" != ',' THEN REPLACE(
+            SPLIT(
+              CR1."Call In GPS Coordinates", ','
+            ) [0], 
+            '"', 
+            CAST(NULL AS NUMBER)
+          ) WHEN CR1."Call Out GPS Coordinates" IS NOT NULL 
+          AND CR1."Call Out GPS Coordinates" != ',' THEN REPLACE(
+            SPLIT(
+              CR1."Call Out GPS Coordinates", 
+              ','
+            ) [0], 
+            '"', 
+            CAST(NULL AS NUMBER)
+          ) ELSE DPAD_P."Provider_Latitude" END AS "Latitude", 
+          CR1."Payer Id" AS "PayerID", 
+          CR1."Application Payer Id" AS "AppPayerID", 
+          COALESCE(
+            SPA."Payer Name", DCON."Contract Name"
+          ) AS "Contract", 
+          SPA."Payer State" AS "PayerState", 
+          CAST(CR1."Invoice Date" AS timestamp) AS "BilledDate", 
+          CR1."Billed Hours" AS "BilledHours", 
+          CR1."Billed" AS "Billed", 
+          DSC."Service Code Id" AS "ServiceCodeID", 
+          DSC."Application Service Code Id" AS "AppServiceCodeID", 
+          CR1."Bill Type" AS "RateType", 
+          DSC."Service Code" AS "ServiceCode", 
+          CAST(
+            CR1."Visit Updated Timestamp" AS timestamp
+          ) AS "LastUpdatedDate", 
+          DUSR."User Fullname" AS "LastUpdatedBy", 
+          DPA_P."Admission Id" AS "P_PAdmissionID", 
+          DPA_P."Patient Name" AS "P_PName", 
+          DPA_P."Patient Firstname" AS "P_PFName", 
+          DPA_P."Patient Lastname" AS "P_PLName", 
+          DPA_P."Medicaid Number" AS "P_PMedicaidNumber", 
+          DPA_P."Status" AS "P_PStatus", 
+          DPAD_P."Patient Address Id" AS "P_PAddressID", 
+          DPAD_P."Application Patient Address Id" AS "P_PAppAddressID", 
+          DPAD_P."Address Line 1" AS "P_PAddressL1", 
+          DPAD_P."Address Line 2" AS "P_PAddressL2", 
+          DPAD_P."City" AS "P_PCity", 
+          DPAD_P."Address State" AS "P_PAddressState", 
+          DPAD_P."Zip Code" AS "P_PZipCode", 
+          DPAD_P."County" AS "P_PCounty", 
+          DPA_PA."Admission Id" AS "PA_PAdmissionID", 
+          DPA_PA."Patient Name" AS "PA_PName", 
+          DPA_PA."Patient Firstname" AS "PA_PFName", 
+          DPA_PA."Patient Lastname" AS "PA_PLName", 
+          DPA_PA."Medicaid Number" AS "PA_PMedicaidNumber", 
+          DPA_PA."Status" AS "PA_PStatus", 
+          DPAD_PA."Patient Address Id" AS "PA_PAddressID", 
+          DPAD_PA."Application Patient Address Id" AS "PA_PAppAddressID", 
+          DPAD_PA."Address Line 1" AS "PA_PAddressL1", 
+          DPAD_PA."Address Line 2" AS "PA_PAddressL2", 
+          DPAD_PA."City" AS "PA_PCity", 
+          DPAD_PA."Address State" AS "PA_PAddressState", 
+          DPAD_PA."Zip Code" AS "PA_PZipCode", 
+          DPAD_PA."County" AS "PA_PCounty", 
+          CASE WHEN (
+            CR1."Application Payer Id" = '0' 
+            AND CR1."Application Contract Id" != '0'
+          ) THEN 'Internal' WHEN (
+            CR1."Application Payer Id" != '0' 
+            AND CR1."Application Contract Id" != '0'
+          ) THEN 'UPR' WHEN (
+            CR1."Application Payer Id" != '0' 
+            AND CR1."Application Contract Id" = '0'
+          ) THEN 'Payer' END AS "ContractType" 
+        FROM 
+          ANALYTICS_SANDBOX.BI.FACTVISITCALLPERFORMANCE_CR AS CR1 
+          INNER JOIN ANALYTICS_SANDBOX.BI.DIMCAREGIVER AS CAR ON CAR."Caregiver Id" = CR1."Caregiver Id" 
+          AND TRIM(CAR."SSN") IS NOT NULL 
+          AND TRIM(CAR."SSN")!= '' 
+          LEFT JOIN ANALYTICS_SANDBOX.BI.DIMOFFICE AS DOF ON DOF."Office Id" = CR1."Office Id" 
+          AND DOF."Is Active" = TRUE 
+          LEFT JOIN ANALYTICS_SANDBOX.BI.DIMPATIENT AS DPA_P ON DPA_P."Patient Id" = CR1."Provider Patient Id" 
+          LEFT JOIN (
+            SELECT 
+              DDD."Patient Address Id", 
+              DDD."Application Patient Address Id", 
+              DDD."Address Line 1", 
+              DDD."Address Line 2", 
+              DDD."City", 
+              DDD."Address State", 
+              DDD."Zip Code", 
+              DDD."County", 
+              DDD."Patient Id", 
+              DDD."Application Patient Id", 
+              DDD."Longitude" AS "Provider_Longitude", 
+              DDD."Latitude" AS "Provider_Latitude", 
+              ROW_NUMBER() OVER (
+                PARTITION BY DDD."Patient Id" 
+                ORDER BY 
+                  DDD."Application Created UTC Timestamp" DESC
+              ) AS rn 
+            FROM 
+              ANALYTICS_SANDBOX.BI.DIMPATIENTADDRESS AS DDD 
+            WHERE 
+              DDD."Primary Address" = TRUE 
+              AND DDD."Address Type" LIKE '%GPS%'
+          ) AS DPAD_P ON DPAD_P."Patient Id" = DPA_P."Patient Id" 
+          AND DPAD_P."RN" = 1 
+          LEFT JOIN ANALYTICS_SANDBOX.BI.DIMPATIENT AS DPA_PA ON DPA_PA."Patient Id" = CR1."Payer Patient Id" 
+          LEFT JOIN (
+            SELECT 
+              DDD."Patient Address Id", 
+              DDD."Application Patient Address Id", 
+              DDD."Address Line 1", 
+              DDD."Address Line 2", 
+              DDD."City", 
+              DDD."Address State", 
+              DDD."Zip Code", 
+              DDD."County", 
+              DDD."Patient Id", 
+              DDD."Application Patient Id", 
+              ROW_NUMBER() OVER (
+                PARTITION BY DDD."Patient Id" 
+                ORDER BY 
+                  DDD."Application Created UTC Timestamp" DESC
+              ) AS rn 
+            FROM 
+              ANALYTICS_SANDBOX.BI.DIMPATIENTADDRESS AS DDD 
+            WHERE 
+              DDD."Primary Address" = TRUE 
+              AND DDD."Address Type" LIKE '%GPS%'
+          ) AS DPAD_PA ON DPAD_PA."Patient Id" = DPA_PA."Patient Id" 
+          AND DPAD_PA."RN" = 1 
+          LEFT JOIN ANALYTICS_SANDBOX.BI.DIMPAYER AS SPA ON SPA."Payer Id" = CR1."Payer Id" 
+          AND SPA."Is Active" = TRUE 
+          AND SPA."Is Demo" = FALSE 
+          LEFT JOIN ANALYTICS_SANDBOX.BI.DIMCONTRACT AS DCON ON DCON."Contract Id" = CR1."Contract Id" 
+          AND DCON."Is Active" = TRUE 
+          INNER JOIN ANALYTICS_SANDBOX.BI.DIMPROVIDER AS DPR ON DPR."Provider Id" = CR1."Provider Id" 
+          AND DPR."Is Active" = TRUE 
+          AND DPR."Is Demo" = FALSE 
+          LEFT JOIN ANALYTICS_SANDBOX.BI.DIMSERVICECODE AS DSC ON DSC."Service Code Id" = CR1."Service Code Id" 
+          LEFT JOIN ANALYTICS_SANDBOX.BI.DIMUSER AS DUSR ON DUSR."User Id" = CR1."Visit Updated User Id" 
+        WHERE 
+          DATE(CR1."Visit Date") BETWEEN DATE(
+            DATEADD(
+              YEAR, 
+              -2, 
+              GETDATE()
+            )
+          ) 
+          AND DATE(
+            DATEADD(
+              DAY, 
+              45, 
+              GETDATE()
+            )
+          ) 
+          AND CR1."Visit Updated Timestamp" >= DATEADD(HOUR, -36, GETDATE()) 
+          AND CR1."Provider Id" NOT IN (
+            SELECT 
+              "ProviderID" AS PAID 
+            FROM 
+              CONFLICTREPORT_SANDBOX.PUBLIC.EXCLUDED_AGENCY
+          ) 
+          AND NOT EXISTS (
+            SELECT 
+              1 
+            FROM 
+              CONFLICTREPORT_SANDBOX.PUBLIC.EXCLUDED_SSN AS SSN 
+            WHERE 
+              TRIM(CAR."SSN") = SSN.SSN
+          )
+      ) AS V2 ON V1."VisitDate" = V2."VisitDate" 
+      AND V1."VisitID" != V2."VisitID" 
+      AND V1.SSN = V2.SSN 
+      AND V1."ProviderID" != V2."ProviderID" CROSS 
+      JOIN CONFLICTREPORT_SANDBOX.PUBLIC."SETTINGS" AS SETT 
+      LEFT JOIN CONFLICTREPORT_SANDBOX.PUBLIC.MPH AS MPH ON ROUND(
+        (
+          ST_DISTANCE(
+            ST_MAKEPOINT(V1."Longitude", V1."Latitude"), 
+            ST_MAKEPOINT(V2."Longitude", V2."Latitude")
+          ) / 1609
+        )* SETT."ExtraDistancePer", 
+        2
+      ) BETWEEN MPH."From" 
+      AND MPH."To" 
+    WHERE 
+      (
+        --SameSchTimeFlag  RULE 1
+        (
+          V1."VisitStartTime" IS NULL 
+          AND V1."VisitEndTime" IS NULL 
+          AND V2."VisitStartTime" IS NULL 
+          AND V2."VisitEndTime" IS NULL 
+          AND CONCAT(
+            V1."SchStartTime", '~', V1."SchEndTime"
+          ) = CONCAT(
+            V2."SchStartTime", '~', V2."SchEndTime"
+          )
+        ) 
+        OR --SameVisitTimeFlag Rule 2
+        (
+          V1."VisitStartTime" IS NOT NULL 
+          AND V1."VisitEndTime" IS NOT NULL 
+          AND V2."VisitStartTime" IS NOT NULL 
+          AND V2."VisitEndTime" IS NOT NULL 
+          AND CONCAT(
+            V1."VisitStartTime", '~', V1."VisitEndTime"
+          ) = CONCAT(
+            V2."VisitStartTime", '~', V2."VisitEndTime"
+          )
+        ) 
+        OR -- SchVisitTimeSame Rule 3
+        (
+          V1."VisitStartTime" IS NULL 
+          AND V1."VisitEndTime" IS NULL 
+          AND V2."VisitStartTime" IS NOT NULL 
+          AND V2."VisitEndTime" IS NOT NULL 
+          AND CONCAT(
+            V1."SchStartTime", '~', V1."SchEndTime"
+          ) = CONCAT(
+            V2."VisitStartTime", '~', V2."VisitEndTime"
+          )
+        ) 
+        OR --SchOverAnotherSchTimeFlag    Rule 4
+        (
+          V1."VisitStartTime" IS NULL 
+          AND V1."VisitEndTime" IS NULL 
+          AND V2."VisitStartTime" IS NULL 
+          AND V2."VisitEndTime" IS NULL 
+          AND (
+            V1."SchStartTime" < V2."SchEndTime" 
+            AND V1."SchEndTime" > V2."SchStartTime"
+          ) 
+          AND CONCAT(
+            V1."SchStartTime", '~', V1."SchEndTime"
+          ) != CONCAT(
+            V2."SchStartTime", '~', V2."SchEndTime"
+          )
+        ) 
+        OR --VisitTimeOverAnotherVisitTimeFlag    Rule 5
+        (
+          V1."VisitStartTime" IS NOT NULL 
+          AND V1."VisitEndTime" IS NOT NULL 
+          AND V2."VisitStartTime" IS NOT NULL 
+          AND V2."VisitEndTime" IS NOT NULL 
+          AND (
+            V1."VisitStartTime" < V2."VisitEndTime" 
+            AND V1."VisitEndTime" > V2."VisitStartTime"
+          ) 
+          AND CONCAT(
+            V1."VisitStartTime", '~', V1."VisitEndTime"
+          ) != CONCAT(
+            V2."VisitStartTime", '~', V2."VisitEndTime"
+          )
+        ) 
+        OR --SchTimeOverVisitTimeFlag    Rule 6
+        (
+          V1."VisitStartTime" IS NULL 
+          AND V1."VisitEndTime" IS NULL 
+          AND V2."VisitStartTime" IS NOT NULL 
+          AND V2."VisitEndTime" IS NOT NULL 
+          AND (
+            V1."SchStartTime" < V2."VisitEndTime" 
+            AND V1."SchEndTime" > V2."VisitStartTime"
+          ) 
+          AND CONCAT(
+            V1."SchStartTime", '~', V1."SchEndTime"
+          ) != CONCAT(
+            V2."VisitStartTime", '~', V2."VisitEndTime"
+          )
+        ) 
+        OR --DistanceFlag Rule 7
+        (
+          V1."Longitude" IS NOT NULL 
+          AND V1."Latitude" IS NOT NULL 
+          AND V2."Longitude" IS NOT NULL 
+          AND V2."Latitude" IS NOT NULL 
+          AND V1."VisitStartTime" IS NOT NULL 
+          AND V1."VisitEndTime" IS NOT NULL 
+          AND V2."VisitStartTime" IS NOT NULL 
+          AND V2."VisitEndTime" IS NOT NULL 
+          AND (
+            (
+              V1."PZipCode" IS NOT NULL 
+              AND V2."PZipCode" IS NOT NULL 
+              AND V1."PZipCode" != V2."PZipCode"
+            ) 
+            OR (
+              V1."PZipCode" IS NULL 
+              OR V2."PZipCode" IS NULL
+            )
+          ) 
+          AND MPH."AverageMilesPerHour" IS NOT NULL 
+          AND ABS(
+            DATEDIFF(
+              MINUTE, V1."VisitEndTime", V2."VisitStartTime"
+            )
+          ) >= 0 
+          AND (
+            ROUND(
+              (
+                (
+                  ROUND(
+                    (
+                      ST_DISTANCE(
+                        ST_MAKEPOINT(V1."Longitude", V1."Latitude"), 
+                        ST_MAKEPOINT(V2."Longitude", V2."Latitude")
+                      ) / 1609
+                    )* SETT."ExtraDistancePer"
+                  )/ MPH."AverageMilesPerHour"
+                )* 60
+              ), 
+              2
+            ) > ABS(
+              DATEDIFF(
+                MINUTE, V1."VisitEndTime", V2."VisitStartTime"
+              )
+            )
+          )
+        )
+      )
+  ) AS ALLDATA 
+WHERE 
+  (
+    CVM."VisitID" = ALLDATA."VisitID" 
+    AND CVM."ConVisitID" = ALLDATA."ConVisitID"
+  ) 
+  OR (
+    CVM."VisitID" = ALLDATA."VisitID" 
+    AND CVM."ConVisitID" IS NULL 
+    AND ALLDATA."ConVisitID" IS NULL
+  ) 
+  AND CVM."InserviceStartDate" IS NULL 
+  AND CVM."InserviceEndDate" IS NULL 
+  AND CVM."PTOStartDate" IS NULL 
+  AND CVM."PTOEndDate" IS NULL 
+  AND CVM."ConInserviceStartDate" IS NULL 
+  AND CVM."ConInserviceEndDate" IS NULL 
+  AND CVM."ConPTOStartDate" IS NULL 
+  AND CVM."ConPTOEndDate" IS NULL 
+  AND CVM."UpdateFlag" = 1;

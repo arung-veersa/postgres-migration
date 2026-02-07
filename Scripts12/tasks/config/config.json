@@ -1,0 +1,33 @@
+{
+  "snowflake": {
+    "account": "${SNOWFLAKE_ACCOUNT}",
+    "user": "${SNOWFLAKE_USER}",
+    "warehouse": "${SNOWFLAKE_WAREHOUSE}",
+    "rsa_key": "${SNOWFLAKE_PRIVATE_KEY}",
+    "analytics_database": "ANALYTICS",
+    "analytics_schema": "BI"
+  },
+  "postgres": {
+    "host": "${POSTGRES_HOST}",
+    "port": 5432,
+    "user": "${POSTGRES_USER}",
+    "password": "${POSTGRES_PASSWORD}",
+    "conflict_database": "conflict_management",
+    "conflict_schema": "conflict_dev"
+  },
+  "task02_parameters": {
+    "lookback_hours": 32,
+    "lookback_years": 2,
+    "lookforward_days": 45,
+    "batch_size": 5000,
+    "timeout_buffer_seconds": 90,
+    "max_retry_attempts": 3,
+    "skip_unchanged_records": true,
+    "enable_asymmetric_join": true,
+    "enable_stale_cleanup": false
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  }
+}

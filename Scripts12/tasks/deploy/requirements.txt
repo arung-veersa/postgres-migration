@@ -1,0 +1,20 @@
+# Lambda Deployment with Layers
+# ================================
+# All dependencies are provided via Lambda layers (not included in code package)
+#
+# Required Layers:
+#   1. psycopg2-binary (existing layer - reuse)
+#   2. snowflake-connector-python (build with build-snowflake-layer.ps1)
+#
+# Layer 2 includes:
+#   - snowflake-connector-python>=3.6.0
+#   - python-dotenv>=1.0.0
+#   - cryptography>=41.0.0
+#
+# For LOCAL DEVELOPMENT only (not deployed to Lambda):
+# Uncomment the lines below if you need to run locally
+
+# snowflake-connector-python>=3.6.0
+# psycopg2-binary>=2.9.9
+# python-dotenv>=1.0.0
+# cryptography>=41.0.0

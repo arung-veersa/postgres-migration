@@ -1,0 +1,976 @@
+-- First, insert the main log history records
+TRUNCATE TABLE CONFLICTREPORT."PUBLIC".LOG_HISTORY_VALUES_TEMP;
+INSERT INTO CONFLICTREPORT."PUBLIC".LOG_HISTORY_VALUES_TEMP (
+  CONID, "LogID", "OldValue", "NewValue", 
+  "VisitID", "AppVisitID"
+) WITH NewLogRecords AS (
+  SELECT 
+    T2.ID as CONID, 
+    T2."VisitID" as "PVisitID", 
+    T2."AppVisitID" as "PAppVisitID", 
+    T2."ConVisitID" as "CVisitID", 
+    T2."ConAppVisitID" as "CAppVisitID", 
+    CAST(T2.CONFLICTID AS TEXT) AS "CONFLICTID", 
+    CAST(T2.SSN AS TEXT) AS "SSN", 
+    CAST(T2."ProviderName" AS TEXT) AS "ProviderName", 
+    CAST(T2."ConProviderName" AS TEXT) AS "ConProviderName", 
+    TO_CHAR(T2."VisitDate", 'YYYY-MM-DD') AS "VisitDate", 
+    TO_CHAR(
+      T2."SchStartTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "SchStartTime", 
+    TO_CHAR(
+      T2."SchEndTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "SchEndTime", 
+    TO_CHAR(
+      T2."ConSchStartTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConSchStartTime", 
+    TO_CHAR(
+      T2."ConSchEndTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConSchEndTime", 
+    TO_CHAR(
+      T2."VisitStartTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "VisitStartTime", 
+    TO_CHAR(
+      T2."VisitEndTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "VisitEndTime", 
+    TO_CHAR(
+      T2."ConVisitStartTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConVisitStartTime", 
+    TO_CHAR(
+      T2."ConVisitEndTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConVisitEndTime", 
+    TO_CHAR(
+      T2."EVVStartTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "EVVStartTime", 
+    TO_CHAR(
+      T2."EVVEndTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "EVVEndTime", 
+    TO_CHAR(
+      T2."ConEVVStartTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConEVVStartTime", 
+    TO_CHAR(
+      T2."ConEVVEndTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConEVVEndTime", 
+    CAST(T2."AideCode" AS TEXT) AS "AideCode", 
+    CAST(T2."AideName" AS TEXT) AS "AideName", 
+    CAST(T2."AideSSN" AS TEXT) AS "AideSSN", 
+    CAST(T2."ConAideCode" AS TEXT) AS "ConAideCode", 
+    CAST(T2."ConAideName" AS TEXT) AS "ConAideName", 
+    CAST(T2."ConAideSSN" AS TEXT) AS "ConAideSSN", 
+    CAST(T2."Office" AS TEXT) AS "Office", 
+    CAST(T2."ConOffice" AS TEXT) AS "ConOffice", 
+    CAST(T2."PAdmissionID" AS TEXT) AS "PAdmissionID", 
+    CAST(T2."PName" AS TEXT) AS "PName", 
+    CAST(T2."PAddressL1" AS TEXT) AS "PAddressL1", 
+    CAST(T2."PAddressL2" AS TEXT) AS "PAddressL2", 
+    CAST(T2."PCity" AS TEXT) AS "PCity", 
+    CAST(T2."PAddressState" AS TEXT) AS "PAddressState", 
+    CAST(T2."PZipCode" AS TEXT) AS "PZipCode", 
+    CAST(T2."PCounty" AS TEXT) AS "PCounty", 
+    CAST(T2."PLongitude" AS TEXT) AS "PLongitude", 
+    CAST(T2."PLatitude" AS TEXT) AS "PLatitude", 
+    CAST(T2."ConPAdmissionID" AS TEXT) AS "ConPAdmissionID", 
+    CAST(T2."ConPName" AS TEXT) AS "ConPName", 
+    CAST(T2."ConPAddressL1" AS TEXT) AS "ConPAddressL1", 
+    CAST(T2."ConPAddressL2" AS TEXT) AS "ConPAddressL2", 
+    CAST(T2."ConPCity" AS TEXT) AS "ConPCity", 
+    CAST(T2."ConPAddressState" AS TEXT) AS "ConPAddressState", 
+    CAST(T2."ConPZipCode" AS TEXT) AS "ConPZipCode", 
+    CAST(T2."ConPCounty" AS TEXT) AS "ConPCounty", 
+    CAST(T2."ConPLongitude" AS TEXT) AS "ConPLongitude", 
+    CAST(T2."ConPLatitude" AS TEXT) AS "ConPLatitude", 
+    CAST(T2."Contract" AS TEXT) AS "Contract", 
+    CAST(T2."ConContract" AS TEXT) AS "ConContract", 
+    TO_CHAR(
+      T2."BilledDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "BilledDate", 
+    TO_CHAR(
+      T2."ConBilledDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConBilledDate", 
+    CAST(T2."BilledHours" AS TEXT) AS "BilledHours", 
+    CAST(T2."ConBilledHours" AS TEXT) AS "ConBilledHours", 
+    CAST(T2."Billed" AS TEXT) AS "Billed", 
+    CAST(T2."ConBilled" AS TEXT) AS "ConBilled", 
+    CAST(
+      T2."MinuteDiffBetweenSch" AS TEXT
+    ) AS "MinuteDiffBetweenSch", 
+    CAST(
+      T2."DistanceMilesFromLatLng" AS TEXT
+    ) AS "DistanceMilesFromLatLng", 
+    CAST(T2."AverageMilesPerHour" AS TEXT) AS "AverageMilesPerHour", 
+    CAST(T2."ETATravleMinutes" AS TEXT) AS "ETATravleMinutes", 
+    TO_CHAR(
+      T2."InserviceStartDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "InserviceStartDate", 
+    TO_CHAR(
+      T2."InserviceEndDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "InserviceEndDate", 
+    TO_CHAR(
+      T2."PTOStartDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "PTOStartDate", 
+    TO_CHAR(
+      T2."PTOEndDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "PTOEndDate", 
+    CAST(T2."SameSchTimeFlag" AS TEXT) AS "SameSchTimeFlag", 
+    CAST(T2."SameVisitTimeFlag" AS TEXT) AS "SameVisitTimeFlag", 
+    CAST(
+      T2."SchAndVisitTimeSameFlag" AS TEXT
+    ) AS "SchAndVisitTimeSameFlag", 
+    CAST(
+      T2."SchOverAnotherSchTimeFlag" AS TEXT
+    ) AS "SchOverAnotherSchTimeFlag", 
+    CAST(
+      T2."VisitTimeOverAnotherVisitTimeFlag" AS TEXT
+    ) AS "VisitTimeOverAnotherVisitTimeFlag", 
+    CAST(
+      T2."SchTimeOverVisitTimeFlag" AS TEXT
+    ) AS "SchTimeOverVisitTimeFlag", 
+    CAST(T2."DistanceFlag" AS TEXT) AS "DistanceFlag", 
+    CAST(T2."InServiceFlag" AS TEXT) AS "InServiceFlag", 
+    CAST(T2."PTOFlag" AS TEXT) AS "PTOFlag", 
+    CAST(T2."StatusFlag" AS TEXT) AS "ConStatusFlag", 
+    CAST(T2."AideFName" AS TEXT) AS "AideFName", 
+    CAST(T2."AideLName" AS TEXT) AS "AideLName", 
+    CAST(T2."ConAideFName" AS TEXT) AS "ConAideFName", 
+    CAST(T2."ConAideLName" AS TEXT) AS "ConAideLName", 
+    CAST(T2."PFName" AS TEXT) AS "PFName", 
+    CAST(T2."PLName" AS TEXT) AS "PLName", 
+    CAST(T2."ConPFName" AS TEXT) AS "ConPFName", 
+    CAST(T2."ConPLName" AS TEXT) AS "ConPLName", 
+    CAST(T2."PMedicaidNumber" AS TEXT) AS "PMedicaidNumber", 
+    CAST(T2."ConPMedicaidNumber" AS TEXT) AS "ConPMedicaidNumber", 
+    CAST(T2."PayerState" AS TEXT) AS "PayerState", 
+    CAST(T2."ConPayerState" AS TEXT) AS "ConPayerState", 
+    CAST(T2."AgencyContact" AS TEXT) AS "AgencyContact", 
+    CAST(T2."ConAgencyContact" AS TEXT) AS "ConAgencyContact", 
+    CAST(T2."AgencyPhone" AS TEXT) AS "AgencyPhone", 
+    CAST(T2."ConAgencyPhone" AS TEXT) AS "ConAgencyPhone", 
+    CAST(T2."LastUpdatedBy" AS TEXT) AS "LastUpdatedBy", 
+    CAST(T2."ConLastUpdatedBy" AS TEXT) AS "ConLastUpdatedBy", 
+    CAST(T2."LastUpdatedDate" AS TEXT) AS "LastUpdatedDate", 
+    CAST(T2."ConLastUpdatedDate" AS TEXT) AS "ConLastUpdatedDate", 
+    CAST(T2."BilledRate" AS TEXT) AS "BilledRate", 
+    CAST(T2."TotalBilledAmount" AS TEXT) AS "TotalBilledAmount", 
+    CAST(T2."ConBilledRate" AS TEXT) AS "ConBilledRate", 
+    CAST(
+      T2."ConTotalBilledAmount" AS TEXT
+    ) AS "ConTotalBilledAmount", 
+    CAST(T2."IsMissed" AS TEXT) AS "IsMissed", 
+    CAST(T2."MissedVisitReason" AS TEXT) AS "MissedVisitReason", 
+    CAST(T2."EVVType" AS TEXT) AS "EVVType", 
+    CAST(T2."ConIsMissed" AS TEXT) AS "ConIsMissed", 
+    CAST(
+      T2."ConMissedVisitReason" AS TEXT
+    ) AS "ConMissedVisitReason", 
+    CAST(T2."ConEVVType" AS TEXT) AS "ConEVVType", 
+    CAST(T2."PStatus" AS TEXT) AS "PStatus", 
+    CAST(T2."ConPStatus" AS TEXT) AS "ConPStatus", 
+    CAST(T2."AideStatus" AS TEXT) AS "AideStatus", 
+    CAST(T2."ConAideStatus" AS TEXT) AS "ConAideStatus", 
+    CAST(T2."ConNoResponseFlag" AS TEXT) AS "ConNoResponseFlag", 
+    CAST(T2."ConNoResponseTitle" AS TEXT) AS "ConNoResponseTitle", 
+    CAST(T2."ConNoResponseNotes" AS TEXT) AS "ConNoResponseNotes", 
+    CAST(T2."P_PAdmissionID" AS TEXT) AS "P_PAdmissionID", 
+    CAST(T2."P_PName" AS TEXT) AS "P_PName", 
+    CAST(T2."P_PAddressL1" AS TEXT) AS "P_PAddressL1", 
+    CAST(T2."P_PAddressL2" AS TEXT) AS "P_PAddressL2", 
+    CAST(T2."P_PCity" AS TEXT) AS "P_PCity", 
+    CAST(T2."P_PAddressState" AS TEXT) AS "P_PAddressState", 
+    CAST(T2."P_PZipCode" AS TEXT) AS "P_PZipCode", 
+    CAST(T2."P_PCounty" AS TEXT) AS "P_PCounty", 
+    CAST(T2."P_PFName" AS TEXT) AS "P_PFName", 
+    CAST(T2."P_PLName" AS TEXT) AS "P_PLName", 
+    CAST(T2."P_PMedicaidNumber" AS TEXT) AS "P_PMedicaidNumber", 
+    CAST(T2."ConP_PAdmissionID" AS TEXT) AS "ConP_PAdmissionID", 
+    CAST(T2."ConP_PName" AS TEXT) AS "ConP_PName", 
+    CAST(T2."ConP_PAddressL1" AS TEXT) AS "ConP_PAddressL1", 
+    CAST(T2."ConP_PAddressL2" AS TEXT) AS "ConP_PAddressL2", 
+    CAST(T2."ConP_PCity" AS TEXT) AS "ConP_PCity", 
+    CAST(T2."ConP_PAddressState" AS TEXT) AS "ConP_PAddressState", 
+    CAST(T2."ConP_PZipCode" AS TEXT) AS "ConP_PZipCode", 
+    CAST(T2."ConP_PCounty" AS TEXT) AS "ConP_PCounty", 
+    CAST(T2."ConP_PFName" AS TEXT) AS "ConP_PFName", 
+    CAST(T2."ConP_PLName" AS TEXT) AS "ConP_PLName", 
+    CAST(
+      T2."ConP_PMedicaidNumber" AS TEXT
+    ) AS "ConP_PMedicaidNumber", 
+    CAST(T2."PA_PAdmissionID" AS TEXT) AS "PA_PAdmissionID", 
+    CAST(T2."PA_PName" AS TEXT) AS "PA_PName", 
+    CAST(T2."PA_PAddressL1" AS TEXT) AS "PA_PAddressL1", 
+    CAST(T2."PA_PAddressL2" AS TEXT) AS "PA_PAddressL2", 
+    CAST(T2."PA_PCity" AS TEXT) AS "PA_PCity", 
+    CAST(T2."PA_PAddressState" AS TEXT) AS "PA_PAddressState", 
+    CAST(T2."PA_PZipCode" AS TEXT) AS "PA_PZipCode", 
+    CAST(T2."PA_PCounty" AS TEXT) AS "PA_PCounty", 
+    CAST(T2."PA_PFName" AS TEXT) AS "PA_PFName", 
+    CAST(T2."PA_PLName" AS TEXT) AS "PA_PLName", 
+    CAST(T2."PA_PMedicaidNumber" AS TEXT) AS "PA_PMedicaidNumber", 
+    CAST(T2."ConPA_PAdmissionID" AS TEXT) AS "ConPA_PAdmissionID", 
+    CAST(T2."ConPA_PName" AS TEXT) AS "ConPA_PName", 
+    CAST(T2."ConPA_PAddressL1" AS TEXT) AS "ConPA_PAddressL1", 
+    CAST(T2."ConPA_PAddressL2" AS TEXT) AS "ConPA_PAddressL2", 
+    CAST(T2."ConPA_PCity" AS TEXT) AS "ConPA_PCity", 
+    CAST(T2."ConPA_PAddressState" AS TEXT) AS "ConPA_PAddressState", 
+    CAST(T2."ConPA_PZipCode" AS TEXT) AS "ConPA_PZipCode", 
+    CAST(T2."ConPA_PCounty" AS TEXT) AS "ConPA_PCounty", 
+    CAST(T2."ConPA_PFName" AS TEXT) AS "ConPA_PFName", 
+    CAST(T2."ConPA_PLName" AS TEXT) AS "ConPA_PLName", 
+    CAST(
+      T2."ConPA_PMedicaidNumber" AS TEXT
+    ) AS "ConPA_PMedicaidNumber", 
+    CAST(T2."ContractType" AS TEXT) AS "ContractType", 
+    CAST(T2."ConContractType" AS TEXT) AS "ConContractType", 
+    CAST(T2."BillRateNonBilled" AS TEXT) AS "BillRateNonBilled", 
+    CAST(
+      T2."ConBillRateNonBilled" AS TEXT
+    ) AS "ConBillRateNonBilled", 
+    CAST(T2."BillRateBoth" AS TEXT) AS "BillRateBoth", 
+    CAST(T2."ConBillRateBoth" AS TEXT) AS "ConBillRateBoth", 
+    CAST(T2."FederalTaxNumber" AS TEXT) AS "FederalTaxNumber", 
+    CAST(T2."ConFederalTaxNumber" AS TEXT) AS "ConFederalTaxNumber", 
+    CAST(T1."StatusFlag" AS TEXT) AS "StatusFlag", 
+    CAST(T1."FlagForReview" AS TEXT) AS "FlagForReview", 
+    TO_CHAR(
+      T1."FlagForReviewDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "FlagForReviewDate", 
+    CAST(T2."FlagForReview" AS TEXT) AS "ConFlagForReview", 
+    TO_CHAR(
+      T2."FlagForReviewDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConFlagForReviewDate", 
+    TO_CHAR(
+      T2."ConInserviceStartDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConInserviceStartDate", 
+    TO_CHAR(
+      T2."ConInserviceEndDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConInserviceEndDate", 
+    TO_CHAR(
+      T2."ConPTOStartDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConPTOStartDate", 
+    TO_CHAR(
+      T2."ConPTOEndDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConPTOEndDate" 
+  FROM 
+    CONFLICTREPORT."PUBLIC".CONFLICTVISITMAPS T2 
+    JOIN CONFLICTREPORT."PUBLIC".CONFLICTS T1 ON T1.CONFLICTID = T2.CONFLICTID 
+  WHERE 
+    DATE(T2."VisitDate") BETWEEN DATE(
+      DATEADD(
+        year, 
+        -2, 
+        GETDATE()
+      )
+    ) 
+    AND DATE(
+      DATEADD(
+        day, 
+        45, 
+        GETDATE()
+      )
+    )
+), 
+TempConflictValues AS (
+  SELECT 
+    T2.ID as CONID, 
+    T2."VisitID" as "PVisitID", 
+    T2."AppVisitID" as "PAppVisitID", 
+    T2."ConVisitID" as "CVisitID", 
+    T2."ConAppVisitID" as "CAppVisitID", 
+    CAST(T2.CONFLICTID AS TEXT) AS "CONFLICTID", 
+    CAST(T2.SSN AS TEXT) AS "SSN", 
+    CAST(T2."ProviderName" AS TEXT) AS "ProviderName", 
+    CAST(T2."ConProviderName" AS TEXT) AS "ConProviderName", 
+    TO_CHAR(T2."VisitDate", 'YYYY-MM-DD') AS "VisitDate", 
+    TO_CHAR(
+      T2."SchStartTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "SchStartTime", 
+    TO_CHAR(
+      T2."SchEndTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "SchEndTime", 
+    TO_CHAR(
+      T2."ConSchStartTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConSchStartTime", 
+    TO_CHAR(
+      T2."ConSchEndTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConSchEndTime", 
+    TO_CHAR(
+      T2."VisitStartTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "VisitStartTime", 
+    TO_CHAR(
+      T2."VisitEndTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "VisitEndTime", 
+    TO_CHAR(
+      T2."ConVisitStartTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConVisitStartTime", 
+    TO_CHAR(
+      T2."ConVisitEndTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConVisitEndTime", 
+    TO_CHAR(
+      T2."EVVStartTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "EVVStartTime", 
+    TO_CHAR(
+      T2."EVVEndTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "EVVEndTime", 
+    TO_CHAR(
+      T2."ConEVVStartTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConEVVStartTime", 
+    TO_CHAR(
+      T2."ConEVVEndTime", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConEVVEndTime", 
+    CAST(T2."AideCode" AS TEXT) AS "AideCode", 
+    CAST(T2."AideName" AS TEXT) AS "AideName", 
+    CAST(T2."AideSSN" AS TEXT) AS "AideSSN", 
+    CAST(T2."ConAideCode" AS TEXT) AS "ConAideCode", 
+    CAST(T2."ConAideName" AS TEXT) AS "ConAideName", 
+    CAST(T2."ConAideSSN" AS TEXT) AS "ConAideSSN", 
+    CAST(T2."Office" AS TEXT) AS "Office", 
+    CAST(T2."ConOffice" AS TEXT) AS "ConOffice", 
+    CAST(T2."PAdmissionID" AS TEXT) AS "PAdmissionID", 
+    CAST(T2."PName" AS TEXT) AS "PName", 
+    CAST(T2."PAddressL1" AS TEXT) AS "PAddressL1", 
+    CAST(T2."PAddressL2" AS TEXT) AS "PAddressL2", 
+    CAST(T2."PCity" AS TEXT) AS "PCity", 
+    CAST(T2."PAddressState" AS TEXT) AS "PAddressState", 
+    CAST(T2."PZipCode" AS TEXT) AS "PZipCode", 
+    CAST(T2."PCounty" AS TEXT) AS "PCounty", 
+    CAST(T2."PLongitude" AS TEXT) AS "PLongitude", 
+    CAST(T2."PLatitude" AS TEXT) AS "PLatitude", 
+    CAST(T2."ConPAdmissionID" AS TEXT) AS "ConPAdmissionID", 
+    CAST(T2."ConPName" AS TEXT) AS "ConPName", 
+    CAST(T2."ConPAddressL1" AS TEXT) AS "ConPAddressL1", 
+    CAST(T2."ConPAddressL2" AS TEXT) AS "ConPAddressL2", 
+    CAST(T2."ConPCity" AS TEXT) AS "ConPCity", 
+    CAST(T2."ConPAddressState" AS TEXT) AS "ConPAddressState", 
+    CAST(T2."ConPZipCode" AS TEXT) AS "ConPZipCode", 
+    CAST(T2."ConPCounty" AS TEXT) AS "ConPCounty", 
+    CAST(T2."ConPLongitude" AS TEXT) AS "ConPLongitude", 
+    CAST(T2."ConPLatitude" AS TEXT) AS "ConPLatitude", 
+    CAST(T2."Contract" AS TEXT) AS "Contract", 
+    CAST(T2."ConContract" AS TEXT) AS "ConContract", 
+    TO_CHAR(
+      T2."BilledDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "BilledDate", 
+    TO_CHAR(
+      T2."ConBilledDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConBilledDate", 
+    CAST(T2."BilledHours" AS TEXT) AS "BilledHours", 
+    CAST(T2."ConBilledHours" AS TEXT) AS "ConBilledHours", 
+    CAST(T2."Billed" AS TEXT) AS "Billed", 
+    CAST(T2."ConBilled" AS TEXT) AS "ConBilled", 
+    CAST(
+      T2."MinuteDiffBetweenSch" AS TEXT
+    ) AS "MinuteDiffBetweenSch", 
+    CAST(
+      T2."DistanceMilesFromLatLng" AS TEXT
+    ) AS "DistanceMilesFromLatLng", 
+    CAST(T2."AverageMilesPerHour" AS TEXT) AS "AverageMilesPerHour", 
+    CAST(T2."ETATravleMinutes" AS TEXT) AS "ETATravleMinutes", 
+    TO_CHAR(
+      T2."InserviceStartDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "InserviceStartDate", 
+    TO_CHAR(
+      T2."InserviceEndDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "InserviceEndDate", 
+    TO_CHAR(
+      T2."PTOStartDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "PTOStartDate", 
+    TO_CHAR(
+      T2."PTOEndDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "PTOEndDate", 
+    CAST(T2."SameSchTimeFlag" AS TEXT) AS "SameSchTimeFlag", 
+    CAST(T2."SameVisitTimeFlag" AS TEXT) AS "SameVisitTimeFlag", 
+    CAST(
+      T2."SchAndVisitTimeSameFlag" AS TEXT
+    ) AS "SchAndVisitTimeSameFlag", 
+    CAST(
+      T2."SchOverAnotherSchTimeFlag" AS TEXT
+    ) AS "SchOverAnotherSchTimeFlag", 
+    CAST(
+      T2."VisitTimeOverAnotherVisitTimeFlag" AS TEXT
+    ) AS "VisitTimeOverAnotherVisitTimeFlag", 
+    CAST(
+      T2."SchTimeOverVisitTimeFlag" AS TEXT
+    ) AS "SchTimeOverVisitTimeFlag", 
+    CAST(T2."DistanceFlag" AS TEXT) AS "DistanceFlag", 
+    CAST(T2."InServiceFlag" AS TEXT) AS "InServiceFlag", 
+    CAST(T2."PTOFlag" AS TEXT) AS "PTOFlag", 
+    CAST(T2."ConStatusFlag" AS TEXT) AS "ConStatusFlag", 
+    CAST(T2."AideFName" AS TEXT) AS "AideFName", 
+    CAST(T2."AideLName" AS TEXT) AS "AideLName", 
+    CAST(T2."ConAideFName" AS TEXT) AS "ConAideFName", 
+    CAST(T2."ConAideLName" AS TEXT) AS "ConAideLName", 
+    CAST(T2."PFName" AS TEXT) AS "PFName", 
+    CAST(T2."PLName" AS TEXT) AS "PLName", 
+    CAST(T2."ConPFName" AS TEXT) AS "ConPFName", 
+    CAST(T2."ConPLName" AS TEXT) AS "ConPLName", 
+    CAST(T2."PMedicaidNumber" AS TEXT) AS "PMedicaidNumber", 
+    CAST(T2."ConPMedicaidNumber" AS TEXT) AS "ConPMedicaidNumber", 
+    CAST(T2."PayerState" AS TEXT) AS "PayerState", 
+    CAST(T2."ConPayerState" AS TEXT) AS "ConPayerState", 
+    CAST(T2."AgencyContact" AS TEXT) AS "AgencyContact", 
+    CAST(T2."ConAgencyContact" AS TEXT) AS "ConAgencyContact", 
+    CAST(T2."AgencyPhone" AS TEXT) AS "AgencyPhone", 
+    CAST(T2."ConAgencyPhone" AS TEXT) AS "ConAgencyPhone", 
+    CAST(T2."LastUpdatedBy" AS TEXT) AS "LastUpdatedBy", 
+    CAST(T2."ConLastUpdatedBy" AS TEXT) AS "ConLastUpdatedBy", 
+    CAST(T2."LastUpdatedDate" AS TEXT) AS "LastUpdatedDate", 
+    CAST(T2."ConLastUpdatedDate" AS TEXT) AS "ConLastUpdatedDate", 
+    CAST(T2."BilledRate" AS TEXT) AS "BilledRate", 
+    CAST(T2."TotalBilledAmount" AS TEXT) AS "TotalBilledAmount", 
+    CAST(T2."ConBilledRate" AS TEXT) AS "ConBilledRate", 
+    CAST(
+      T2."ConTotalBilledAmount" AS TEXT
+    ) AS "ConTotalBilledAmount", 
+    CAST(T2."IsMissed" AS TEXT) AS "IsMissed", 
+    CAST(T2."MissedVisitReason" AS TEXT) AS "MissedVisitReason", 
+    CAST(T2."EVVType" AS TEXT) AS "EVVType", 
+    CAST(T2."ConIsMissed" AS TEXT) AS "ConIsMissed", 
+    CAST(
+      T2."ConMissedVisitReason" AS TEXT
+    ) AS "ConMissedVisitReason", 
+    CAST(T2."ConEVVType" AS TEXT) AS "ConEVVType", 
+    CAST(T2."PStatus" AS TEXT) AS "PStatus", 
+    CAST(T2."ConPStatus" AS TEXT) AS "ConPStatus", 
+    CAST(T2."AideStatus" AS TEXT) AS "AideStatus", 
+    CAST(T2."ConAideStatus" AS TEXT) AS "ConAideStatus", 
+    CAST(T2."ConNoResponseFlag" AS TEXT) AS "ConNoResponseFlag", 
+    CAST(T2."ConNoResponseTitle" AS TEXT) AS "ConNoResponseTitle", 
+    CAST(T2."ConNoResponseNotes" AS TEXT) AS "ConNoResponseNotes", 
+    CAST(T2."P_PAdmissionID" AS TEXT) AS "P_PAdmissionID", 
+    CAST(T2."P_PName" AS TEXT) AS "P_PName", 
+    CAST(T2."P_PAddressL1" AS TEXT) AS "P_PAddressL1", 
+    CAST(T2."P_PAddressL2" AS TEXT) AS "P_PAddressL2", 
+    CAST(T2."P_PCity" AS TEXT) AS "P_PCity", 
+    CAST(T2."P_PAddressState" AS TEXT) AS "P_PAddressState", 
+    CAST(T2."P_PZipCode" AS TEXT) AS "P_PZipCode", 
+    CAST(T2."P_PCounty" AS TEXT) AS "P_PCounty", 
+    CAST(T2."P_PFName" AS TEXT) AS "P_PFName", 
+    CAST(T2."P_PLName" AS TEXT) AS "P_PLName", 
+    CAST(T2."P_PMedicaidNumber" AS TEXT) AS "P_PMedicaidNumber", 
+    CAST(T2."ConP_PAdmissionID" AS TEXT) AS "ConP_PAdmissionID", 
+    CAST(T2."ConP_PName" AS TEXT) AS "ConP_PName", 
+    CAST(T2."ConP_PAddressL1" AS TEXT) AS "ConP_PAddressL1", 
+    CAST(T2."ConP_PAddressL2" AS TEXT) AS "ConP_PAddressL2", 
+    CAST(T2."ConP_PCity" AS TEXT) AS "ConP_PCity", 
+    CAST(T2."ConP_PAddressState" AS TEXT) AS "ConP_PAddressState", 
+    CAST(T2."ConP_PZipCode" AS TEXT) AS "ConP_PZipCode", 
+    CAST(T2."ConP_PCounty" AS TEXT) AS "ConP_PCounty", 
+    CAST(T2."ConP_PFName" AS TEXT) AS "ConP_PFName", 
+    CAST(T2."ConP_PLName" AS TEXT) AS "ConP_PLName", 
+    CAST(
+      T2."ConP_PMedicaidNumber" AS TEXT
+    ) AS "ConP_PMedicaidNumber", 
+    CAST(T2."PA_PAdmissionID" AS TEXT) AS "PA_PAdmissionID", 
+    CAST(T2."PA_PName" AS TEXT) AS "PA_PName", 
+    CAST(T2."PA_PAddressL1" AS TEXT) AS "PA_PAddressL1", 
+    CAST(T2."PA_PAddressL2" AS TEXT) AS "PA_PAddressL2", 
+    CAST(T2."PA_PCity" AS TEXT) AS "PA_PCity", 
+    CAST(T2."PA_PAddressState" AS TEXT) AS "PA_PAddressState", 
+    CAST(T2."PA_PZipCode" AS TEXT) AS "PA_PZipCode", 
+    CAST(T2."PA_PCounty" AS TEXT) AS "PA_PCounty", 
+    CAST(T2."PA_PFName" AS TEXT) AS "PA_PFName", 
+    CAST(T2."PA_PLName" AS TEXT) AS "PA_PLName", 
+    CAST(T2."PA_PMedicaidNumber" AS TEXT) AS "PA_PMedicaidNumber", 
+    CAST(T2."ConPA_PAdmissionID" AS TEXT) AS "ConPA_PAdmissionID", 
+    CAST(T2."ConPA_PName" AS TEXT) AS "ConPA_PName", 
+    CAST(T2."ConPA_PAddressL1" AS TEXT) AS "ConPA_PAddressL1", 
+    CAST(T2."ConPA_PAddressL2" AS TEXT) AS "ConPA_PAddressL2", 
+    CAST(T2."ConPA_PCity" AS TEXT) AS "ConPA_PCity", 
+    CAST(T2."ConPA_PAddressState" AS TEXT) AS "ConPA_PAddressState", 
+    CAST(T2."ConPA_PZipCode" AS TEXT) AS "ConPA_PZipCode", 
+    CAST(T2."ConPA_PCounty" AS TEXT) AS "ConPA_PCounty", 
+    CAST(T2."ConPA_PFName" AS TEXT) AS "ConPA_PFName", 
+    CAST(T2."ConPA_PLName" AS TEXT) AS "ConPA_PLName", 
+    CAST(
+      T2."ConPA_PMedicaidNumber" AS TEXT
+    ) AS "ConPA_PMedicaidNumber", 
+    CAST(T2."ContractType" AS TEXT) AS "ContractType", 
+    CAST(T2."ConContractType" AS TEXT) AS "ConContractType", 
+    CAST(T2."BillRateNonBilled" AS TEXT) AS "BillRateNonBilled", 
+    CAST(
+      T2."ConBillRateNonBilled" AS TEXT
+    ) AS "ConBillRateNonBilled", 
+    CAST(T2."BillRateBoth" AS TEXT) AS "BillRateBoth", 
+    CAST(T2."ConBillRateBoth" AS TEXT) AS "ConBillRateBoth", 
+    CAST(T2."FederalTaxNumber" AS TEXT) AS "FederalTaxNumber", 
+    CAST(T2."ConFederalTaxNumber" AS TEXT) AS "ConFederalTaxNumber", 
+    CAST(T2."StatusFlag" AS TEXT) AS "StatusFlag", 
+    CAST(T2."FlagForReview" AS TEXT) AS "FlagForReview", 
+    TO_CHAR(
+      T2."FlagForReviewDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "FlagForReviewDate", 
+    CAST(T2."ConFlagForReview" AS TEXT) AS "ConFlagForReview", 
+    TO_CHAR(
+      T2."ConFlagForReviewDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConFlagForReviewDate", 
+    TO_CHAR(
+      T2."ConInserviceStartDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConInserviceStartDate", 
+    TO_CHAR(
+      T2."ConInserviceEndDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConInserviceEndDate", 
+    TO_CHAR(
+      T2."ConPTOStartDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConPTOStartDate", 
+    TO_CHAR(
+      T2."ConPTOEndDate", 'YYYY-MM-DD HH24:MI:SS'
+    ) AS "ConPTOEndDate" 
+  FROM 
+    CONFLICTREPORT."PUBLIC".CONFLICTVISITMAPS_TEMP T2
+), 
+LogFields AS (
+  SELECT 
+    ID as "LogID", 
+    "FieldName", 
+    "FieldFor" 
+  FROM 
+    CONFLICTREPORT."PUBLIC".LOG_FIELDS
+), 
+UnpivotedData AS (
+  SELECT 
+    CONID, 
+    "PVisitID", 
+    "PAppVisitID", 
+    "CVisitID", 
+    "CAppVisitID", 
+    column_name, 
+    column_value 
+  FROM 
+    NewLogRecords UNPIVOT(
+      column_value FOR column_name IN (
+        "CONFLICTID", 
+        "SSN", 
+        "ProviderName", 
+        "ConProviderName", 
+        "VisitDate", 
+        "SchStartTime", 
+        "SchEndTime", 
+        "ConSchStartTime", 
+        "ConSchEndTime", 
+        "VisitStartTime", 
+        "VisitEndTime", 
+        "ConVisitStartTime", 
+        "ConVisitEndTime", 
+        "EVVStartTime", 
+        "EVVEndTime", 
+        "ConEVVStartTime", 
+        "ConEVVEndTime", 
+        "AideCode", 
+        "AideName", 
+        "AideSSN", 
+        "ConAideCode", 
+        "ConAideName", 
+        "ConAideSSN", 
+        "Office", 
+        "ConOffice", 
+        "PAdmissionID", 
+        "PName", 
+        "PAddressL1", 
+        "PAddressL2", 
+        "PCity", 
+        "PAddressState", 
+        "PZipCode", 
+        "PCounty", 
+        "PLongitude", 
+        "PLatitude", 
+        "ConPAdmissionID", 
+        "ConPName", 
+        "ConPAddressL1", 
+        "ConPAddressL2", 
+        "ConPCity", 
+        "ConPAddressState", 
+        "ConPZipCode", 
+        "ConPCounty", 
+        "ConPLongitude", 
+        "ConPLatitude", 
+        "Contract", 
+        "ConContract", 
+        "BilledDate", 
+        "ConBilledDate", 
+        "BilledHours", 
+        "ConBilledHours", 
+        "Billed", 
+        "ConBilled", 
+        "MinuteDiffBetweenSch", 
+        "DistanceMilesFromLatLng", 
+        "AverageMilesPerHour", 
+        "ETATravleMinutes", 
+        "InserviceStartDate", 
+        "InserviceEndDate", 
+        "PTOStartDate", 
+        "PTOEndDate", 
+        "SameSchTimeFlag", 
+        "SameVisitTimeFlag", 
+        "SchAndVisitTimeSameFlag", 
+        "SchOverAnotherSchTimeFlag", 
+        "VisitTimeOverAnotherVisitTimeFlag", 
+        "SchTimeOverVisitTimeFlag", 
+        "DistanceFlag", 
+        "InServiceFlag", 
+        "PTOFlag", 
+        "StatusFlag", 
+        "ConStatusFlag", 
+        "AideFName", 
+        "AideLName", 
+        "ConAideFName", 
+        "ConAideLName", 
+        "PFName", 
+        "PLName", 
+        "ConPFName", 
+        "ConPLName", 
+        "PMedicaidNumber", 
+        "ConPMedicaidNumber", 
+        "PayerState", 
+        "ConPayerState", 
+        "AgencyContact", 
+        "ConAgencyContact", 
+        "AgencyPhone", 
+        "ConAgencyPhone", 
+        "LastUpdatedBy", 
+        "ConLastUpdatedBy", 
+        "LastUpdatedDate", 
+        "ConLastUpdatedDate", 
+        "BilledRate", 
+        "TotalBilledAmount", 
+        "ConBilledRate", 
+        "ConTotalBilledAmount", 
+        "IsMissed", 
+        "MissedVisitReason", 
+        "EVVType", 
+        "ConIsMissed", 
+        "ConMissedVisitReason", 
+        "ConEVVType", 
+        "PStatus", 
+        "ConPStatus", 
+        "AideStatus", 
+        "ConAideStatus", 
+        "ConNoResponseFlag", 
+        "ConNoResponseTitle", 
+        "ConNoResponseNotes", 
+        "P_PAdmissionID", 
+        "P_PName", 
+        "P_PAddressL1", 
+        "P_PAddressL2", 
+        "P_PCity", 
+        "P_PAddressState", 
+        "P_PZipCode", 
+        "P_PCounty", 
+        "P_PFName", 
+        "P_PLName", 
+        "P_PMedicaidNumber", 
+        "ConP_PAdmissionID", 
+        "ConP_PName", 
+        "ConP_PAddressL1", 
+        "ConP_PAddressL2", 
+        "ConP_PCity", 
+        "ConP_PAddressState", 
+        "ConP_PZipCode", 
+        "ConP_PCounty", 
+        "ConP_PFName", 
+        "ConP_PLName", 
+        "ConP_PMedicaidNumber", 
+        "PA_PAdmissionID", 
+        "PA_PName", 
+        "PA_PAddressL1", 
+        "PA_PAddressL2", 
+        "PA_PCity", 
+        "PA_PAddressState", 
+        "PA_PZipCode", 
+        "PA_PCounty", 
+        "PA_PFName", 
+        "PA_PLName", 
+        "PA_PMedicaidNumber", 
+        "ConPA_PAdmissionID", 
+        "ConPA_PName", 
+        "ConPA_PAddressL1", 
+        "ConPA_PAddressL2", 
+        "ConPA_PCity", 
+        "ConPA_PAddressState", 
+        "ConPA_PZipCode", 
+        "ConPA_PCounty", 
+        "ConPA_PFName", 
+        "ConPA_PLName", 
+        "ConPA_PMedicaidNumber", 
+        "ContractType", 
+        "ConContractType", 
+        "BillRateNonBilled", 
+        "ConBillRateNonBilled", 
+        "BillRateBoth", 
+        "ConBillRateBoth", 
+        "FederalTaxNumber", 
+        "ConFederalTaxNumber", 
+        "FlagForReview", 
+        "FlagForReviewDate", 
+        "ConFlagForReview", 
+        "ConFlagForReviewDate", 
+        "ConInserviceStartDate", 
+        "ConInserviceEndDate", 
+        "ConPTOStartDate", 
+        "ConPTOEndDate"
+      )
+    )
+), 
+UnpivotedDataTemp AS (
+  SELECT 
+    CONID, 
+    "PVisitID", 
+    "PAppVisitID", 
+    "CVisitID", 
+    "CAppVisitID", 
+    column_name, 
+    column_value 
+  FROM 
+    TempConflictValues UNPIVOT(
+      column_value FOR column_name IN (
+        "CONFLICTID", 
+        "SSN", 
+        "ProviderName", 
+        "ConProviderName", 
+        "VisitDate", 
+        "SchStartTime", 
+        "SchEndTime", 
+        "ConSchStartTime", 
+        "ConSchEndTime", 
+        "VisitStartTime", 
+        "VisitEndTime", 
+        "ConVisitStartTime", 
+        "ConVisitEndTime", 
+        "EVVStartTime", 
+        "EVVEndTime", 
+        "ConEVVStartTime", 
+        "ConEVVEndTime", 
+        "AideCode", 
+        "AideName", 
+        "AideSSN", 
+        "ConAideCode", 
+        "ConAideName", 
+        "ConAideSSN", 
+        "Office", 
+        "ConOffice", 
+        "PAdmissionID", 
+        "PName", 
+        "PAddressL1", 
+        "PAddressL2", 
+        "PCity", 
+        "PAddressState", 
+        "PZipCode", 
+        "PCounty", 
+        "PLongitude", 
+        "PLatitude", 
+        "ConPAdmissionID", 
+        "ConPName", 
+        "ConPAddressL1", 
+        "ConPAddressL2", 
+        "ConPCity", 
+        "ConPAddressState", 
+        "ConPZipCode", 
+        "ConPCounty", 
+        "ConPLongitude", 
+        "ConPLatitude", 
+        "Contract", 
+        "ConContract", 
+        "BilledDate", 
+        "ConBilledDate", 
+        "BilledHours", 
+        "ConBilledHours", 
+        "Billed", 
+        "ConBilled", 
+        "MinuteDiffBetweenSch", 
+        "DistanceMilesFromLatLng", 
+        "AverageMilesPerHour", 
+        "ETATravleMinutes", 
+        "InserviceStartDate", 
+        "InserviceEndDate", 
+        "PTOStartDate", 
+        "PTOEndDate", 
+        "SameSchTimeFlag", 
+        "SameVisitTimeFlag", 
+        "SchAndVisitTimeSameFlag", 
+        "SchOverAnotherSchTimeFlag", 
+        "VisitTimeOverAnotherVisitTimeFlag", 
+        "SchTimeOverVisitTimeFlag", 
+        "DistanceFlag", 
+        "InServiceFlag", 
+        "PTOFlag", 
+        "StatusFlag", 
+        "ConStatusFlag", 
+        "AideFName", 
+        "AideLName", 
+        "ConAideFName", 
+        "ConAideLName", 
+        "PFName", 
+        "PLName", 
+        "ConPFName", 
+        "ConPLName", 
+        "PMedicaidNumber", 
+        "ConPMedicaidNumber", 
+        "PayerState", 
+        "ConPayerState", 
+        "AgencyContact", 
+        "ConAgencyContact", 
+        "AgencyPhone", 
+        "ConAgencyPhone", 
+        "LastUpdatedBy", 
+        "ConLastUpdatedBy", 
+        "LastUpdatedDate", 
+        "ConLastUpdatedDate", 
+        "BilledRate", 
+        "TotalBilledAmount", 
+        "ConBilledRate", 
+        "ConTotalBilledAmount", 
+        "IsMissed", 
+        "MissedVisitReason", 
+        "EVVType", 
+        "ConIsMissed", 
+        "ConMissedVisitReason", 
+        "ConEVVType", 
+        "PStatus", 
+        "ConPStatus", 
+        "AideStatus", 
+        "ConAideStatus", 
+        "ConNoResponseFlag", 
+        "ConNoResponseTitle", 
+        "ConNoResponseNotes", 
+        "P_PAdmissionID", 
+        "P_PName", 
+        "P_PAddressL1", 
+        "P_PAddressL2", 
+        "P_PCity", 
+        "P_PAddressState", 
+        "P_PZipCode", 
+        "P_PCounty", 
+        "P_PFName", 
+        "P_PLName", 
+        "P_PMedicaidNumber", 
+        "ConP_PAdmissionID", 
+        "ConP_PName", 
+        "ConP_PAddressL1", 
+        "ConP_PAddressL2", 
+        "ConP_PCity", 
+        "ConP_PAddressState", 
+        "ConP_PZipCode", 
+        "ConP_PCounty", 
+        "ConP_PFName", 
+        "ConP_PLName", 
+        "ConP_PMedicaidNumber", 
+        "PA_PAdmissionID", 
+        "PA_PName", 
+        "PA_PAddressL1", 
+        "PA_PAddressL2", 
+        "PA_PCity", 
+        "PA_PAddressState", 
+        "PA_PZipCode", 
+        "PA_PCounty", 
+        "PA_PFName", 
+        "PA_PLName", 
+        "PA_PMedicaidNumber", 
+        "ConPA_PAdmissionID", 
+        "ConPA_PName", 
+        "ConPA_PAddressL1", 
+        "ConPA_PAddressL2", 
+        "ConPA_PCity", 
+        "ConPA_PAddressState", 
+        "ConPA_PZipCode", 
+        "ConPA_PCounty", 
+        "ConPA_PFName", 
+        "ConPA_PLName", 
+        "ConPA_PMedicaidNumber", 
+        "ContractType", 
+        "ConContractType", 
+        "BillRateNonBilled", 
+        "ConBillRateNonBilled", 
+        "BillRateBoth", 
+        "ConBillRateBoth", 
+        "FederalTaxNumber", 
+        "ConFederalTaxNumber", 
+        "FlagForReview", 
+        "FlagForReviewDate", 
+        "ConFlagForReview", 
+        "ConFlagForReviewDate", 
+        "ConInserviceStartDate", 
+        "ConInserviceEndDate", 
+        "ConPTOStartDate", 
+        "ConPTOEndDate"
+      )
+    )
+) 
+SELECT 
+  TB1.CONID, 
+  TB1."LogID", 
+  TB2."NewValue" AS "OldValue", 
+  TB1."NewValue", 
+  TB1."VisitID", 
+  TB1."AppVisitID" 
+FROM 
+  (
+    SELECT 
+      U.CONID, 
+      LF."LogID", 
+      U.column_value as "NewValue", 
+      CASE WHEN LF."FieldFor" = 'P' THEN U."PVisitID" WHEN LF."FieldFor" = 'C' THEN U."CVisitID" END as "VisitID", 
+      CASE WHEN LF."FieldFor" = 'P' THEN U."PAppVisitID" WHEN LF."FieldFor" = 'C' THEN U."CAppVisitID" END as "AppVisitID" 
+    FROM 
+      UnpivotedData U 
+      JOIN LogFields LF ON LF."FieldName" = U.column_name
+  ) AS TB1 
+  INNER JOIN (
+    SELECT 
+      U.CONID, 
+      LF."LogID", 
+      U.column_value as "NewValue", 
+      CASE WHEN LF."FieldFor" = 'P' THEN U."PVisitID" WHEN LF."FieldFor" = 'C' THEN U."CVisitID" END as "VisitID", 
+      CASE WHEN LF."FieldFor" = 'P' THEN U."PAppVisitID" WHEN LF."FieldFor" = 'C' THEN U."CAppVisitID" END as "AppVisitID" 
+    FROM 
+      UnpivotedDataTemp U 
+      JOIN LogFields LF ON LF."FieldName" = U.column_name
+  ) AS TB2 ON TB1."LogID" = TB2."LogID" 
+  AND TB1.CONID = TB2.CONID 
+  AND TB1."VisitID" = TB2."VisitID" 
+  AND TB1."AppVisitID" = TB2."AppVisitID" 
+WHERE 
+  TB1."NewValue" != TB2."NewValue";
+
+-- First, insert the main log history records
+INSERT INTO CONFLICTREPORT."PUBLIC".LOG_HISTORY ("CONID", "LogTypeFlag") 
+SELECT 
+  distinct T2.CONID, 
+  'UpdatedNew' 
+FROM 
+  CONFLICTREPORT."PUBLIC".LOG_HISTORY_VALUES_TEMP T2;
+
+-- First, insert the main log history records
+INSERT INTO CONFLICTREPORT."PUBLIC".LOG_HISTORY_VALUES (
+  LHID, "LogID", "OldValue", "NewValue", 
+  "VisitID", "AppVisitID"
+) 
+SELECT 
+  LH.ID, 
+  LHVT."LogID", 
+  LHVT."OldValue", 
+  LHVT."NewValue", 
+  LHVT."VisitID", 
+  LHVT."AppVisitID" 
+FROM 
+  CONFLICTREPORT."PUBLIC".LOG_HISTORY_VALUES_TEMP AS LHVT 
+  INNER JOIN CONFLICTREPORT."PUBLIC".LOG_HISTORY AS LH ON LH.CONID = LHVT.CONID 
+  AND "LogTypeFlag" = 'UpdatedNew';
+UPDATE 
+  CONFLICTREPORT."PUBLIC".LOG_HISTORY 
+SET 
+  "LogTypeFlag" = 'Updated' 
+WHERE 
+  "LogTypeFlag" = 'UpdatedNew';
+
+-- First, insert the main log history records
+TRUNCATE TABLE CONFLICTREPORT."PUBLIC".LOG_HISTORY_VALUES_TEMP;
+
+UPDATE 
+  CONFLICTREPORT.PUBLIC.SETTINGS 
+SET 
+  "LastLoadDate" = CURRENT_TIMESTAMP, 
+  "InProgressFlag" = 2;
+
+-- error
+UPDATE 
+  CONFLICTREPORT."PUBLIC".SETTINGS 
+SET 
+  "InProgressFlag" = 2;
