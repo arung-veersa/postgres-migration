@@ -1,6 +1,0 @@
-# Core Dependencies (Packaged with Code)
-python-dotenv==1.0.0
-
-# Database Connectors (Provided by Layer - DO NOT INSTALL IN CODE PACKAGE)
-# psycopg2-binary
-
