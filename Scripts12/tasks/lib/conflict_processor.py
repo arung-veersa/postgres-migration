@@ -56,7 +56,15 @@ class ConflictProcessor:
             # Asymmetric join stats
             'asymmetric_join_enabled': enable_asymmetric_join,
             'stale_cleanup_enabled': enable_stale_cleanup,
-            'stale_conflicts_reset': 0
+            'stale_conflicts_reset': 0,
+            # Scoped stale cleanup stats
+            'delta_ssns_count': 0,
+            'delta_dates_count': 0,
+            'delta_pairs_count': 0,
+            'delta_keys_count': 0,  # backward compat alias
+            'modified_visit_ids_count': 0,  # backward compat alias
+            'records_marked_for_update': 0,
+            'stale_conflicts_resolved': 0
         }
     
     def fetch_reference_data(self) -> Dict[str, Any]:
@@ -74,12 +82,11 @@ class ConflictProcessor:
         excluded_agencies = [row[0] for row in agencies if row[0]]
         logger.info(f"  ✓ Excluded agencies: {len(excluded_agencies)}")
         
-        # Fetch excluded SSNs - SKIPPED for performance test
-        # query = self.query_builder.build_reference_query('pg_fetch_excluded_ssns.sql', self.db_names)
-        # ssns = self.pg_manager.execute_query(query, database=self.db_names['pg_database'])
-        # excluded_ssns = [row[0] for row in ssns if row[0]]
-        excluded_ssns = []  # Empty list for performance test
-        logger.info(f"  ⚠ Excluded SSNs: SKIPPED (performance test - isolating bottleneck)")
+        # Fetch excluded SSNs
+        query = self.query_builder.build_reference_query('pg_fetch_excluded_ssns.sql', self.db_names)
+        ssns = self.pg_manager.execute_query(query, database=self.db_names['pg_database'])
+        excluded_ssns = [row[0] for row in ssns if row[0]]
+        logger.info(f"  ✓ Excluded SSNs: {len(excluded_ssns)}")
         
         # Fetch settings
         query = self.query_builder.build_reference_query('pg_fetch_settings.sql', self.db_names)
@@ -101,6 +108,239 @@ class ConflictProcessor:
             'settings': settings,
             'mph': mph
         }
+    
+    def stream_and_process_conflicts_v3(
+        self,
+        queries: Dict[str, str],
+        timeout_callback: Optional[callable] = None
+    ) -> Dict[str, Any]:
+        """
+        Stream conflict results from Snowflake using v3 temp table approach
+        with pair-precise seen-based anti-join for accurate stale conflict detection.
+        
+        V3 Execution Flow:
+        1. Execute step1 (delta_keys temp table) - always created for stale cleanup scoping
+        2. Execute step2 (base_visits temp table with materialization)
+        2d. Stream actual (visit_date, ssn) pairs from delta_keys to Postgres _tmp_delta_pairs
+            (precise scope for stale resolve -- avoids cross-product of separate SSN/date lists)
+        3. Execute step3 (final conflict detection query) and stream results
+           - During streaming, collect all seen (VisitID, ConVisitID) pairs
+        4. Resolve stale conflicts via pair-precise seen-based anti-join
+        
+        PERFORMANCE: Step 2d streams actual (visit_date, ssn) pairs from delta_keys 
+        directly into Postgres via chunked COPY. This gives precise stale scoping --
+        only records matching an exact (visit_date, ssn) pair from delta_keys are
+        candidates for stale resolution, eliminating the cross-product problem.
+        
+        Args:
+            queries: Dict with keys 'step1', 'step2', 'step2d', 'step3' containing SQL
+            timeout_callback: Optional function to check for timeout (Lambda)
+        
+        Returns:
+            Dict with processing statistics
+        """
+        logger.info("Starting v3 conflict detection with temp tables...")
+        logger.info(f"  Batch size: {self.batch_size}")
+        logger.info(f"  Asymmetric join: {'ENABLED' if self.enable_asymmetric_join else 'DISABLED'}")
+        logger.info(f"  Stale cleanup: {'ENABLED' if self.enable_stale_cleanup else 'DISABLED'}")
+        
+        batch = []
+        batch_number = 0
+        delta_pairs_loaded = False  # Whether (visit_date, ssn) pairs were loaded into Postgres
+        
+        try:
+            # Open a connection to Snowflake
+            with self.sf_manager.streaming_cursor() as cursor:
+                # STEP 0: Create and populate excluded_ssns temp table
+                if queries.get('step0_create'):
+                    logger.info("STEP 0: Creating excluded_ssns temp table...")
+                    cursor.execute(queries['step0_create'])
+                    insert_stmts = queries.get('step0_inserts', [])
+                    if insert_stmts:
+                        for stmt in insert_stmts:
+                            cursor.execute(stmt)
+                        logger.info(f"  ✓ Loaded {len(insert_stmts)} batch(es) of excluded SSNs")
+                    else:
+                        logger.info("  ✓ No excluded SSNs to load (table created empty)")
+                
+                # STEP 1: Create delta_keys temp table (always created now)
+                if queries.get('step1'):
+                    logger.info("STEP 1: Creating delta_keys temp table...")
+                    cursor.execute(queries['step1'])
+                    logger.info("  ✓ delta_keys temp table created")
+                else:
+                    logger.info("STEP 1: SKIPPED (no step1 query)")
+                
+                # STEP 2: Create base_visits temp table
+                # Part A: Delta rows only (~70K, fast with partition pruning)
+                import time as _time
+                step2a_start = _time.time()
+                logger.info("STEP 2 (Part A): Creating base_visits with delta rows only...")
+                cursor.execute(queries['step2'])
+                step2a_duration = _time.time() - step2a_start
+                logger.info(f"  ✓ base_visits created with delta rows ({step2a_duration:.1f}s)")
+                
+                # Part B (asymmetric only): INSERT related non-delta rows via delta_keys JOIN
+                if queries.get('step2_asym_insert'):
+                    step2b_start = _time.time()
+                    logger.info("STEP 2 (Part B): Inserting related non-delta visits via delta_keys JOIN...")
+                    cursor.execute(queries['step2_asym_insert'])
+                    step2b_duration = _time.time() - step2b_start
+                    logger.info(f"  ✓ Related non-delta rows inserted ({step2b_duration:.1f}s)")
+                    logger.info(f"  Total Step 2: {step2a_duration + step2b_duration:.1f}s")
+                
+                # STEP 2d: Stream actual (visit_date, ssn) pairs from delta_keys into Postgres
+                # These pairs define the EXACT scope Snowflake scanned for conflict detection.
+                # Using actual pairs avoids the cross-product problem of separate SSN/date lists.
+                # Streamed in chunks of 100K via COPY for low memory usage.
+                if self.enable_stale_cleanup and queries.get('step2d'):
+                    import io
+                    step2d_start = _time.time()
+                    logger.info("STEP 2d: Streaming (visit_date, ssn) pairs from delta_keys to Postgres...")
+                    
+                    # Create _tmp_delta_pairs in Postgres
+                    if self.pg_connection is None:
+                        self.pg_connection = self.pg_manager.get_connection(
+                            database=self.db_names['pg_database']
+                        )
+                    pg_cursor = self.pg_connection.cursor()
+                    pg_cursor.execute("DROP TABLE IF EXISTS _tmp_delta_pairs")
+                    pg_cursor.execute("""
+                        CREATE TEMP TABLE _tmp_delta_pairs (
+                            visit_date DATE,
+                            ssn VARCHAR(20)
+                        )
+                    """)
+                    
+                    # Stream from Snowflake cursor and COPY in chunks
+                    COPY_CHUNK_SIZE = 100000
+                    cursor.execute(queries['step2d'])
+                    buffer = io.StringIO()
+                    pair_count = 0
+                    chunk_count = 0
+                    distinct_ssns = set()
+                    distinct_dates = set()
+                    
+                    for row in cursor:
+                        visit_date = row[0]
+                        ssn = str(row[1]).strip() if row[1] else None
+                        if visit_date and ssn:
+                            buffer.write(f"{visit_date}\t{ssn}\n")
+                            pair_count += 1
+                            distinct_ssns.add(ssn)
+                            distinct_dates.add(visit_date)
+                            
+                            if pair_count % COPY_CHUNK_SIZE == 0:
+                                buffer.seek(0)
+                                pg_cursor.copy_from(buffer, '_tmp_delta_pairs', columns=('visit_date', 'ssn'))
+                                chunk_count += 1
+                                buffer = io.StringIO()
+                                if pair_count % 1000000 == 0:
+                                    logger.info(f"    Streamed {pair_count:,} pairs...")
+                    
+                    # Flush remaining rows
+                    if buffer.tell() > 0:
+                        buffer.seek(0)
+                        pg_cursor.copy_from(buffer, '_tmp_delta_pairs', columns=('visit_date', 'ssn'))
+                        chunk_count += 1
+                    
+                    copy_duration = _time.time() - step2d_start
+                    logger.info(f"  ✓ Loaded {pair_count:,} pairs into _tmp_delta_pairs ({chunk_count} chunks, {copy_duration:.1f}s)")
+                    logger.info(f"    Distinct SSNs: {len(distinct_ssns):,}, Distinct dates: {len(distinct_dates):,}")
+                    
+                    # Index for Phase 1 JOIN performance
+                    idx_start = _time.time()
+                    pg_cursor.execute("CREATE INDEX ON _tmp_delta_pairs (ssn, visit_date)")
+                    pg_cursor.execute("ANALYZE _tmp_delta_pairs")
+                    idx_duration = _time.time() - idx_start
+                    logger.info(f"  ✓ Indexed and analyzed _tmp_delta_pairs ({idx_duration:.1f}s)")
+                    
+                    pg_cursor.close()
+                    delta_pairs_loaded = True
+                    
+                    step2d_duration = _time.time() - step2d_start
+                    self.stats['delta_ssns_count'] = len(distinct_ssns)
+                    self.stats['delta_keys_count'] = pair_count
+                    self.stats['delta_dates_count'] = len(distinct_dates)
+                    self.stats['delta_pairs_count'] = pair_count
+                    logger.info(f"  Total step 2d: {step2d_duration:.1f}s")
+                    logger.info("  (No upfront marking -- will use seen-based resolve after streaming)")
+                else:
+                    logger.info("STEP 2d: SKIPPED (stale cleanup disabled)")
+                
+                # STEP 3: Execute final conflict detection query and stream results
+                logger.info("STEP 3: Executing final conflict detection query...")
+                cursor.execute(queries['step3'])
+                logger.info("  ✓ Query started, streaming results...")
+                
+                # Get column names
+                column_names = [desc[0] for desc in cursor.description]
+                logger.info(f"  Result columns: {len(column_names)}")
+                
+                # Track all (VisitID, ConVisitID) pairs from Snowflake for seen-based stale resolve
+                seen_conflict_keys = set()
+                
+                # Stream and process results
+                for row in cursor:
+                    # Check timeout
+                    if timeout_callback and timeout_callback():
+                        logger.warning("Timeout detected, stopping processing")
+                        break
+                    
+                    self.stats['rows_fetched'] += 1
+                    
+                    # Convert row to dict
+                    conflict_row = dict(zip(column_names, row))
+                    
+                    # Track unique visits
+                    self.stats['unique_visits'].add(conflict_row['VisitID'])
+                    
+                    # Track seen conflict keys for stale resolve
+                    if self.enable_stale_cleanup:
+                        visit_id = str(conflict_row.get('VisitID'))
+                        con_visit_id = str(conflict_row.get('ConVisitID')) if conflict_row.get('ConVisitID') else None
+                        seen_conflict_keys.add((visit_id, con_visit_id))
+                    
+                    batch.append(conflict_row)
+                    
+                    # Process batch when full
+                    if len(batch) >= self.batch_size:
+                        batch_number += 1
+                        self._process_batch(batch, batch_number)
+                        batch = []
+                
+                # Process remaining records
+                if batch:
+                    batch_number += 1
+                    self._process_batch(batch, batch_number)
+            
+            logger.info(f"✓ Streaming complete: {self.stats['rows_fetched']} conflicts fetched from Snowflake")
+            if self.enable_stale_cleanup:
+                logger.info(f"  Seen conflict keys collected: {len(seen_conflict_keys):,}")
+            
+            # STEP 4: Resolve stale conflicts (seen-based anti-join approach)
+            # _tmp_delta_pairs was already loaded in Step 2d and persists in the PG session
+            if self.enable_stale_cleanup and delta_pairs_loaded:
+                self._resolve_stale_conflicts_seen_based(seen_conflict_keys)
+            
+            # Finalize stats
+            self.stats['batches_processed'] = batch_number
+            self.stats['unique_visits'] = len(self.stats['unique_visits'])
+            
+            return self.stats
+            
+        except Exception as e:
+            logger.error(f"Error during v3 conflict processing: {str(e)}")
+            self.stats['errors'] += 1
+            raise
+        finally:
+            # Close persistent connection
+            if self.pg_connection:
+                try:
+                    self.pg_connection.close()
+                    logger.info("Closed persistent Postgres connection")
+                except Exception as e:
+                    logger.warning(f"Error closing Postgres connection: {e}")
     
     def stream_and_process_conflicts(
         self,
@@ -214,11 +454,10 @@ class ConflictProcessor:
                     avg_rate = self.stats['rows_fetched'] / streaming_duration
                     logger.info(f"  Average streaming rate: {avg_rate:.0f} rows/sec")
                 
-                # After processing all new conflicts, cleanup stale ones
-                if self.enable_stale_cleanup and all_conflict_keys:
-                    logger.info("")
-                    logger.info(f"Running stale conflict cleanup with {len(all_conflict_keys)} active conflicts...")
-                    self._cleanup_stale_conflicts(all_conflict_keys)
+                # Stale cleanup is only supported in the v3 method (pair-precise seen-based approach).
+                if self.enable_stale_cleanup:
+                    logger.warning("Stale cleanup is only supported in v3 mode. Skipping in v2.")
+                    logger.warning("  Use stream_and_process_conflicts_v3() for pair-precise stale cleanup.")
         
         except Exception as e:
             logger.error(f"Error during stream processing: {e}", exc_info=True)
@@ -643,98 +882,167 @@ class ConflictProcessor:
         finally:
             cursor.close()
     
-    def _build_reset_update(self, visit_id: int, con_visit_id: int) -> Tuple[str, tuple]:
+    def _resolve_stale_conflicts_seen_based(self, seen_conflict_keys: set):
         """
-        Build UPDATE statement to reset all conflict flags to 'N' for stale conflicts.
-        Used when a conflict pair no longer appears in Snowflake results.
+        Resolve stale conflicts using precise pair-based anti-join approach.
+        
+        Optimizations applied (v5 - precise pair scope):
+        1. Pair-precise scope: Uses _tmp_delta_pairs (visit_date, ssn) loaded in Step 2d
+           with actual pairs from delta_keys, eliminating the cross-product problem
+           that caused 3.9M false stale records with separate SSN + date filters.
+        2. UUID type match: _tmp_seen_conflicts uses UUID columns (enables index usage)
+        3. Minimal UPDATE: Only sets StatusFlag='R' and UpdatedDate
+        4. Two-phase resolve: SELECT stale IDs first, then UPDATE by PK
+        5. Batched Phase 2: UPDATEs in chunks of 100K to avoid giant transactions
+        
+        Prerequisite: _tmp_delta_pairs must already exist in the PG session (created in Step 2d).
         
         Args:
-            visit_id: The VisitID
-            con_visit_id: The ConVisitID
-            
-        Returns:
-            Tuple of (SQL statement, parameters tuple)
+            seen_conflict_keys: Set of (VisitID, ConVisitID) tuples seen during streaming
         """
-        schema = self.db_names['pg_schema']
+        import io
+        import time as _time
         
-        sql = f"""
-            UPDATE {schema}.conflictvisitmaps
-            SET 
-                "SameSchTimeFlag" = 'N',
-                "SameVisitTimeFlag" = 'N',
-                "SchAndVisitTimeSameFlag" = 'N',
-                "SchOverAnotherSchTimeFlag" = 'N',
-                "VisitTimeOverAnotherVisitTimeFlag" = 'N',
-                "SchTimeOverVisitTimeFlag" = 'N',
-                "DistanceFlag" = 'N',
-                "StatusFlag" = CASE 
-                    WHEN "StatusFlag" NOT IN ('W', 'I') THEN 'U' 
-                    ELSE "StatusFlag" 
-                END,
-                "UpdatedDate" = CURRENT_TIMESTAMP
-            WHERE "VisitID" = %s
-              AND "ConVisitID" = %s
-        """
+        BATCH_SIZE = 100000  # Phase 2 UPDATE batch size (reduced from 500K for faster commits)
         
-        return (sql, (visit_id, con_visit_id))
-    
-    def _cleanup_stale_conflicts(self, active_conflict_keys: set):
-        """
-        Find and reset conflicts in Postgres that no longer appear in Snowflake results.
-        This handles the case where visits were updated and no longer conflict.
-        
-        Args:
-            active_conflict_keys: Set of (VisitID, ConVisitID) tuples from current Snowflake query
-        """
         try:
             schema = self.db_names['pg_schema']
+            step4_start = _time.time()
             
-            # Fetch all existing conflicts from Postgres in the date window
-            # We need to check these against the active conflicts from Snowflake
-            query = f"""
-                SELECT "VisitID", "ConVisitID"
-                FROM {schema}.conflictvisitmaps
-                WHERE "CONFLICTID" IS NOT NULL
-                  AND ("SameSchTimeFlag" = 'Y' 
-                       OR "SameVisitTimeFlag" = 'Y'
-                       OR "SchAndVisitTimeSameFlag" = 'Y'
-                       OR "SchOverAnotherSchTimeFlag" = 'Y'
-                       OR "VisitTimeOverAnotherVisitTimeFlag" = 'Y'
-                       OR "SchTimeOverVisitTimeFlag" = 'Y'
-                       OR "DistanceFlag" = 'Y')
-            """
+            # Get or create persistent connection
+            if self.pg_connection is None:
+                self.pg_connection = self.pg_manager.get_connection(
+                    database=self.db_names['pg_database']
+                )
             
-            existing_conflicts = self.pg_manager.execute_query(query, database=self.db_names['pg_database'])
-            logger.info(f"  Found {len(existing_conflicts)} existing conflicts in Postgres with active flags")
+            cursor = self.pg_connection.cursor()
             
-            # Find stale conflicts (exist in Postgres but not in current Snowflake results)
-            stale_conflicts = []
-            for row in existing_conflicts:
-                key = (row[0], row[1])  # (VisitID, ConVisitID)
-                if key not in active_conflict_keys:
-                    stale_conflicts.append(key)
+            logger.info(f"STEP 4: Resolving stale conflicts (pair-precise seen-based approach)...")
+            logger.info(f"  Delta pairs scope: _tmp_delta_pairs (loaded in Step 2d)")
+            logger.info(f"  Seen conflict pairs: {len(seen_conflict_keys):,}")
             
-            if stale_conflicts:
-                logger.info(f"  Resetting {len(stale_conflicts)} stale conflicts (flags → 'N')")
+            # 1. Create and load _tmp_seen_conflicts temp table (UUID columns for index match)
+            cursor.execute("DROP TABLE IF EXISTS _tmp_seen_conflicts")
+            cursor.execute("""
+                CREATE TEMP TABLE _tmp_seen_conflicts (
+                    visit_id UUID,
+                    con_visit_id UUID
+                )
+            """)
+            
+            copy_start = _time.time()
+            buffer = io.StringIO()
+            for visit_id, con_visit_id in seen_conflict_keys:
+                vid = visit_id if visit_id else '\\N'
+                cvid = con_visit_id if con_visit_id else '\\N'
+                buffer.write(f"{vid}\t{cvid}\n")
+            buffer.seek(0)
+            cursor.copy_from(buffer, '_tmp_seen_conflicts', columns=('visit_id', 'con_visit_id'))
+            copy_duration = _time.time() - copy_start
+            logger.info(f"  ✓ Loaded {len(seen_conflict_keys):,} seen pairs into _tmp_seen_conflicts ({copy_duration:.1f}s)")
+            
+            # 2. Index and analyze temp tables
+            idx_start = _time.time()
+            cursor.execute("CREATE INDEX ON _tmp_seen_conflicts (visit_id, con_visit_id)")
+            cursor.execute("ANALYZE _tmp_seen_conflicts")
+            # _tmp_delta_pairs was already indexed in Step 2d
+            idx_duration = _time.time() - idx_start
+            logger.info(f"  ✓ _tmp_seen_conflicts indexed and analyzed ({idx_duration:.1f}s)")
+            
+            # 3. Phase 1: Identify stale records into temp table (read-only scan)
+            # JOIN on _tmp_delta_pairs gives precise (visit_date, ssn) scope -- no cross-product.
+            # Records that: (a) match an actual delta (visit_date, ssn) pair,
+            # (b) are NOT in seen pairs (stale),
+            # (c) are non-InService/PTO, (d) are not already resolved/whitelisted/ignored
+            phase1_start = _time.time()
+            cursor.execute("DROP TABLE IF EXISTS _tmp_stale_ids")
+            cursor.execute(f"""
+                CREATE TEMP TABLE _tmp_stale_ids AS
+                SELECT cvm."VisitID", cvm."ConVisitID"
+                FROM {schema}.conflictvisitmaps cvm
+                INNER JOIN _tmp_delta_pairs dp
+                  ON cvm."SSN" = dp.ssn
+                  AND cvm."VisitDate" = dp.visit_date
+                WHERE cvm."CONFLICTID" IS NOT NULL
+                  AND cvm."StatusFlag" NOT IN ('R', 'W', 'I')
+                  AND cvm."InserviceStartDate" IS NULL
+                  AND cvm."InserviceEndDate" IS NULL
+                  AND cvm."PTOStartDate" IS NULL
+                  AND cvm."PTOEndDate" IS NULL
+                  AND cvm."ConInserviceStartDate" IS NULL
+                  AND cvm."ConInserviceEndDate" IS NULL
+                  AND cvm."ConPTOStartDate" IS NULL
+                  AND cvm."ConPTOEndDate" IS NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM _tmp_seen_conflicts sc
+                      WHERE sc.visit_id = cvm."VisitID"
+                        AND sc.con_visit_id = cvm."ConVisitID"
+                  )
+            """)
+            # Get count of stale records identified
+            cursor.execute("SELECT COUNT(*) FROM _tmp_stale_ids")
+            stale_count = cursor.fetchone()[0]
+            phase1_duration = _time.time() - phase1_start
+            logger.info(f"  Phase 1: Identified {stale_count:,} stale records ({phase1_duration:.1f}s)")
+            
+            # 4. Phase 2: Update stale records by PK with minimal SET, in batches
+            phase2_start = _time.time()
+            total_rows_updated = 0
+            
+            if stale_count > 0:
+                # Add a row_number to _tmp_stale_ids for batching
+                cursor.execute("ALTER TABLE _tmp_stale_ids ADD COLUMN batch_id SERIAL")
                 
-                # Build reset UPDATE statements
-                reset_updates = [self._build_reset_update(vid, cvid) for vid, cvid in stale_conflicts]
+                num_batches = (stale_count + BATCH_SIZE - 1) // BATCH_SIZE
+                logger.info(f"  Phase 2: Updating {stale_count:,} rows in {num_batches} batch(es) of {BATCH_SIZE:,}...")
                 
-                # Execute resets in batches
-                batch_size = 1000
-                for i in range(0, len(reset_updates), batch_size):
-                    batch = reset_updates[i:i+batch_size]
-                    rows_updated = self._execute_updates_with_commit(batch)
-                    self.stats['stale_conflicts_reset'] += rows_updated
-                    logger.debug(f"    Reset batch {i//batch_size + 1}: {rows_updated} conflicts")
-                
-                logger.info(f"  ✓ Stale cleanup complete: {self.stats['stale_conflicts_reset']} conflicts reset")
+                for batch_num in range(num_batches):
+                    batch_start = batch_num * BATCH_SIZE + 1
+                    batch_end = (batch_num + 1) * BATCH_SIZE
+                    
+                    cursor.execute(f"""
+                        UPDATE {schema}.conflictvisitmaps cvm
+                        SET "StatusFlag" = CASE
+                                WHEN cvm."StatusFlag" NOT IN ('W', 'I') THEN 'R'
+                                ELSE cvm."StatusFlag"
+                            END,
+                            "UpdatedDate" = CURRENT_TIMESTAMP
+                        FROM _tmp_stale_ids si
+                        WHERE cvm."VisitID" = si."VisitID"
+                          AND cvm."ConVisitID" = si."ConVisitID"
+                          AND si.batch_id BETWEEN {batch_start} AND {batch_end}
+                    """)
+                    batch_updated = cursor.rowcount
+                    total_rows_updated += batch_updated
+                    self.pg_connection.commit()
+                    
+                    batch_elapsed = _time.time() - phase2_start
+                    logger.info(f"    Batch {batch_num + 1}/{num_batches}: {batch_updated:,} rows updated (cumulative: {total_rows_updated:,}, {batch_elapsed:.1f}s)")
+            
+            phase2_duration = _time.time() - phase2_start
+            logger.info(f"  Phase 2 complete: {total_rows_updated:,} rows updated ({phase2_duration:.1f}s)")
+            
+            cursor.close()
+            
+            step4_total = _time.time() - step4_start
+            self.stats['stale_conflicts_resolved'] = stale_count
+            self.stats['stale_conflicts_reset'] = stale_count  # backward compat
+            self.stats['records_marked_for_update'] = 0  # no upfront marking in seen-based approach
+            
+            if stale_count > 0:
+                logger.info(f"  ✓ Resolved {stale_count:,} stale conflicts → StatusFlag='R'")
             else:
-                logger.info("  ✓ No stale conflicts found")
-        
+                logger.info(f"  ✓ No stale conflicts found")
+            logger.info(f"  Total step 4: {step4_total:.1f}s (Phase 1: {phase1_duration:.1f}s, Phase 2: {phase2_duration:.1f}s)")
+            
         except Exception as e:
-            logger.error(f"Error during stale conflict cleanup: {e}", exc_info=True)
-            # Don't raise - stale cleanup is not critical, just log the error
+            logger.error(f"Error resolving stale conflicts (seen-based): {e}", exc_info=True)
+            if self.pg_connection:
+                try:
+                    self.pg_connection.rollback()
+                except Exception:
+                    pass
+            # Don't raise - stale cleanup is important but shouldn't fail the whole run
     
     def get_statistics(self) -> Dict[str, Any]:
         """Get processing statistics with enhanced metrics"""
@@ -749,14 +1057,25 @@ class ConflictProcessor:
             'matched_in_postgres': self.stats['matched_in_postgres'],
             'new_conflicts': self.stats['new_conflicts'],
             'stale_conflicts_reset': self.stats['stale_conflicts_reset'],
+            'delta_ssns_count': self.stats['delta_ssns_count'],
+            'delta_dates_count': self.stats.get('delta_dates_count', 0),
+            'delta_pairs_count': self.stats.get('delta_pairs_count', 0),
+            'delta_keys_count': self.stats.get('delta_pairs_count', 0),  # backward compat
+            'modified_visit_ids_count': self.stats['delta_ssns_count'],  # backward compat
+            'records_marked_for_update': self.stats['records_marked_for_update'],
+            'stale_conflicts_resolved': self.stats['stale_conflicts_resolved'],
             'update_rate': (self.stats['rows_updated'] / max(self.stats['rows_fetched'], 1)) * 100,
             'match_rate': (self.stats['matched_in_postgres'] / max(self.stats['rows_fetched'], 1)) * 100,
             'efficiency_rate': (self.stats['rows_updated'] / max(self.stats['matched_in_postgres'], 1)) * 100
         }
     
-    def _get_table_counts(self) -> Dict[str, int]:
+    def _get_table_counts(self, skip_snowflake: bool = True) -> Dict[str, int]:
         """
-        Fetch row counts from key tables
+        Fetch row counts from key tables.
+        
+        Args:
+            skip_snowflake: If True, skip the Snowflake count query (~25s savings).
+                          The SF count is informational only and not worth the latency.
         
         Returns:
             Dict with table names as keys and row counts as values
@@ -764,7 +1083,7 @@ class ConflictProcessor:
         counts = {}
         
         try:
-            # Postgres table counts
+            # Postgres table counts (fast, <1 second each)
             pg_schema = self.db_names['pg_schema']
             
             # ConflictVisitMaps count
@@ -785,16 +1104,20 @@ class ConflictProcessor:
                 logger.warning(f"Could not fetch conflicts count: {e}")
                 counts['conflicts'] = -1
             
-            # Snowflake FACTVISITCALLPERFORMANCE_CR count
-            try:
-                sf_db = self.db_names['sf_database']
-                sf_schema = self.db_names['sf_schema']
-                query = f'SELECT COUNT(*) FROM {sf_db}.{sf_schema}.FACTVISITCALLPERFORMANCE_CR'
-                result = self.sf_manager.execute_query(query)
-                counts['factvisitcallperformance_cr'] = result[0][0] if result else 0
-            except Exception as e:
-                logger.warning(f"Could not fetch FACTVISITCALLPERFORMANCE_CR count: {e}")
-                counts['factvisitcallperformance_cr'] = -1
+            # Snowflake FACTVISITCALLPERFORMANCE_CR count (expensive - ~25s)
+            if not skip_snowflake:
+                try:
+                    sf_db = self.db_names['sf_database']
+                    sf_schema = self.db_names['sf_schema']
+                    query = f'SELECT COUNT(*) FROM {sf_db}.{sf_schema}.FACTVISITCALLPERFORMANCE_CR'
+                    result = self.sf_manager.execute_query(query)
+                    counts['factvisitcallperformance_cr'] = result[0][0] if result else 0
+                except Exception as e:
+                    logger.warning(f"Could not fetch FACTVISITCALLPERFORMANCE_CR count: {e}")
+                    counts['factvisitcallperformance_cr'] = -1
+            else:
+                logger.info("  (Snowflake table count skipped for performance)")
+                counts['factvisitcallperformance_cr'] = -2  # Skipped indicator
             
         except Exception as e:
             logger.warning(f"Error fetching table counts: {e}")
@@ -828,7 +1151,7 @@ class ConflictProcessor:
         if self.enable_asymmetric_join:
             logger.info("")
             logger.info("Asymmetric Join Analysis:")
-            unique_visit_count = len(self.stats['unique_visits'])
+            unique_visit_count = self.stats['unique_visits'] if isinstance(self.stats['unique_visits'], int) else len(self.stats['unique_visits'])
             logger.info(f"  Delta visits (32-hour window): {unique_visit_count:,}")
             
             # Estimate conflict keys (assuming ~80% uniqueness in date/SSN combinations)
@@ -854,7 +1177,7 @@ class ConflictProcessor:
                 logger.info(f"    (symmetric would detect ~{symmetric_estimate:,} conflicts)")
         else:
             # Unique visits count (legacy mode)
-            unique_visit_count = len(self.stats['unique_visits'])
+            unique_visit_count = self.stats['unique_visits'] if isinstance(self.stats['unique_visits'], int) else len(self.stats['unique_visits'])
             logger.info(f"  Unique visits in last 36 hours: {unique_visit_count:,}")
         
         # Match statistics
@@ -870,9 +1193,15 @@ class ConflictProcessor:
             logger.info(f"  Matched in Postgres: {matched:,}")
             logger.info(f"  New conflicts (not in Postgres): {new_conflicts:,}")
         
-        # Stale cleanup results
-        if self.enable_stale_cleanup and self.stats['stale_conflicts_reset'] > 0:
-            logger.info(f"  Stale conflicts reset (flags → 'N'): {self.stats['stale_conflicts_reset']:,}")
+        # Stale cleanup results (pair-precise seen-based anti-join approach)
+        if self.enable_stale_cleanup:
+            logger.info("")
+            logger.info("Stale Cleanup (Pair-Precise Seen-Based Anti-Join):")
+            logger.info(f"  Delta pairs (scope): {self.stats.get('delta_pairs_count', 0):,}")
+            logger.info(f"    Distinct SSNs: {self.stats['delta_ssns_count']:,}")
+            logger.info(f"    Distinct dates: {self.stats.get('delta_dates_count', 0):,}")
+            logger.info(f"  Seen conflict pairs (from Snowflake): {self.stats['rows_fetched']:,}")
+            logger.info(f"  Stale conflicts resolved (→ 'R'): {self.stats['stale_conflicts_resolved']:,}")
         
         # Change detection analysis
         if self.skip_unchanged_records:
@@ -938,8 +1267,11 @@ class ConflictProcessor:
             logger.info("Conflicts (Postgres): Error fetching count")
         
         # Snowflake table
-        if counts.get('factvisitcallperformance_cr', -1) >= 0:
-            logger.info(f"FactVisitCallPerformance_CR (Snowflake): {counts['factvisitcallperformance_cr']:,}")
+        sf_count = counts.get('factvisitcallperformance_cr', -1)
+        if sf_count >= 0:
+            logger.info(f"FactVisitCallPerformance_CR (Snowflake): {sf_count:,}")
+        elif sf_count == -2:
+            logger.info("FactVisitCallPerformance_CR (Snowflake): Skipped (performance optimization)")
         else:
             logger.info("FactVisitCallPerformance_CR (Snowflake): Error fetching count")
         

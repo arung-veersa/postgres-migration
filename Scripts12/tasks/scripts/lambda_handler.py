@@ -234,8 +234,8 @@ def lambda_handler(event: Dict[str, Any], context: Optional[Any] = None) -> Dict
             # Step 1: Fetch reference data from Postgres
             ref_data = processor.fetch_reference_data()
             
-            # Step 2: Build conflict detection query
-            conflict_query = query_builder.build_conflict_detection_query(
+            # Step 2: Build conflict detection query (v3 with temp tables)
+            queries = query_builder.build_conflict_detection_query_v3(
                 db_names=db_names,
                 excluded_agencies=ref_data['excluded_agencies'],
                 excluded_ssns=ref_data['excluded_ssns'],
@@ -254,8 +254,8 @@ def lambda_handler(event: Dict[str, Any], context: Optional[Any] = None) -> Dict
                     return remaining < timeout_buffer
                 return False
             
-            stats = processor.stream_and_process_conflicts(
-                conflict_query,
+            stats = processor.stream_and_process_conflicts_v3(
+                queries,
                 timeout_callback=check_timeout
             )
             

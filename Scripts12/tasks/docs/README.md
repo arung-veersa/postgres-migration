@@ -17,17 +17,19 @@
 Migrate Task 02 (Conflict Detection and Update) from Snowflake stored procedures to AWS Lambda, maintaining bi-directional updates between Snowflake (analytics) and PostgreSQL (operational database).
 
 ### Key Features
-- **Streaming Processing**: Handles 70K+ conflict records in batches of 5,000
+- **Streaming Processing**: Handles 150K+ conflict records in batches of 5,000
 - **7 Conflict Rules**: Time overlaps, distance-based impossible travel detection
 - **Smart Change Detection**: Only updates rows with actual changes (~98% reduction)
-- **Dual Modes**: Symmetric (fast, production) vs Asymmetric (comprehensive, needs optimization)
-- **Preserve Overrides**: Maintains manual status flags and conflict IDs
+- **Dual Modes**: Symmetric (fast) vs Asymmetric (comprehensive, production-ready)
+- **Pair-Precise Stale Cleanup**: Accurately resolves stale conflicts using exact (VisitDate, SSN) pairs from Snowflake
+- **Preserve Overrides**: Maintains manual status flags (W=Whitelisted, I=Ignored) and conflict IDs
 
-### Performance
-- **Execution Time**: 40-60 seconds (symmetric mode)
+### Performance (Asymmetric Mode with Stale Cleanup)
+- **Execution Time**: ~6 minutes (36-hour lookback)
 - **Memory Usage**: ~140 MB
-- **Throughput**: ~70K records processed per run
+- **Throughput**: ~150K conflict records processed per run
 - **Updates**: 200-300 rows per execution (with change detection)
+- **Stale Cleanup**: Pair-precise scoping, batched updates in 100K chunks
 
 ---
 
@@ -36,121 +38,168 @@ Migrate Task 02 (Conflict Detection and Update) from Snowflake stored procedures
 ### Component Structure
 
 ```
-┌─────────────────┐
-│  AWS Lambda     │
-│  (Python 3.11)  │
-└────────┬────────┘
-         │
-    ┌────┴────┐
-    │         │
-┌───▼───┐ ┌──▼──────┐
-│Snowfl │ │PostgreSQL│
-│ake    │ │          │
-│(Read) │ │(Read/    │
-│       │ │Write)    │
-└───────┘ └──────────┘
++-------------------+
+|  AWS Lambda       |
+|  (Python 3.11)    |
++--------+----------+
+         |
+    +----+----+
+    |         |
++---v---+ +--v--------+
+|Snowfl | |PostgreSQL  |
+|ake    | |            |
+|(Read) | |(Read/      |
+|       | |Write)      |
++-------+ +------------+
 ```
 
 ### File Organization
 ```
 Scripts12/tasks/
 ├── config/
-│   └── config.json                # All configuration settings
+│   └── config.json                          # All configuration settings
 ├── lib/
-│   ├── connections.py             # SnowflakeManager, PostgresManager
-│   ├── query_builder.py           # SQL generation with conditional logic
-│   └── conflict_processor.py      # Core business logic
+│   ├── connections.py                       # SnowflakeManager, PostgresManager
+│   ├── query_builder.py                     # SQL generation with conditional logic
+│   ├── conflict_processor.py                # Core business logic
+│   └── utils.py                             # Logging, formatting utilities
 ├── scripts/
-│   └── lambda_handler.py          # Entry point, orchestration
+│   └── lambda_handler.py                    # Entry point, orchestration
 ├── sql/
-│   ├── sf_task02_conflict_detection_v2.sql    # Main query template
-│   └── pg_fetch_*.sql             # Reference data queries
+│   ├── sf_task02_v3_step1_delta_keys.sql    # Step 1: Delta keys extraction
+│   ├── sf_task02_v3_step2_base_visits.sql   # Step 2: Base visits materialization
+│   ├── sf_task02_v3_step3_final_query.sql   # Step 3: Conflict detection self-join
+│   ├── sf_task02_v3-sym-defaults.sql        # Test: Symmetric mode standalone query
+│   ├── sf_task02_v3-asym-defaults.sql       # Test: Asymmetric mode standalone query
+│   └── pg_fetch_*.sql                       # Reference data queries
+├── docs/
+│   └── README.md                            # This documentation
 └── tests/
-    ├── test_comprehensive.py      # Unit tests
-    └── test_conditional_logic.py  # Feature flag tests
+    ├── test_comprehensive.py                # Unit tests
+    └── test_conditional_logic.py            # Feature flag tests
 ```
 
 ### Data Flow
 
 1. **Fetch Reference Data** (PostgreSQL)
    - Excluded agencies (3 items)
-   - Excluded SSNs (~7K items, currently disabled for performance)
+   - Excluded SSNs (~7K items, loaded via batched INSERT to Snowflake temp table)
    - MPH lookup (4 ranges for distance calculations)
    - Settings (ExtraDistancePer multiplier)
 
-2. **Build & Execute Query** (Snowflake)
-   - Inject parameters into SQL template
-   - Execute with streaming cursor
-   - Fetch in batches of 5,000
+2. **Build & Execute Queries** (Snowflake - v3 Temp Table Approach)
+   - Step 1: Create `delta_keys` temp table (distinct VisitDate, SSN pairs from recent updates)
+   - Step 2: Create `base_visits` temp table (two-part: delta rows + related non-delta rows)
+   - Step 2d: Stream (VisitDate, SSN) pairs from `delta_keys` to PostgreSQL `_tmp_delta_pairs`
+   - Step 3: Execute conflict detection self-join on `base_visits`, stream results
 
 3. **Process Conflicts** (Python)
    - For each conflict pair:
      - Check if exists in PostgreSQL
      - Determine if data changed (if `skip_unchanged_records=true`)
-     - Build UPDATE statement
+     - Build UPDATE statement with conditional flag logic
    - Commit every 5,000 rows
+   - Track all seen (VisitID, ConVisitID) pairs for stale cleanup
 
-4. **Cleanup Stale Records** (PostgreSQL - optional)
-   - Find conflicts with active flags but no matching Snowflake data
-   - Reset flags to 'N' (currently disabled due to OOM at scale)
+4. **Resolve Stale Conflicts** (PostgreSQL - Pair-Precise Seen-Based Anti-Join)
+   - Phase 1: JOIN `conflictvisitmaps` with `_tmp_delta_pairs` to scope, anti-join with `_tmp_seen_conflicts` to identify stale records
+   - Phase 2: UPDATE stale records in batches of 100K (StatusFlag='R', UpdatedDate=CURRENT_TIMESTAMP)
+   - Preserves W (Whitelisted) and I (Ignored) statuses
 
 ---
 
 ## Implementation Details
 
-### SQL Query Structure
+### v3 Temp Table Approach
 
-#### Base CTE Design (DRY Principle)
-```sql
-WITH
-mph_data AS (...),           -- MPH lookup for ETA calculation
+**Problem Solved**: The v2 CTE approach timed out (>15 minutes) in asymmetric mode because CTEs are re-evaluated during query execution, causing the full 2-year dataset to be processed multiple times.
 
-base_visits AS (             -- Single source of truth
-  SELECT ... ~120 columns
-  FROM FACTVISITCALLPERFORMANCE_CR
-  JOIN DIMCAREGIVER, DIMOFFICE, etc.
-  WHERE Date between -2 years and +45 days
-  AND Provider not in (excluded agencies)
-  {conditional_timestamp_filter}
-),
+**Solution**: v3 uses Snowflake temporary tables to materialize intermediate results, with a two-step `base_visits` creation and an `is_delta` flag for efficient self-join filtering.
 
-delta_visits AS (            -- Recent updates
-  SELECT * FROM base_visits
-  {conditional_delta_filter}
-),
+#### Execution Flow
 
-{CONDITIONAL_ASYMMETRIC_CTEs}  -- Only in asymmetric mode
+```
+V3 EXECUTION FLOW:
 
-conflict_pairs AS (           -- Symmetric OR asymmetric join
-  {CONDITIONAL_JOIN_LOGIC}
-),
-
-spatial_calculations AS (...), -- Distance & time diff (once)
-conflict_with_eta AS (...),    -- MPH lookup & ETA
-conflicts_with_flags AS (...), -- Apply 7 rules
-final_conflicts AS (...)       -- Filter to actual conflicts
-
-SELECT * FROM final_conflicts;
+STEP 1: Create delta_keys temp table
++-------------------------------------------+
+| SELECT DISTINCT VisitDate, SSN            |
+| FROM FACTVISITCALLPERFORMANCE_CR          |
+| WHERE Updated in last N hours             |
++-------------------------------------------+
+        | Result: ~5K-12M unique (date, SSN) pairs
+        v
+STEP 2: Create base_visits temp table (two-part)
++-------------------------------------------+
+| Part A: Delta rows only (fast, ~70K rows) |
+|   CREATE TABLE base_visits AS             |
+|   SELECT *, 1 as is_delta FROM ...        |
+|   WHERE timestamp in last N hours         |
++-------------------------------------------+
+| Part B (asymmetric only):                 |
+|   INSERT INTO base_visits                 |
+|   SELECT *, 0 as is_delta FROM ...        |
+|   INNER JOIN delta_keys ON (date, SSN)    |
+|   WHERE timestamp NOT in last N hours     |
++-------------------------------------------+
+        | Symmetric: ~70K rows
+        | Asymmetric: up to ~9.6M rows (materialized)
+        v
+STEP 2d: Stream delta pairs to Postgres
++-------------------------------------------+
+| SELECT visit_date, ssn FROM delta_keys    |
+| -> Chunked COPY to _tmp_delta_pairs (PG)  |
+| -> Composite index (ssn, visit_date)      |
++-------------------------------------------+
+        v
+STEP 3: Final conflict detection
++-------------------------------------------+
+| SELECT V1.*, V2.*                         |
+| FROM base_visits V1                       |
+| JOIN base_visits V2                       |
+|   ON V1.VisitDate = V2.VisitDate          |
+|  AND V1.SSN = V2.SSN                      |
+|  AND V1.VisitID != V2.VisitID             |
+|  AND V1.is_delta = 1  (asymmetric only)   |
+| WHERE <7 conflict rules>                  |
++-------------------------------------------+
+        v
+STEP 4: Pair-precise stale cleanup
++-------------------------------------------+
+| Phase 1: Identify stale records           |
+|   JOIN conflictvisitmaps WITH              |
+|   _tmp_delta_pairs ON (SSN, VisitDate)    |
+|   ANTI-JOIN _tmp_seen_conflicts            |
+| Phase 2: Batched UPDATE (100K chunks)     |
+|   SET StatusFlag='R', UpdatedDate=NOW()   |
++-------------------------------------------+
 ```
 
-#### Symmetric Mode (Default - Production)
-```sql
-base_visits: 2-year window + 32-hour timestamp filter
-delta_visits: Filter on base_visits
-conflict_pairs: delta_visits self-join (V1 ↔ V2)
-```
-**Performance**: 40-60 seconds
+#### Key Design Decisions
 
-#### Asymmetric Mode (Comprehensive - Not Production Ready)
-```sql
-base_visits: 2-year window (NO timestamp filter)
-delta_visits: Filter base_visits to 32 hours
-delta_conflict_keys: Extract unique (VisitDate, SSN)
-all_visits: Filter base_visits by delta keys
-conflict_pairs: (delta ↔ all_visits) UNION (all_visits ↔ delta)
-```
-**Performance**: >15 minutes (times out)
-**Issue**: `base_visits` processes entire 2-year window before filtering
+1. **Two-Part base_visits Creation**: Part A creates the table with delta rows (fast, uses partition pruning). Part B inserts related non-delta rows via `INNER JOIN delta_keys` (avoids the expensive `OR + IN` subquery pattern that prevented Snowflake optimization).
+
+2. **`is_delta` Flag**: In asymmetric mode, constrains the Step 3 self-join to `V1.is_delta = 1`, avoiding the all-vs-all join on ~9.6M rows while still detecting Delta-vs-All and All-vs-Delta conflicts.
+
+3. **Pair-Precise Stale Cleanup**: Streams actual `(VisitDate, SSN)` pairs from `delta_keys` to PostgreSQL. This eliminates the "cross-product problem" where separate DISTINCT SSN and DISTINCT date lists would create millions of false stale candidates (e.g., 507K SSNs x 597 dates = 302M combos vs ~12M actual pairs).
+
+4. **UUID Type Matching**: `_tmp_seen_conflicts` uses UUID columns to match `conflictvisitmaps` index types, enabling proper index usage in the anti-join.
+
+#### Configuration Toggle
+
+- `enable_asymmetric_join: true` (default): Processes delta + all related visits for comprehensive detection
+- `enable_asymmetric_join: false`: Only processes delta visits (~70K rows, faster but may miss some conflicts)
+- `enable_stale_cleanup: true` (default): Resolves stale conflicts via pair-precise seen-based anti-join
+- `enable_stale_cleanup: false`: Skips stale cleanup (useful for testing)
+
+#### Code References
+
+- **Templates**: `sql/sf_task02_v3_step1_delta_keys.sql`, `sf_task02_v3_step2_base_visits.sql`, `sf_task02_v3_step3_final_query.sql`
+- **Builder**: `lib/query_builder.py::build_conflict_detection_query_v3()`
+- **Processor**: `lib/conflict_processor.py::stream_and_process_conflicts_v3()`
+- **Test Queries**: `sql/sf_task02_v3-sym-defaults.sql`, `sf_task02_v3-asym-defaults.sql`
+
+---
 
 ### Conflict Detection Rules
 
@@ -165,21 +214,32 @@ conflict_pairs: (delta ↔ all_visits) UNION (all_visits ↔ delta)
 ### Change Detection Logic
 
 When `skip_unchanged_records: true`, checks if any of these changed:
-- **7 Conflict Flags** (Y/N values)
+- **7 Conflict Flags** (Y/N values, conditional: only update if existing='N')
 - **Business Columns** (40+ columns): Provider, Visit, Caregiver, Office, Patient, Payer, ServiceCode IDs and names, Times, Dates, Rates, Status fields
 
-If no changes detected, skip the UPDATE statement.
+If no changes detected, the UPDATE statement is skipped entirely.
 
 ### Update Logic
 
 **Preserves**:
 - Existing `CONFLICTID` (never overwrite)
-- `StatusFlag` if 'W' (Working) or 'I' (Inactive/Resolved)
+- `StatusFlag` if 'W' (Whitelisted) or 'I' (Ignored)
 
 **Updates**:
-- All conflict flag columns (7 rules)
+- All conflict flag columns (7 rules, conditional: only N->Y)
 - All business data columns
 - Sets `StatusFlag='N'` only if currently NULL or 'N'
+
+### Stale Cleanup Logic
+
+**What is a stale conflict?** A conflict record in PostgreSQL that was within the scope of Snowflake's detection run (matching VisitDate + SSN pair) but was NOT re-detected in the current run. This means the conflict no longer exists in the source data.
+
+**How it works (Pair-Precise Seen-Based Anti-Join):**
+1. During Step 2d, actual `(VisitDate, SSN)` pairs from `delta_keys` are streamed to PostgreSQL `_tmp_delta_pairs`
+2. During Step 3 streaming, all detected `(VisitID, ConVisitID)` pairs are collected into `_tmp_seen_conflicts`
+3. Phase 1 joins `conflictvisitmaps` with `_tmp_delta_pairs` (scope) and anti-joins with `_tmp_seen_conflicts` (seen) to identify stale records
+4. Phase 2 updates stale records: `StatusFlag='R'`, `UpdatedDate=CURRENT_TIMESTAMP`
+5. Records with `StatusFlag` in ('W', 'I', 'R') are excluded from cleanup
 
 ---
 
@@ -206,13 +266,15 @@ If no changes detected, skip the UPDATE statement.
     "conflict_schema": "conflict_dev"
   },
   "task02_parameters": {
-    "lookback_hours": 32,
+    "lookback_hours": 36,
     "lookback_years": 2,
     "lookforward_days": 45,
     "batch_size": 5000,
+    "timeout_buffer_seconds": 90,
+    "max_retry_attempts": 3,
     "skip_unchanged_records": true,
-    "enable_asymmetric_join": false,
-    "enable_stale_cleanup": false
+    "enable_asymmetric_join": true,
+    "enable_stale_cleanup": true
   }
 }
 ```
@@ -221,9 +283,20 @@ If no changes detected, skip the UPDATE statement.
 
 | Flag | Default | Purpose | Status |
 |------|---------|---------|--------|
-| `skip_unchanged_records` | `true` | Only update rows with actual changes | ✅ Production |
-| `enable_asymmetric_join` | `false` | Comprehensive conflict detection | ⚠️ Needs optimization |
-| `enable_stale_cleanup` | `false` | Reset stale conflict flags | ⚠️ Causes OOM |
+| `skip_unchanged_records` | `true` | Only update rows with actual changes | Production |
+| `enable_asymmetric_join` | `true` | Comprehensive conflict detection (Delta vs All) | Production |
+| `enable_stale_cleanup` | `true` | Pair-precise stale conflict resolution | Production |
+
+### Parameter Reference
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `lookback_hours` | 36 | Hours to look back for recently updated visits |
+| `lookback_years` | 2 | Years of visit history for conflict detection window |
+| `lookforward_days` | 45 | Days ahead for future visit conflict detection |
+| `batch_size` | 5000 | Number of records per processing batch |
+| `timeout_buffer_seconds` | 90 | Seconds before Lambda timeout to stop processing |
+| `max_retry_attempts` | 3 | Maximum retry attempts for transient errors |
 
 ---
 
@@ -278,22 +351,18 @@ aws lambda invoke \
 ### PostgreSQL Indexes (Required)
 
 ```sql
--- Critical for join performance
-CREATE INDEX IF NOT EXISTS idx_conflictvisitmaps_providerid_visitdate_ssn
-  ON conflict_dev.conflictvisitmaps (providerid, visitdate, ssn);
-
+-- Critical for batch lookup performance
 CREATE INDEX IF NOT EXISTS idx_conflictvisitmaps_visitid
-  ON conflict_dev.conflictvisitmaps (visitid);
+  ON conflict_dev.conflictvisitmaps ("VisitID");
 
--- For stale cleanup queries
-CREATE INDEX IF NOT EXISTS idx_conflictvisitmaps_flags
-  ON conflict_dev.conflictvisitmaps (sameschdateflag, samevisittimeflag, 
-      schandvisittimesameflag, schoverschdateflag, 
-      visittimeovervisittimeflag, schtimeovervisittimeflag, distanceflag)
-  WHERE sameschdateflag = 'Y' OR samevisittimeflag = 'Y' 
-    OR schandvisittimesameflag = 'Y' OR schoverschdateflag = 'Y'
-    OR visittimeovervisittimeflag = 'Y' OR schtimeovervisittimeflag = 'Y'
-    OR distanceflag = 'Y';
+-- For stale cleanup: pair-precise scoping via (VisitDate, SSN) JOIN
+CREATE INDEX IF NOT EXISTS idx_cvm_visitdate_ssn
+  ON conflict_dev.conflictvisitmaps ("VisitDate", "SSN")
+  WHERE "CONFLICTID" IS NOT NULL
+    AND "InserviceStartDate" IS NULL AND "InserviceEndDate" IS NULL
+    AND "PTOStartDate" IS NULL AND "PTOEndDate" IS NULL
+    AND "ConInserviceStartDate" IS NULL AND "ConInserviceEndDate" IS NULL
+    AND "ConPTOStartDate" IS NULL AND "ConPTOEndDate" IS NULL;
 ```
 
 ---
@@ -318,7 +387,7 @@ python -m pytest tests/ -v
 
 **Via AWS Console**:
 1. Navigate to Lambda function
-2. Test tab → Configure test event
+2. Test tab -> Configure test event
 3. Use payload: `{"action": "task02_00_run_conflict_update"}`
 4. Execute and review CloudWatch logs
 
@@ -334,6 +403,15 @@ aws lambda invoke \
 cat response.json | jq .
 ```
 
+**Override Parameters**:
+```bash
+# Test with custom lookback hours
+aws lambda invoke \
+  --function-name task02-conflict-updater \
+  --payload '{"action":"task02_00_run_conflict_update","lookback_hours":40}' \
+  response.json
+```
+
 ### Expected Output
 
 ```json
@@ -343,23 +421,27 @@ cat response.json | jq .
     "status": "completed",
     "action": "task02_00_run_conflict_update",
     "statistics": {
-      "rows_fetched": 73240,
-      "rows_processed": 73240,
-      "matched_in_postgres": 20742,
-      "rows_updated": 251,
-      "rows_skipped": 20491,
+      "rows_fetched": 156949,
+      "rows_processed": 156949,
+      "matched_in_postgres": 57483,
+      "rows_updated": 32,
+      "rows_skipped_no_changes": 41365,
+      "new_conflicts": 99466,
       "skip_unchanged_records": true,
-      "stale_conflicts_reset": 0
+      "asymmetric_join_enabled": true,
+      "stale_cleanup_enabled": true,
+      "stale_conflicts_resolved": 0,
+      "delta_pairs_count": 12054514
     },
-    "duration_seconds": 52.4,
+    "duration_seconds": 349.5,
     "parameters": {
-      "lookback_hours": 32,
+      "lookback_hours": 36,
       "lookback_years": 2,
       "lookforward_days": 45,
       "batch_size": 5000,
       "skip_unchanged_records": true,
-      "enable_asymmetric_join": false,
-      "enable_stale_cleanup": false
+      "enable_asymmetric_join": true,
+      "enable_stale_cleanup": true
     }
   }
 }
@@ -376,41 +458,33 @@ cat response.json | jq .
 **Symptoms**: `Task timed out after 900.00 seconds`
 
 **Causes**:
-- Asymmetric join enabled (`enable_asymmetric_join: true`)
-- Large data volume without proper filtering
+- `lookback_hours` set too high (>40 hours can cause large datasets)
+- Snowflake warehouse too small for the data volume
 - Network issues with Snowflake/PostgreSQL
 
 **Solutions**:
-- ✅ Ensure `enable_asymmetric_join: false` (default)
-- Check Snowflake query execution time in logs
-- Verify network connectivity
+- Reduce `lookback_hours` to 36 (default)
+- Use a larger Snowflake warehouse for higher lookback windows
+- Check Snowflake query execution time in Step 2 logs
 
-#### 2. Out of Memory (OOM)
+#### 2. Zero Stale Conflicts
 
-**Symptoms**: `Runtime.OutOfMemory` or `Runtime exited with error: signal: killed`
+**Symptoms**: `stale_conflicts_resolved: 0` when expecting stale records
 
-**Causes**:
-- Stale cleanup enabled with 8M+ stale records
-- Batch size too large
-- Memory leak in processing
-
-**Solutions**:
-- ✅ Set `enable_stale_cleanup: false` (default)
-- Reduce `batch_size` from 5000 to 2500
-- Monitor memory usage in CloudWatch
+**Explanation**: This is expected behavior when all conflicts detected in previous runs are still valid. The pair-precise approach only marks records as stale if they are within the exact `(VisitDate, SSN)` scope of the current run but were not re-detected.
 
 #### 3. SQL Compilation Errors
 
 **Symptom**: `SQL compilation error: syntax error line X at position Y`
 
 **Causes**:
-- Placeholder replacement issues in SQL template
+- Placeholder replacement issues in SQL templates
 - Column name mismatches
 - Missing/invalid parameters
 
 **Solutions**:
-- Verify `sf_task02_conflict_detection_v2.sql` has correct placeholder format
-- Check CloudWatch logs for DEBUG messages showing query structure
+- Verify SQL template files have correct placeholder format
+- Check CloudWatch logs for query structure debug messages
 - Validate all placeholders are replaced (no `{...}` remaining)
 
 #### 4. Column Name Mismatches
@@ -419,7 +493,7 @@ cat response.json | jq .
 
 **Causes**:
 - Snowflake uses case-sensitive quoted identifiers
-- PostgreSQL columns are lowercase
+- PostgreSQL columns are case-sensitive when quoted
 - Schema differences between environments
 
 **Solutions**:
@@ -433,7 +507,7 @@ cat response.json | jq .
 
 **Possible Causes**:
 - All records unchanged (change detection working correctly)
-- No matching records in PostgreSQL
+- No matching records in PostgreSQL (new conflicts not yet inserted)
 - Filter criteria too restrictive
 
 **Verification**:
@@ -441,119 +515,47 @@ cat response.json | jq .
 -- Check PostgreSQL for expected conflicts
 SELECT COUNT(*) 
 FROM conflict_dev.conflictvisitmaps
-WHERE visitdate >= CURRENT_DATE - INTERVAL '7 days';
+WHERE "VisitDate" >= CURRENT_DATE - INTERVAL '7 days';
 
 -- Check recent Snowflake updates
 SELECT COUNT(*) 
 FROM ANALYTICS.BI.FACTVISITCALLPERFORMANCE_CR
-WHERE "Visit Updated Timestamp" >= DATEADD(HOUR, -32, GETDATE());
+WHERE "Visit Updated Timestamp" >= DATEADD(HOUR, -36, GETDATE());
 ```
 
 ### Debug Mode
 
 Enable detailed logging by checking CloudWatch logs for:
-- Query structure (`WITH` keyword position, CTE presence)
-- Row counts at each stage (fetched, matched, updated)
-- Skip reasons for unchanged records
-- Batch processing timing
+- Step timing (Step 1, Step 2 Part A/B, Step 2d, Step 3, Step 4)
+- Row counts at each stage (fetched, matched, updated, stale)
+- Delta pair counts (distinct SSNs, distinct dates, total pairs)
+- Phase 1/Phase 2 timing for stale cleanup
+- Batch processing progress
 
 ### Performance Monitoring
 
 **Key Metrics**:
-- Snowflake query execution time (should be <60s in symmetric mode)
-- PostgreSQL batch commit time
-- Memory usage trend
-- Lambda duration
-
-**Optimization Checklist**:
-- ✅ Symmetric mode enabled
-- ✅ Change detection enabled
-- ✅ Stale cleanup disabled
-- ✅ Batch size appropriate (5000)
-- ✅ PostgreSQL indexes created
-- ✅ Excluded SSNs loading disabled (performance test mode)
+- Step 2 duration (base_visits creation, should be <3 minutes)
+- Step 2d duration (delta pairs streaming, depends on pair count)
+- Step 3 streaming duration
+- Step 4 Phase 1/Phase 2 timing
+- Overall Lambda duration (should be <10 minutes for 36h lookback)
 
 ---
 
-## Known Limitations
+## Future Enhancements
 
-### 1. Asymmetric Join Performance
-**Issue**: Times out (>15 minutes) when `enable_asymmetric_join: true`
+### 1. INSERT Logic for New Conflicts
+Currently, the ~99K new conflicts detected but not present in PostgreSQL are counted but not inserted. Implementing INSERT logic would complete the full sync cycle.
 
-**Root Cause**: In asymmetric mode, the `base_visits` CTE has no timestamp filter, causing it to materialize the entire 2-year dataset (100M+ rows) before the `all_visits` CTE can filter it.
+### 2. UpdateFlag Cleanup
+Deferred for now. Records with `UpdateFlag` set could be cleaned up in a separate maintenance task.
 
-**Impact**: Cannot detect conflicts between:
-- New conflict with unchanged record
-- Stale conflict (no longer valid) with unchanged records
-
-**Workaround**: Use symmetric mode for nightly runs (99% of conflicts detected), schedule periodic full refresh
-
-**Future Fix**: Refactor to use separate CTEs:
-```sql
-base_visits_delta AS (SELECT ... WHERE 32-hour filter)
-base_visits_all AS (SELECT ... WHERE 2-year filter only)
-```
-
-### 2. Stale Conflict Cleanup
-**Issue**: Causes OOM when attempting to process 8M+ stale records
-
-**Root Cause**: Single UPDATE statement for millions of rows exceeds Lambda memory
-
-**Workaround**: Disabled by default (`enable_stale_cleanup: false`)
-
-**Future Fix**: Implement batched cleanup:
-```python
-BATCH_SIZE = 10000
-while True:
-    updated = execute("""
-        UPDATE conflictvisitmaps 
-        SET flags = 'N'
-        WHERE id IN (
-            SELECT id FROM stale_conflicts
-            LIMIT {BATCH_SIZE}
-        )
-    """)
-    if updated == 0: break
-    commit()
-```
-
-### 3. Edge Case Conflicts
-**Issue**: Symmetric mode misses some conflicts where neither record changed
-
-**Example**:
-- Visit A and Visit B both exist, no conflict
-- Visit C created (conflicts with both A and B)
-- Visit C updated (triggers detection)
-- Conflict detected: C↔B (both have delta)
-- **MISSED**: A↔C (only C has delta, A unchanged)
-
-**Impact**: Minor - most conflicts involve recent updates on both sides
-
-**Mitigation**: Schedule weekly full refresh with asymmetric mode (after optimization)
+### 3. Conflicts Table Updates
+The parent `conflicts` table updates (aggregating from `conflictvisitmaps`) are planned as a subsequent step.
 
 ---
 
-## Migration from Snowflake
-
-### Original Procedure
-`TASK_02_UPDATE_DATA_CONFLICTVISITMAPS_0.sql`
-
-### Key Changes
-1. **UpdateFlag Removed**: No longer sets/checks UpdateFlag=1 (unnecessary transaction tracking)
-2. **Streaming Processing**: Added batch-based streaming instead of full result set in memory
-3. **Change Detection**: New optimization to skip unchanged records
-4. **Conditional Modes**: Added symmetric/asymmetric toggle
-5. **Enhanced Logging**: Comprehensive metrics and timing
-
-### Preserved Behavior
-- All 7 conflict detection rules
-- StatusFlag preservation ('W', 'I' not overwritten)
-- CONFLICTID preservation
-- Column data mapping and transformations
-- Date/time filtering logic
-
----
-
-**Version**: 2.0
-**Last Updated**: 2026-02-07
-**Status**: ✅ Production Ready (Symmetric Mode)
+**Version**: 3.0
+**Last Updated**: 2026-02-08
+**Status**: Production Ready (Asymmetric Mode + Stale Cleanup)

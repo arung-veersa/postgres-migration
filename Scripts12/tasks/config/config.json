@@ -16,7 +16,7 @@
     "conflict_schema": "conflict_dev"
   },
   "task02_parameters": {
-    "lookback_hours": 32,
+    "lookback_hours": 36,
     "lookback_years": 2,
     "lookforward_days": 45,
     "batch_size": 5000,
@@ -24,7 +24,7 @@
     "max_retry_attempts": 3,
     "skip_unchanged_records": true,
     "enable_asymmetric_join": true,
-    "enable_stale_cleanup": false
+    "enable_stale_cleanup": true
   },
   "logging": {
     "level": "INFO",

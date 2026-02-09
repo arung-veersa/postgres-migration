@@ -80,6 +80,8 @@ class SnowflakeConnectionManager:
                 user=self.user,
                 private_key=self.get_private_key(self.rsa_key),
                 warehouse=self.warehouse,
+                database=self.analytics_database,
+                schema=self.analytics_schema,
                 # Disable OCSP checks for Lambda VPC environments
                 insecure_mode=True,
                 session_parameters={
