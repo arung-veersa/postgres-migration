@@ -554,70 +554,65 @@ conflict_with_eta AS (
 ),
 
 -- CTE 5: Apply 7 conflict detection rules
+-- NOTE: ProviderID != ConProviderID is already enforced by the conflict_pairs JOIN condition,
+--       so it is not repeated in each rule below.
 conflicts_with_flags AS (
   SELECT 
     CE.*,
     -- Rule 1: Same scheduled time (both visits not started)
     CASE 
-      WHEN CE."ProviderID" != CE."ConProviderID"
-           AND CE."VisitStartTime" IS NULL AND CE."VisitEndTime" IS NULL
+      WHEN CE."VisitStartTime" IS NULL AND CE."VisitEndTime" IS NULL
            AND CE."ConVisitStartTime" IS NULL AND CE."ConVisitEndTime" IS NULL
-           AND CONCAT(CE."SchStartTime", '~', CE."SchEndTime") = CONCAT(CE."ConSchStartTime", '~', CE."ConSchEndTime")
+           AND CE."SchStartTime" = CE."ConSchStartTime" AND CE."SchEndTime" = CE."ConSchEndTime"
       THEN 'Y' ELSE 'N' 
     END AS "SameSchTimeFlag",
     
     -- Rule 2: Same visit time (both visits completed)
     CASE 
-      WHEN CE."ProviderID" != CE."ConProviderID"
-           AND CE."VisitStartTime" IS NOT NULL AND CE."VisitEndTime" IS NOT NULL
+      WHEN CE."VisitStartTime" IS NOT NULL AND CE."VisitEndTime" IS NOT NULL
            AND CE."ConVisitStartTime" IS NOT NULL AND CE."ConVisitEndTime" IS NOT NULL
-           AND CONCAT(CE."VisitStartTime", '~', CE."VisitEndTime") = CONCAT(CE."ConVisitStartTime", '~', CE."ConVisitEndTime")
+           AND CE."VisitStartTime" = CE."ConVisitStartTime" AND CE."VisitEndTime" = CE."ConVisitEndTime"
       THEN 'Y' ELSE 'N' 
     END AS "SameVisitTimeFlag",
     
     -- Rule 3: Scheduled time matches conflicting visit time
     CASE 
-      WHEN CE."ProviderID" != CE."ConProviderID"
-           AND CE."VisitStartTime" IS NULL AND CE."VisitEndTime" IS NULL
+      WHEN CE."VisitStartTime" IS NULL AND CE."VisitEndTime" IS NULL
            AND CE."ConVisitStartTime" IS NOT NULL AND CE."ConVisitEndTime" IS NOT NULL
-           AND CONCAT(CE."SchStartTime", '~', CE."SchEndTime") = CONCAT(CE."ConVisitStartTime", '~', CE."ConVisitEndTime")
+           AND CE."SchStartTime" = CE."ConVisitStartTime" AND CE."SchEndTime" = CE."ConVisitEndTime"
       THEN 'Y' ELSE 'N' 
     END AS "SchVisitTimeSame",
     
-    -- Rule 4: Scheduled time overlaps another scheduled time
+    -- Rule 4: Scheduled time overlaps another scheduled time (excludes exact match = Rule 1)
     CASE 
-      WHEN CE."ProviderID" != CE."ConProviderID"
-           AND CE."VisitStartTime" IS NULL AND CE."VisitEndTime" IS NULL
+      WHEN CE."VisitStartTime" IS NULL AND CE."VisitEndTime" IS NULL
            AND CE."ConVisitStartTime" IS NULL AND CE."ConVisitEndTime" IS NULL
            AND (CE."SchStartTime" < CE."ConSchEndTime" AND CE."SchEndTime" > CE."ConSchStartTime")
-           AND CONCAT(CE."SchStartTime", '~', CE."SchEndTime") != CONCAT(CE."ConSchStartTime", '~', CE."ConSchEndTime")
+           AND NOT (CE."SchStartTime" = CE."ConSchStartTime" AND CE."SchEndTime" = CE."ConSchEndTime")
       THEN 'Y' ELSE 'N' 
     END AS "SchOverAnotherSchTimeFlag",
     
-    -- Rule 5: Visit time overlaps another visit time
+    -- Rule 5: Visit time overlaps another visit time (excludes exact match = Rule 2)
     CASE 
-      WHEN CE."ProviderID" != CE."ConProviderID"
-           AND CE."VisitStartTime" IS NOT NULL AND CE."VisitEndTime" IS NOT NULL
+      WHEN CE."VisitStartTime" IS NOT NULL AND CE."VisitEndTime" IS NOT NULL
            AND CE."ConVisitStartTime" IS NOT NULL AND CE."ConVisitEndTime" IS NOT NULL
            AND (CE."VisitStartTime" < CE."ConVisitEndTime" AND CE."VisitEndTime" > CE."ConVisitStartTime")
-           AND CONCAT(CE."VisitStartTime", '~', CE."VisitEndTime") != CONCAT(CE."ConVisitStartTime", '~', CE."ConVisitEndTime")
+           AND NOT (CE."VisitStartTime" = CE."ConVisitStartTime" AND CE."VisitEndTime" = CE."ConVisitEndTime")
       THEN 'Y' ELSE 'N' 
     END AS "VisitTimeOverAnotherVisitTimeFlag",
     
-    -- Rule 6: Scheduled time overlaps visit time
+    -- Rule 6: Scheduled time overlaps visit time (excludes exact match = Rule 3)
     CASE 
-      WHEN CE."ProviderID" != CE."ConProviderID"
-           AND CE."VisitStartTime" IS NULL AND CE."VisitEndTime" IS NULL
+      WHEN CE."VisitStartTime" IS NULL AND CE."VisitEndTime" IS NULL
            AND CE."ConVisitStartTime" IS NOT NULL AND CE."ConVisitEndTime" IS NOT NULL
            AND (CE."SchStartTime" < CE."ConVisitEndTime" AND CE."SchEndTime" > CE."ConVisitStartTime")
-           AND CONCAT(CE."SchStartTime", '~', CE."SchEndTime") != CONCAT(CE."ConVisitStartTime", '~', CE."ConVisitEndTime")
+           AND NOT (CE."SchStartTime" = CE."ConVisitStartTime" AND CE."SchEndTime" = CE."ConVisitEndTime")
       THEN 'Y' ELSE 'N' 
     END AS "SchTimeOverVisitTimeFlag",
     
     -- Rule 7: Distance flag (impossible travel distance - reuses ETATravelMinutes from CTE 4)
     CASE 
-      WHEN CE."ProviderID" != CE."ConProviderID"
-           AND CE."Longitude" IS NOT NULL AND CE."Latitude" IS NOT NULL
+      WHEN CE."Longitude" IS NOT NULL AND CE."Latitude" IS NOT NULL
            AND CE."ConLongitude" IS NOT NULL AND CE."ConLatitude" IS NOT NULL
            AND CE."VisitStartTime" IS NOT NULL AND CE."VisitEndTime" IS NOT NULL
            AND CE."ConVisitStartTime" IS NOT NULL AND CE."ConVisitEndTime" IS NOT NULL
