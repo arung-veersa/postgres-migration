@@ -1004,7 +1004,7 @@ class ConflictProcessor:
             logger.info(f"  (Delta vs All visits - catches conflicts with unchanged records)")
         logger.info(f"  Stale cleanup: {'ENABLED' if self.enable_stale_cleanup else 'DISABLED'}")
         if self.enable_stale_cleanup:
-            logger.info(f"  (Resets flag values to 'N' for resolved conflicts)")
+            logger.info(f"  (Sets StatusFlag='R' and UpdatedDate for stale conflicts)")
         
         # Performance metrics
         logger.info("")
