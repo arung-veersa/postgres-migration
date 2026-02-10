@@ -1,12 +1,17 @@
 ---
-description: Task 02 conflict detection - v3 architecture, execution flow, and implementation details
-globs: Scripts12/tasks/**/*.py, Scripts12/tasks/**/*.sql, Scripts12/tasks/**/*.json
+description: Scripts12 Task 02 - conflict detection v3 architecture, execution flow, and implementation details
+globs: Scripts12/**/*.py, Scripts12/**/*.sql, Scripts12/**/*.json
 alwaysApply: false
 ---
 
-# Task 02 Conflict Detection (v3)
+# Scripts12: Task 02 Conflict Detection (v3)
 
-## Key Files
+## Databases
+
+- **Snowflake (read-only source)**: `ANALYTICS.BI.FACTVISITCALLPERFORMANCE_CR` view with dimension joins. RSA key auth, streaming cursor. Temp tables require `database` and `schema` on connection.
+- **PostgreSQL (read/write target)**: `conflict_management.conflict_dev` schema. Tables: `conflicts` (parent), `conflictvisitmaps` (detail with 7 conflict flags). psycopg2 driver. All column names double-quoted (case-sensitive).
+
+## Key Files (under Scripts12/tasks/)
 
 - `scripts/lambda_handler.py` -- Entry point, orchestration, parameter handling
 - `lib/conflict_processor.py` -- Core logic: streaming, batch updates, stale cleanup
@@ -31,20 +36,18 @@ alwaysApply: false
 - **`is_delta` flag**: Constrains self-join to Delta-vs-All (not All-vs-All on 9.6M rows)
 - **Pair-precise stale cleanup**: Uses exact `(VisitDate, SSN)` pairs, NOT separate DISTINCT lists (cross-product of 507K SSNs x 597 dates = 302M combos caused 3.9M false stale positives)
 - **UUID type matching**: `_tmp_seen_conflicts` uses UUID columns to match `conflictvisitmaps` indexes
-- **StatusFlag values**: 'N'=New/Active, 'R'=Resolved/Stale, 'W'=Whitelisted, 'I'=Ignored (W and I are never overwritten)
+- **StatusFlag values**: 'N'=New/Active, 'R'=Resolved/Stale, 'W'=Whitelisted, 'I'=Ignored (W and I never overwritten)
 
 ## Stats Fields (backward compat aliases)
 
 - `delta_keys_count` -> alias for `delta_pairs_count`
 - `modified_visit_ids_count` -> alias for `delta_ssns_count`
 - `stale_conflicts_reset` -> alias for `stale_conflicts_resolved`
-- `records_marked_for_update` -> always 0 (no upfront marking in seen-based approach)
 
 ## Current State (as of 2026-02-08)
 
-- Asymmetric join: WORKING (~6 min for 36h lookback)
-- Pair-precise stale cleanup: WORKING (0 false positives confirmed)
-- UPDATE logic: WORKING (conditional flags, change detection)
-- INSERT logic for new conflicts: NOT YET IMPLEMENTED (~99K new conflicts detected but not inserted)
+- Asymmetric join + pair-precise stale cleanup: WORKING (~6 min for 36h lookback)
+- UPDATE logic with conditional flags and change detection: WORKING
+- INSERT logic for new conflicts (~99K detected but not inserted): NOT YET IMPLEMENTED
 - Conflicts table aggregation: NOT YET IMPLEMENTED
 - UpdateFlag cleanup: DEFERRED
