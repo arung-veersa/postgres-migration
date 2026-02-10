@@ -1,0 +1,50 @@
+---
+description: Task 02 conflict detection - v3 architecture, execution flow, and implementation details
+globs: Scripts12/tasks/**/*.py, Scripts12/tasks/**/*.sql, Scripts12/tasks/**/*.json
+alwaysApply: false
+---
+
+# Task 02 Conflict Detection (v3)
+
+## Key Files
+
+- `scripts/lambda_handler.py` -- Entry point, orchestration, parameter handling
+- `lib/conflict_processor.py` -- Core logic: streaming, batch updates, stale cleanup
+- `lib/query_builder.py` -- Builds Snowflake SQL from templates, v3 multi-step approach
+- `lib/connections.py` -- Snowflake and PostgreSQL connection managers
+- `config/config.json` -- Runtime config (lookback_hours=36, batch_size=5000)
+- `sql/sf_task02_v3_step*.sql` -- Snowflake SQL templates for steps 1/2/3
+
+## v3 Execution Flow
+
+1. **Step 0**: Load excluded SSNs into Snowflake temp table (`excluded_ssns_temp`)
+2. **Step 1**: Create `delta_keys` temp table (DISTINCT VisitDate, SSN from recent updates)
+3. **Step 2 Part A**: Create `base_visits` with delta rows only (`is_delta=1`)
+4. **Step 2 Part B** (asymmetric): INSERT related non-delta rows via `INNER JOIN delta_keys` (`is_delta=0`)
+5. **Step 2d**: Stream `(visit_date, ssn)` pairs from `delta_keys` to PostgreSQL `_tmp_delta_pairs` via chunked COPY
+6. **Step 3**: Self-join `base_visits` with `V1.is_delta=1` constraint (asymmetric), stream conflicts
+7. **Step 4**: Pair-precise stale cleanup -- Phase 1: identify stale via anti-join on `_tmp_delta_pairs`; Phase 2: batched UPDATE (100K chunks), `StatusFlag='R'`
+
+## Critical Design Decisions
+
+- **Two-part base_visits**: Avoids `OR + IN` subquery that prevented Snowflake partition pruning
+- **`is_delta` flag**: Constrains self-join to Delta-vs-All (not All-vs-All on 9.6M rows)
+- **Pair-precise stale cleanup**: Uses exact `(VisitDate, SSN)` pairs, NOT separate DISTINCT lists (cross-product of 507K SSNs x 597 dates = 302M combos caused 3.9M false stale positives)
+- **UUID type matching**: `_tmp_seen_conflicts` uses UUID columns to match `conflictvisitmaps` indexes
+- **StatusFlag values**: 'N'=New/Active, 'R'=Resolved/Stale, 'W'=Whitelisted, 'I'=Ignored (W and I are never overwritten)
+
+## Stats Fields (backward compat aliases)
+
+- `delta_keys_count` -> alias for `delta_pairs_count`
+- `modified_visit_ids_count` -> alias for `delta_ssns_count`
+- `stale_conflicts_reset` -> alias for `stale_conflicts_resolved`
+- `records_marked_for_update` -> always 0 (no upfront marking in seen-based approach)
+
+## Current State (as of 2026-02-08)
+
+- Asymmetric join: WORKING (~6 min for 36h lookback)
+- Pair-precise stale cleanup: WORKING (0 false positives confirmed)
+- UPDATE logic: WORKING (conditional flags, change detection)
+- INSERT logic for new conflicts: NOT YET IMPLEMENTED (~99K new conflicts detected but not inserted)
+- Conflicts table aggregation: NOT YET IMPLEMENTED
+- UpdateFlag cleanup: DEFERRED

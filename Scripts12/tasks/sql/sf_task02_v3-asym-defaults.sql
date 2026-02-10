@@ -4,7 +4,7 @@
 -- Generated for direct Snowflake execution via DBeaver or similar client
 -- 
 -- MODE: ASYMMETRIC (enable_asymmetric_join = true)
--- DESCRIPTION: Processes visits updated in last 32 hours + related visits
+-- DESCRIPTION: Processes visits updated in last 36 hours + related visits
 -- EXPECTED ROWS IN base_visits: ~9.6 million
 -- EXPECTED RUNTIME: 3-5 minutes (estimated)
 -- 
@@ -31,7 +31,7 @@ CREATE TEMPORARY TABLE IF NOT EXISTS excluded_ssns_temp (ssn VARCHAR);
 --          1. Used in Step 2 to expand base_visits scope (asymmetric mode)
 --          2. Used in Step 2b to scope stale cleanup marking in Postgres
 --
--- PERFORMANCE: Fast (~10-20 seconds) - processes only 32-hour window
+-- PERFORMANCE: Fast (~10-20 seconds) - processes only 36-hour window
 -- OUTPUT: Temp table with ~50K-100K rows (one per unique date+SSN combo)
 -- ============================================================================
 
@@ -46,7 +46,7 @@ FROM
     AND TRIM(CAR."SSN") IS NOT NULL 
     AND TRIM(CAR."SSN") != ''
 WHERE 
-  CR1."Visit Updated Timestamp" >= DATEADD(HOUR, -32, GETDATE())
+  CR1."Visit Updated Timestamp" >= DATEADD(HOUR, -36, GETDATE())
   AND DATE(CR1."Visit Date") BETWEEN DATEADD(YEAR, -2, GETDATE()) 
                                  AND DATEADD(DAY, 45, GETDATE())
   AND CR1."Provider Id" NOT IN ('d65b83d5-eb23-4a20-9e64-288ddcd7e0f1','e1391287-3089-4db6-9603-0357ce908b67','aaa64975-c24a-421b-8239-f148001873e0')
@@ -57,18 +57,19 @@ WHERE
 
 
 -- ============================================================================
--- STEP 2b: Collect distinct SSNs for stale cleanup scoping
+-- STEP 2d: Collect actual (visit_date, ssn) pairs for stale cleanup scoping
 -- ============================================================================
--- Run this to see the distinct SSNs that define the stale cleanup scope.
--- No upfront marking -- Lambda uses seen-based anti-join resolve instead.
--- SELECT DISTINCT ssn FROM delta_keys;
--- Expected: ~500K distinct SSNs (all caregivers with recently-updated visits)
+-- Lambda streams these exact pairs to PostgreSQL _tmp_delta_pairs via COPY.
+-- This gives pair-precise stale scoping (avoids the cross-product problem
+-- of separate DISTINCT SSN + DISTINCT date lists).
+-- SELECT visit_date, ssn FROM delta_keys;
+-- Expected: ~12M pairs (~507K distinct SSNs, ~597 distinct dates)
 
 
 -- ============================================================================
 -- STEP 2 (Part A): Create base_visits with DELTA rows only (~70K, fast)
 -- ============================================================================
--- Uses partition pruning on Visit Updated Timestamp >= 32 hours
+-- Uses partition pruning on Visit Updated Timestamp >= 36 hours
 -- All rows get is_delta = 1
 -- Performance: ~30-40 seconds
 -- ============================================================================
@@ -237,14 +238,14 @@ WHERE
                              AND DATEADD(DAY, 45, GETDATE())
   AND CR1."Provider Id" NOT IN ('d65b83d5-eb23-4a20-9e64-288ddcd7e0f1','e1391287-3089-4db6-9603-0357ce908b67','aaa64975-c24a-421b-8239-f148001873e0')
   AND TRIM(CAR."SSN") NOT IN (SELECT ssn FROM excluded_ssns_temp)
-  AND CR1."Visit Updated Timestamp" >= DATEADD(HOUR, -32, GETDATE());
+  AND CR1."Visit Updated Timestamp" >= DATEADD(HOUR, -36, GETDATE());
 
 
 -- ============================================================================
 -- STEP 2 (Part B): INSERT related non-delta visits via INNER JOIN delta_keys
 -- ============================================================================
 -- Uses explicit INNER JOIN with delta_keys (much faster than OR + IN subquery)
--- Excludes delta rows (timestamp < 32h) to avoid duplicates with Part A
+-- Excludes delta rows (timestamp < 36h) to avoid duplicates with Part A
 -- All rows get is_delta = 0 (used in Step 3 join condition)
 -- Performance: estimated 2-5 minutes
 -- ============================================================================
@@ -415,7 +416,7 @@ WHERE
                              AND DATEADD(DAY, 45, GETDATE())
   AND CR1."Provider Id" NOT IN ('d65b83d5-eb23-4a20-9e64-288ddcd7e0f1','e1391287-3089-4db6-9603-0357ce908b67','aaa64975-c24a-421b-8239-f148001873e0')
   AND TRIM(CAR."SSN") NOT IN (SELECT ssn FROM excluded_ssns_temp)
-  AND CR1."Visit Updated Timestamp" < DATEADD(HOUR, -32, GETDATE());
+  AND CR1."Visit Updated Timestamp" < DATEADD(HOUR, -36, GETDATE());
 
 
 -- STEP 3: Final conflict detection query

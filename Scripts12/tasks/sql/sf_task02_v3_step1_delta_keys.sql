@@ -5,7 +5,7 @@
 -- PURPOSE: Extract unique (VisitDate, SSN) combinations from recently updated visits
 --          to identify which caregivers and dates need comprehensive conflict checking
 --
--- PERFORMANCE: Fast (~10-20 seconds) - processes only 32-hour window
+-- PERFORMANCE: Fast (~10-20 seconds) - processes only the lookback_hours window
 -- OUTPUT: Temp table with thousands of rows (one per unique date+SSN combo)
 --
 -- This temp table is used in Step 2 to expand the search scope beyond just delta

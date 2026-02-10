@@ -4,7 +4,7 @@
 -- Generated for direct Snowflake execution via DBeaver or similar client
 -- 
 -- MODE: SYMMETRIC (enable_asymmetric_join = false)
--- DESCRIPTION: Only processes visits updated in last 32 hours
+-- DESCRIPTION: Only processes visits updated in last 36 hours
 -- EXPECTED ROWS IN base_visits: ~70,000
 -- EXPECTED RUNTIME: 30-40 seconds
 -- 
@@ -39,7 +39,7 @@ FROM
     AND TRIM(CAR."SSN") IS NOT NULL 
     AND TRIM(CAR."SSN") != ''
 WHERE 
-  CR1."Visit Updated Timestamp" >= DATEADD(HOUR, -32, GETDATE())
+  CR1."Visit Updated Timestamp" >= DATEADD(HOUR, -36, GETDATE())
   AND DATE(CR1."Visit Date") BETWEEN DATEADD(YEAR, -2, GETDATE()) 
                                  AND DATEADD(DAY, 45, GETDATE())
   AND CR1."Provider Id" NOT IN ('d65b83d5-eb23-4a20-9e64-288ddcd7e0f1','e1391287-3089-4db6-9603-0357ce908b67','aaa64975-c24a-421b-8239-f148001873e0')
@@ -50,18 +50,19 @@ WHERE
 
 
 -- ============================================================================
--- STEP 2b: Collect distinct SSNs for stale cleanup scoping
+-- STEP 2d: Collect actual (visit_date, ssn) pairs for stale cleanup scoping
 -- ============================================================================
--- Run this to see the distinct SSNs that define the stale cleanup scope.
--- No upfront marking -- Lambda uses seen-based anti-join resolve instead.
--- SELECT DISTINCT ssn FROM delta_keys;
--- Expected: ~500K distinct SSNs (all caregivers with recently-updated visits)
+-- Lambda streams these exact pairs to PostgreSQL _tmp_delta_pairs via COPY.
+-- This gives pair-precise stale scoping (avoids the cross-product problem
+-- of separate DISTINCT SSN + DISTINCT date lists).
+-- SELECT visit_date, ssn FROM delta_keys;
+-- Expected: ~12M pairs (~507K distinct SSNs, ~597 distinct dates)
 
 
 -- ============================================================================
 -- STEP 2: Create base_visits with delta rows only (SYMMETRIC MODE)
 -- ============================================================================
--- In symmetric mode there is only one step: all rows come from the 32-hour
+-- In symmetric mode there is only one step: all rows come from the 36-hour
 -- delta window and get is_delta = 1. No Part B INSERT needed.
 -- Result: ~70K rows, ~30-40 seconds
 -- ============================================================================
@@ -230,7 +231,7 @@ WHERE
                              AND DATEADD(DAY, 45, GETDATE())
   AND CR1."Provider Id" NOT IN ('d65b83d5-eb23-4a20-9e64-288ddcd7e0f1','e1391287-3089-4db6-9603-0357ce908b67','aaa64975-c24a-421b-8239-f148001873e0')
   AND TRIM(CAR."SSN") NOT IN (SELECT ssn FROM excluded_ssns_temp)
-  AND CR1."Visit Updated Timestamp" >= DATEADD(HOUR, -32, GETDATE());
+  AND CR1."Visit Updated Timestamp" >= DATEADD(HOUR, -36, GETDATE());
 
 
 -- STEP 3: Final conflict detection query
@@ -245,7 +246,7 @@ WHERE
 -- In ASYMMETRIC mode, an additional join condition (V1."is_delta" = 1) ensures at least
 -- one side of each pair is a delta visit, avoiding the expensive all-vs-all on 9.6M rows.
 --
--- SYMMETRIC MODE: base_visits contains ~70K rows (32-hour delta only)
+-- SYMMETRIC MODE: base_visits contains ~70K rows (36-hour delta only)
 -- ASYMMETRIC MODE: base_visits contains ~9.6M rows (delta + related records)
 --
 -- PERFORMANCE: 

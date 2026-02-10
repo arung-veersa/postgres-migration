@@ -1,0 +1,33 @@
+---
+description: Postgres migration project overview - architecture, databases, and conventions
+alwaysApply: true
+---
+
+# Postgres Migration Project
+
+## Repository Structure
+
+This repo contains multiple migration scripts (`Scripts04` through `Scripts12`) for migrating Snowflake stored procedures to AWS Lambda (Python 3.11). Each `ScriptsNN/tasks/` folder is an independent Lambda function.
+
+**Active work**: `Scripts12/tasks/` -- Task 02 Conflict Detection and Update.
+
+## Databases
+
+- **Snowflake (read-only source)**: `ANALYTICS.BI.FACTVISITCALLPERFORMANCE_CR` view with dimension joins (DIMCAREGIVER, DIMOFFICE, etc.). RSA key auth, streaming cursor.
+- **PostgreSQL (read/write target)**: `conflict_management.conflict_dev` schema. Tables: `conflicts` (parent), `conflictvisitmaps` (detail with 7 conflict flags). psycopg2 driver.
+
+## Conventions
+
+- Python 3.11, no type stubs available for snowflake.connector/psycopg2
+- SQL templates in `sql/` loaded via `QueryBuilder.load_sql_file()`, parameterized with `.format()`
+- All PostgreSQL column names are double-quoted (case-sensitive): `"VisitID"`, `"SSN"`, `"StatusFlag"`
+- Snowflake columns use `"Visit Date"`, `"Visit Updated Timestamp"` (spaces in names)
+- Batch processing with explicit commit after each batch (Lambda timeout safety)
+- Config via `config/config.json` with `${ENV_VAR}` placeholders resolved at runtime
+
+## Constraints
+
+- **AWS Lambda timeout**: 15 minutes (900 seconds), `timeout_buffer_seconds: 90`
+- **Memory**: 10 GB allocated
+- Snowflake temp tables require `database` and `schema` set on connection
+- PostgreSQL indexes on `conflictvisitmaps` are critical for performance (especially partial indexes)

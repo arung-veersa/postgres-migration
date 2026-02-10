@@ -24,7 +24,7 @@ def generate_test_queries():
     # Default task parameters
     lookback_years = 2
     lookforward_days = 45
-    lookback_hours = 32
+    lookback_hours = 36
     
     # Reference data (simplified - actual values from database)
     excluded_agencies = ['10039', '10040', '10041', '10083', '10107', '10123', '10126', 

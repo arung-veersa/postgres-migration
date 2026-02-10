@@ -10,7 +10,7 @@
 -- ensures at least one side of each pair is a delta visit (is_delta=1), avoiding
 -- the expensive all-vs-all self-join on the full 9.6M rows.
 --
--- SYMMETRIC MODE: base_visits contains ~70K rows (32-hour delta only)
+-- SYMMETRIC MODE: base_visits contains ~70K rows (lookback_hours delta only)
 -- ASYMMETRIC MODE: base_visits contains ~9.6M rows (delta + related records)
 --
 -- PERFORMANCE: 
