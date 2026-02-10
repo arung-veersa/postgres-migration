@@ -1,5 +1,5 @@
 -- ============================================================================
--- Task 02 v3: Step 1 - Create Delta Keys Temp Table (ASYMMETRIC MODE ONLY)
+-- Task 02 v3: Step 1 - Create Delta Keys Temp Table
 -- ============================================================================
 -- 
 -- PURPOSE: Extract unique (VisitDate, SSN) combinations from recently updated visits
@@ -8,8 +8,10 @@
 -- PERFORMANCE: Fast (~10-20 seconds) - processes only the lookback_hours window
 -- OUTPUT: Temp table with thousands of rows (one per unique date+SSN combo)
 --
--- This temp table is used in Step 2 to expand the search scope beyond just delta
--- records to include ALL visits on the same date with the same SSN.
+-- USED BY:
+--   - Step 2 Part B (asymmetric): Expand search scope via INNER JOIN delta_keys
+--   - Step 2d (stale cleanup): Stream exact (date, ssn) pairs to Postgres for scoping
+-- Always created in both symmetric and asymmetric modes.
 -- ============================================================================
 
 CREATE TEMPORARY TABLE IF NOT EXISTS delta_keys AS

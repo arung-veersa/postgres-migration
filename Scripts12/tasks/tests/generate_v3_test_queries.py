@@ -7,8 +7,8 @@ import sys
 import os
 from pathlib import Path
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent))
+# Add tasks directory to path (parent of tests/)
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.query_builder import QueryBuilder
 
@@ -43,8 +43,9 @@ def generate_test_queries():
         {'From': 100, 'To': 500, 'AverageMilesPerHour': 60}
     ]
     
-    # Initialize query builder
-    query_builder = QueryBuilder(sql_dir='sql')
+    # Initialize query builder (templates are in ../sql relative to tests/)
+    tasks_dir = str(Path(__file__).parent.parent)
+    query_builder = QueryBuilder(sql_dir=os.path.join(tasks_dir, 'sql'))
     
     print("Generating v3 test queries...")
     print("=" * 70)
@@ -63,7 +64,8 @@ def generate_test_queries():
         enable_asymmetric_join=False
     )
     
-    # Combine symmetric steps (step1 is None for symmetric)
+    # Combine symmetric steps
+    # Note: step1 (delta_keys) is always created even in symmetric mode for stale cleanup scoping
     sym_full_query = f"""-- ============================================================================
 -- Task 02 v3: SYMMETRIC MODE - Test Query with Default Values
 -- ============================================================================
@@ -75,15 +77,43 @@ def generate_test_queries():
 -- EXPECTED RUNTIME: 30-40 seconds
 -- ============================================================================
 
+-- ============================================================================
+-- STEP 0: Create excluded_ssns temp table (empty for test queries)
+-- ============================================================================
+CREATE TEMPORARY TABLE IF NOT EXISTS excluded_ssns_temp (ssn VARCHAR);
+
+-- ============================================================================
+-- STEP 1: Create delta_keys temp table (used for stale cleanup scoping)
+-- ============================================================================
+{sym_queries['step1']}
+
+-- ============================================================================
+-- STEP 2d: Collect actual (visit_date, ssn) pairs for stale cleanup scoping
+-- ============================================================================
+-- In production, these pairs are streamed to Postgres via chunked COPY.
+-- For standalone Snowflake testing, run this to inspect the scope:
+-- {sym_queries['step2d']}
+
+-- ============================================================================
+-- STEP 2: Create base_visits with delta rows only (SYMMETRIC MODE)
+-- ============================================================================
+-- In symmetric mode there is only one step: all rows come from the {lookback_hours}-hour
+-- delta window and get is_delta = 1. No Part B INSERT needed.
+-- Result: ~70K rows, ~30-40 seconds
+
 {sym_queries['step2']}
 
--- STEP 3: Final conflict detection query
+-- ============================================================================
 {sym_queries['step3']}
 """
     
-    with open('sql/sf_task02_v3-sym-defaults.sql', 'w', encoding='utf-8') as f:
+    output_dir = os.path.join(os.path.dirname(__file__), 'sql')
+    os.makedirs(output_dir, exist_ok=True)
+    
+    sym_path = os.path.join(output_dir, 'sf_task02_v3-sym-defaults.sql')
+    with open(sym_path, 'w', encoding='utf-8') as f:
         f.write(sym_full_query)
-    print("   Created: sql/sf_task02_v3-sym-defaults.sql")
+    print(f"   Created: {sym_path}")
     print(f"   Query length: {len(sym_full_query):,} characters")
     
     # ASYMMETRIC VERSION
@@ -100,7 +130,7 @@ def generate_test_queries():
         enable_asymmetric_join=True
     )
     
-    # Combine asymmetric steps
+    # Combine asymmetric steps (includes Part A + Part B + step2d)
     asym_full_query = f"""-- ============================================================================
 -- Task 02 v3: ASYMMETRIC MODE - Test Query with Default Values
 -- ============================================================================
@@ -112,22 +142,56 @@ def generate_test_queries():
 -- EXPECTED RUNTIME: 3-5 minutes (estimated)
 -- 
 -- NOTE: This query uses temp tables and must be run in a single session.
---       All three steps below must be executed sequentially.
+--       All steps below must be executed sequentially.
 -- ============================================================================
 
+-- ============================================================================
+-- STEP 0: Create excluded_ssns temp table (empty for test queries)
+-- ============================================================================
+CREATE TEMPORARY TABLE IF NOT EXISTS excluded_ssns_temp (ssn VARCHAR);
+
+-- ============================================================================
 -- STEP 1: Create delta_keys temp table
+-- ============================================================================
+-- PURPOSE: Extract unique (VisitDate, SSN) combinations from recently updated visits
+--          1. Used in Step 2 to expand base_visits scope (asymmetric mode)
+--          2. Used in Step 2d to scope stale cleanup marking in Postgres
 {asym_queries['step1']}
 
--- STEP 2: Create base_visits temp table (with expanded scope)
+-- ============================================================================
+-- STEP 2d: Collect actual (visit_date, ssn) pairs for stale cleanup scoping
+-- ============================================================================
+-- In production, these pairs are streamed to Postgres via chunked COPY.
+-- For standalone Snowflake testing, run this to inspect the scope:
+-- {asym_queries['step2d']}
+
+-- ============================================================================
+-- STEP 2 (Part A): Create base_visits with DELTA rows only (~70K, fast)
+-- ============================================================================
+-- Uses partition pruning on Visit Updated Timestamp >= {lookback_hours} hours
+-- All rows get is_delta = 1
+-- Performance: ~30-40 seconds
+
 {asym_queries['step2']}
 
--- STEP 3: Final conflict detection query
+-- ============================================================================
+-- STEP 2 (Part B): INSERT related non-delta visits via INNER JOIN delta_keys
+-- ============================================================================
+-- Uses explicit INNER JOIN with delta_keys (much faster than OR + IN subquery)
+-- Excludes delta rows (timestamp < {lookback_hours}h) to avoid duplicates with Part A
+-- All rows get is_delta = 0 (used in Step 3 join condition)
+-- Performance: estimated 2-5 minutes
+
+{asym_queries['step2_asym_insert']}
+
+-- ============================================================================
 {asym_queries['step3']}
 """
     
-    with open('sql/sf_task02_v3-asym-defaults.sql', 'w', encoding='utf-8') as f:
+    asym_path = os.path.join(output_dir, 'sf_task02_v3-asym-defaults.sql')
+    with open(asym_path, 'w', encoding='utf-8') as f:
         f.write(asym_full_query)
-    print("   Created: sql/sf_task02_v3-asym-defaults.sql")
+    print(f"   Created: {asym_path}")
     print(f"   Query length: {len(asym_full_query):,} characters")
     
     print("\n" + "=" * 70)
@@ -139,10 +203,10 @@ def generate_test_queries():
     print("  4. Execute the entire script (all steps must run in same session)")
     print("  5. Review execution time and row counts")
     print("\nTo test symmetric version first (recommended):")
-    print("  - Run sql/sf_task02_v3-sym-defaults.sql")
+    print("  - Run tests/sql/sf_task02_v3-sym-defaults.sql")
     print("  - Expected: 30-40 seconds, similar to previous results")
     print("\nTo test asymmetric version:")
-    print("  - Run sql/sf_task02_v3-asym-defaults.sql")
+    print("  - Run tests/sql/sf_task02_v3-asym-defaults.sql")
     print("  - Expected: 3-5 minutes (much faster than v2's timeout)")
 
 

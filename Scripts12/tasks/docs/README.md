@@ -60,21 +60,23 @@ Scripts12/tasks/
 │   └── config.json                          # All configuration settings
 ├── lib/
 │   ├── connections.py                       # SnowflakeManager, PostgresManager
-│   ├── query_builder.py                     # SQL generation with conditional logic
-│   ├── conflict_processor.py                # Core business logic
+│   ├── query_builder.py                     # SQL generation (v3 only)
+│   ├── conflict_processor.py                # Core business logic (v3 only)
 │   └── utils.py                             # Logging, formatting utilities
 ├── scripts/
 │   └── lambda_handler.py                    # Entry point, orchestration
-├── sql/
+├── sql/                                     # Production SQL templates (loaded by Lambda)
 │   ├── sf_task02_v3_step1_delta_keys.sql    # Step 1: Delta keys extraction
 │   ├── sf_task02_v3_step2_base_visits.sql   # Step 2: Base visits materialization
 │   ├── sf_task02_v3_step3_final_query.sql   # Step 3: Conflict detection self-join
-│   ├── sf_task02_v3-sym-defaults.sql        # Test: Symmetric mode standalone query
-│   ├── sf_task02_v3-asym-defaults.sql       # Test: Asymmetric mode standalone query
 │   └── pg_fetch_*.sql                       # Reference data queries
 ├── docs/
 │   └── README.md                            # This documentation
 └── tests/
+    ├── sql/                                 # Generated test queries (manual Snowflake testing)
+    │   ├── sf_task02_v3-sym-defaults.sql    # Symmetric mode standalone query
+    │   └── sf_task02_v3-asym-defaults.sql   # Asymmetric mode standalone query
+    ├── generate_v3_test_queries.py          # Regenerates test queries from templates
     ├── test_comprehensive.py                # Unit tests
     └── test_conditional_logic.py            # Feature flag tests
 ```
@@ -177,13 +179,28 @@ STEP 4: Pair-precise stale cleanup
 
 #### Key Design Decisions
 
-1. **Two-Part base_visits Creation**: Part A creates the table with delta rows (fast, uses partition pruning). Part B inserts related non-delta rows via `INNER JOIN delta_keys` (avoids the expensive `OR + IN` subquery pattern that prevented Snowflake optimization).
+1. **Two-Part base_visits (CREATE + INSERT, not UNION ALL)**: Part A creates the table with delta rows (fast, uses partition pruning). Part B inserts related non-delta rows via `INNER JOIN delta_keys`. Both use the same SQL template (`sf_task02_v3_step2_base_visits.sql`) formatted with different placeholders (`TABLE_CLAUSE`, `is_delta_value`, `DELTA_KEYS_JOIN`, `TIMESTAMP_CONDITION`). The two-statement approach was chosen over UNION ALL because:
+   - Each statement gets separate timing in logs, making it easy to identify which leg is slow
+   - If Part B times out, Part A's data is already materialized in the temp table
+   - The original single-query approach (`OR + IN subquery`) prevented Snowflake partition pruning and caused timeouts
+   - Both parts share 120+ columns and 11 dimension JOINs -- this duplication is unavoidable since Step 3 needs all columns resolved before the self-join
 
 2. **`is_delta` Flag**: In asymmetric mode, constrains the Step 3 self-join to `V1.is_delta = 1`, avoiding the all-vs-all join on ~9.6M rows while still detecting Delta-vs-All and All-vs-Delta conflicts.
 
-3. **Pair-Precise Stale Cleanup**: Streams actual `(VisitDate, SSN)` pairs from `delta_keys` to PostgreSQL. This eliminates the "cross-product problem" where separate DISTINCT SSN and DISTINCT date lists would create millions of false stale candidates (e.g., 507K SSNs x 597 dates = 302M combos vs ~12M actual pairs).
+3. **Streaming Cursor with Batch Processing**: Step 3 results are streamed from Snowflake via a server-side cursor (not fetched into memory all at once). Rows are accumulated into batches of `batch_size` (default 5,000). Each batch is processed as follows:
+   - Fetch existing `conflictvisitmaps` records from PostgreSQL for the batch's VisitIDs
+   - Match Snowflake rows to existing PostgreSQL records by `(VisitID, ConVisitID)`
+   - Apply change detection (7 conditional flags + 40 business columns) to skip unchanged records
+   - Build and execute UPDATE statements for dirty records only
+   - Commit after each batch (ensures progress is saved even if Lambda times out mid-run)
+   - Track all seen `(VisitID, ConVisitID)` pairs in memory for stale cleanup
+   - Single-threaded by design: the bottleneck is Snowflake query time (Steps 1-2), not Python batch processing
 
-4. **UUID Type Matching**: `_tmp_seen_conflicts` uses UUID columns to match `conflictvisitmaps` index types, enabling proper index usage in the anti-join.
+4. **Pair-Precise Stale Cleanup**: Streams actual `(VisitDate, SSN)` pairs from `delta_keys` to PostgreSQL via chunked COPY (100K rows/chunk). This eliminates the "cross-product problem" where separate DISTINCT SSN and DISTINCT date lists would create millions of false stale candidates (e.g., 507K SSNs x 597 dates = 302M combos vs ~12M actual pairs).
+
+5. **UUID Type Matching**: `_tmp_seen_conflicts` uses UUID columns to match `conflictvisitmaps` index types, enabling proper index usage in the anti-join.
+
+6. **Conflict Flag Simplification**: The 7 conflict rules in `conflicts_with_flags` CTE do not repeat the `ProviderID != ConProviderID` check (already enforced by the `conflict_pairs` JOIN condition). Equality checks use direct column comparison instead of CONCAT-based string comparison.
 
 #### Configuration Toggle
 
@@ -197,7 +214,8 @@ STEP 4: Pair-precise stale cleanup
 - **Templates**: `sql/sf_task02_v3_step1_delta_keys.sql`, `sf_task02_v3_step2_base_visits.sql`, `sf_task02_v3_step3_final_query.sql`
 - **Builder**: `lib/query_builder.py::build_conflict_detection_query_v3()`
 - **Processor**: `lib/conflict_processor.py::stream_and_process_conflicts_v3()`
-- **Test Queries**: `sql/sf_task02_v3-sym-defaults.sql`, `sf_task02_v3-asym-defaults.sql`
+- **Test Queries**: `tests/sql/sf_task02_v3-sym-defaults.sql`, `tests/sql/sf_task02_v3-asym-defaults.sql`
+- **Test Generator**: `tests/generate_v3_test_queries.py`
 
 ---
 
@@ -228,7 +246,7 @@ If no changes detected, the UPDATE statement is skipped entirely.
 **Updates**:
 - All conflict flag columns (7 rules, conditional: only N->Y)
 - All business data columns
-- Sets `StatusFlag='N'` only if currently NULL or 'N'
+- Sets `StatusFlag='U'` (Updated) unless current value is 'W' (Whitelisted) or 'I' (Ignored)
 
 ### Stale Cleanup Logic
 

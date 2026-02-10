@@ -1,871 +1,834 @@
 """
-Enhanced Test Suite: Conditional Update Logic and Core Functions
-Comprehensive tests for conflict detection system without database dependencies
+Comprehensive test suite for Task 02 Conflict Detection (v3).
+Tests actual code from lib/ -- no logic reimplementation.
+
+Run with: python -m pytest tests/ -v   (from Scripts12/tasks/)
 """
 
-# ============================================================================
-# TEST 1: Conditional Update Logic (All 7 Flags + StatusFlag)
-# ============================================================================
+import sys
+import os
+import types
+import pytest
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-def test_all_conditional_flags():
-    """Test conditional update logic for ALL 7 rule flags plus StatusFlag"""
-    
-    print("=" * 70)
-    print("TEST 1: ALL CONDITIONAL FLAGS (8 TOTAL)")
-    print("=" * 70)
-    
-    all_flags = [
-        'SameSchTimeFlag',
-        'SameVisitTimeFlag',
-        'SchAndVisitTimeSameFlag',
-        'SchOverAnotherSchTimeFlag',
-        'VisitTimeOverAnotherVisitTimeFlag',
-        'SchTimeOverVisitTimeFlag',
-        'DistanceFlag'
-    ]
-    
-    test_cases = [
-        {
-            'name': 'All Flags N -> Should Update All',
-            'existing': {flag: 'N' for flag in all_flags},
-            'detected': {flag: 'Y' for flag in all_flags},
-            'expected': {flag: 'Y' for flag in all_flags}
-        },
-        {
-            'name': 'All Flags Y -> Should Preserve All',
-            'existing': {flag: 'Y' for flag in all_flags},
-            'detected': {flag: 'N' for flag in all_flags},
-            'expected': {flag: 'Y' for flag in all_flags}
-        },
-        {
-            'name': 'Mixed Flags -> Update N, Preserve Y',
-            'existing': {
-                'SameSchTimeFlag': 'N',
-                'SameVisitTimeFlag': 'Y',
-                'SchAndVisitTimeSameFlag': 'N',
-                'SchOverAnotherSchTimeFlag': 'Y',
-                'VisitTimeOverAnotherVisitTimeFlag': 'N',
-                'SchTimeOverVisitTimeFlag': 'Y',
-                'DistanceFlag': 'N'
-            },
-            'detected': {flag: 'Y' for flag in all_flags},
-            'expected': {
-                'SameSchTimeFlag': 'Y',  # Updated (was N)
-                'SameVisitTimeFlag': 'Y',  # Preserved (was Y)
-                'SchAndVisitTimeSameFlag': 'Y',  # Updated (was N)
-                'SchOverAnotherSchTimeFlag': 'Y',  # Preserved (was Y)
-                'VisitTimeOverAnotherVisitTimeFlag': 'Y',  # Updated (was N)
-                'SchTimeOverVisitTimeFlag': 'Y',  # Preserved (was Y)
-                'DistanceFlag': 'Y'  # Updated (was N)
-            }
-        }
-    ]
-    
-    all_passed = True
-    
-    for test_case in test_cases:
-        print(f"\n{test_case['name']}")
-        print("-" * 70)
-        
-        passed = True
-        for flag in all_flags:
-            existing = test_case['existing'][flag]
-            detected = test_case['detected'][flag]
-            expected = test_case['expected'][flag]
-            
-            # Apply conditional logic
-            if existing == 'N':
-                result = detected
-            else:
-                result = existing
-            
-            if result == expected:
-                print(f"  [PASS] {flag}: '{existing}' -> '{result}'")
-            else:
-                print(f"  [FAIL] {flag}: Expected '{expected}', Got '{result}'")
-                passed = False
-                all_passed = False
-        
-        print(f"  Result: {'PASS' if passed else 'FAIL'}")
-    
-    print("\n" + "=" * 70)
-    print(f"TEST 1: {'PASSED' if all_passed else 'FAILED'}")
-    print("=" * 70)
-    
-    return all_passed
+# ---------------------------------------------------------------------------
+# Mock heavy database driver modules BEFORE importing any lib code.
+# This lets tests run on dev machines that don't have snowflake-connector
+# or psycopg2 installed.  We use MagicMock so that any attribute access
+# (e.g. ``from snowflake.connector import SnowflakeConnection``) succeeds.
+# ---------------------------------------------------------------------------
+_MOCK_MODULES = [
+    'snowflake', 'snowflake.connector',
+    'psycopg2', 'psycopg2.extras', 'psycopg2.pool',
+    'cryptography', 'cryptography.hazmat',
+    'cryptography.hazmat.primitives', 'cryptography.hazmat.primitives.serialization',
+    'cryptography.hazmat.backends',
+]
+for mod_name in _MOCK_MODULES:
+    if mod_name not in sys.modules:
+        sys.modules[mod_name] = MagicMock()
+
+# Add tasks directory to path for imports
+tasks_dir = str(Path(__file__).parent.parent)
+if tasks_dir not in sys.path:
+    sys.path.insert(0, tasks_dir)
+
+from lib.utils import (
+    format_exclusion_list,
+    format_sql_identifier,
+    format_duration,
+    estimate_memory_mb,
+    chunk_list,
+)
+from lib.query_builder import QueryBuilder
+from lib.conflict_processor import ConflictProcessor
 
 
 # ============================================================================
-# TEST 2: StatusFlag Edge Cases
+# Fixtures
 # ============================================================================
 
-def test_statusflag_edge_cases():
-    """Test StatusFlag with all possible values and edge cases"""
-    
-    print("\n" + "=" * 70)
-    print("TEST 2: STATUSFLAG EDGE CASES")
-    print("=" * 70)
-    
-    test_cases = [
-        # Standard cases
-        {'existing': 'N', 'expected': 'U', 'description': 'New -> Updated'},
-        {'existing': 'U', 'expected': 'U', 'description': 'Updated -> Updated'},
-        {'existing': 'W', 'expected': 'W', 'description': 'Whitelist -> Preserved'},
-        {'existing': 'I', 'expected': 'I', 'description': 'Ignore -> Preserved'},
-        
-        # Edge cases
-        {'existing': '', 'expected': 'U', 'description': 'Empty string -> Updated'},
-        {'existing': None, 'expected': 'U', 'description': 'None -> Updated'},
-        {'existing': 'X', 'expected': 'U', 'description': 'Unknown value -> Updated'},
-        {'existing': 'w', 'expected': 'U', 'description': 'Lowercase w -> Updated (case-sensitive)'},
-        {'existing': 'i', 'expected': 'U', 'description': 'Lowercase i -> Updated (case-sensitive)'},
-    ]
-    
-    all_passed = True
-    
-    for test_case in test_cases:
-        existing = test_case['existing']
-        expected = test_case['expected']
-        description = test_case['description']
-        
-        # Apply StatusFlag logic
-        if existing not in ('W', 'I'):
-            result = 'U'
-        else:
-            result = existing
-        
-        if result == expected:
-            print(f"  [PASS] {description}: '{existing}' -> '{result}'")
-        else:
-            print(f"  [FAIL] {description}: Expected '{expected}', Got '{result}'")
-            all_passed = False
-    
-    print("\n" + "=" * 70)
-    print(f"TEST 2: {'PASSED' if all_passed else 'FAILED'}")
-    print("=" * 70)
-    
-    return all_passed
+@pytest.fixture
+def query_builder():
+    """QueryBuilder pointed at the real sql/ templates."""
+    sql_dir = os.path.join(tasks_dir, 'sql')
+    return QueryBuilder(sql_dir=sql_dir)
 
 
-# ============================================================================
-# TEST 3: WHERE Clause Matching Logic
-# ============================================================================
-
-def test_where_clause_matching():
-    """Test the WHERE clause matching logic for VisitID + ConVisitID"""
-    
-    print("\n" + "=" * 70)
-    print("TEST 3: WHERE CLAUSE MATCHING (VisitID + ConVisitID)")
-    print("=" * 70)
-    
-    # Simulated existing records
-    existing_records = {
-        ('V123', 'V456'): {'CONFLICTID': 'C-001'},
-        ('V789', None): {'CONFLICTID': 'C-002'},
-        ('V111', 'V222'): {'CONFLICTID': 'C-003'},
+@pytest.fixture
+def db_names():
+    return {
+        'sf_database': 'ANALYTICS', 'sf_schema': 'BI',
+        'pg_database': 'conflict_management', 'pg_schema': 'conflict_dev',
     }
-    
-    test_cases = [
-        {
-            'conflict': {'VisitID': 'V123', 'ConVisitID': 'V456'},
-            'should_match': True,
-            'expected_conflictid': 'C-001',
-            'description': 'Both VisitID and ConVisitID match'
-        },
-        {
-            'conflict': {'VisitID': 'V789', 'ConVisitID': None},
-            'should_match': True,
-            'expected_conflictid': 'C-002',
-            'description': 'VisitID matches, both ConVisitID NULL'
-        },
-        {
-            'conflict': {'VisitID': 'V123', 'ConVisitID': 'V999'},
-            'should_match': False,
-            'expected_conflictid': None,
-            'description': 'VisitID matches, ConVisitID different'
-        },
-        {
-            'conflict': {'VisitID': 'V999', 'ConVisitID': 'V456'},
-            'should_match': False,
-            'expected_conflictid': None,
-            'description': 'No match - new conflict'
-        },
-        {
-            'conflict': {'VisitID': 'V789', 'ConVisitID': 'V888'},
-            'should_match': False,
-            'expected_conflictid': None,
-            'description': 'VisitID matches but ConVisitID NULL vs non-NULL'
-        }
+
+
+@pytest.fixture
+def sample_mph_data():
+    return [
+        {'From': 0, 'To': 2, 'AverageMilesPerHour': 2},
+        {'From': 2, 'To': 5, 'AverageMilesPerHour': 6},
+        {'From': 5, 'To': 10, 'AverageMilesPerHour': 15},
+        {'From': 10, 'To': 25, 'AverageMilesPerHour': 25},
     ]
-    
-    all_passed = True
-    
-    for test_case in test_cases:
-        conflict = test_case['conflict']
-        should_match = test_case['should_match']
-        expected_conflictid = test_case['expected_conflictid']
-        description = test_case['description']
-        
-        # Apply matching logic
-        visit_id = conflict['VisitID']
-        con_visit_id = conflict.get('ConVisitID')
-        key = (visit_id, con_visit_id)
-        
-        matched = key in existing_records
-        actual_conflictid = existing_records[key]['CONFLICTID'] if matched else None
-        
-        # Validate
-        if matched == should_match and actual_conflictid == expected_conflictid:
-            print(f"  [PASS] {description}")
-            print(f"         Key: {key}, Matched: {matched}, CONFLICTID: {actual_conflictid}")
-        else:
-            print(f"  [FAIL] {description}")
-            print(f"         Expected match: {should_match}, actual: {matched}")
-            print(f"         Expected ID: {expected_conflictid}, actual: {actual_conflictid}")
-            all_passed = False
-    
-    print("\n" + "=" * 70)
-    print(f"TEST 3: {'PASSED' if all_passed else 'FAILED'}")
-    print("=" * 70)
-    
-    return all_passed
+
+
+@pytest.fixture
+def sample_settings():
+    return {'ExtraDistancePer': 100}
+
+
+@pytest.fixture
+def sample_excluded_agencies():
+    return ['10039', '10040', '10041']
+
+
+@pytest.fixture
+def processor():
+    """ConflictProcessor with mocked database managers."""
+    sf_manager = MagicMock()
+    pg_manager = MagicMock()
+    qb = QueryBuilder(sql_dir=os.path.join(tasks_dir, 'sql'))
+    db = {
+        'sf_database': 'ANALYTICS', 'sf_schema': 'BI',
+        'pg_database': 'conflict_management', 'pg_schema': 'conflict_dev',
+    }
+    return ConflictProcessor(
+        sf_manager=sf_manager,
+        pg_manager=pg_manager,
+        query_builder=qb,
+        db_names=db,
+        batch_size=5000,
+        skip_unchanged_records=True,
+        enable_asymmetric_join=True,
+        enable_stale_cleanup=True,
+    )
 
 
 # ============================================================================
-# TEST 4: Utility Functions
+# 1. Utility Functions (import real code, no reimplementation)
 # ============================================================================
 
-def test_format_exclusion_list():
-    """Test format_exclusion_list utility function"""
-    
-    print("\n" + "=" * 70)
-    print("TEST 4: UTILITY FUNCTIONS - format_exclusion_list")
-    print("=" * 70)
-    
-    # Import or inline the function
-    def format_exclusion_list(items: list, quote_char: str = "'") -> str:
-        if not items:
-            return "''"
-        escaped_items = [str(item).replace(quote_char, quote_char + quote_char) for item in items]
-        return ','.join([f"{quote_char}{item}{quote_char}" for item in escaped_items])
-    
-    test_cases = [
-        {
-            'input': ['123', '456', '789'],
-            'expected': "'123','456','789'",
-            'description': 'Normal list'
-        },
-        {
-            'input': [],
-            'expected': "''",
-            'description': 'Empty list'
-        },
-        {
-            'input': ['O\'Reilly'],
-            'expected': "'O''Reilly'",
-            'description': 'Single quote in value (SQL escape)'
-        },
-        {
-            'input': ['123'],
-            'expected': "'123'",
-            'description': 'Single item'
-        },
-        {
-            'input': [123, 456],
-            'expected': "'123','456'",
-            'description': 'Integer values (converted to string)'
-        },
-        {
-            'input': ['', 'valid', ''],
-            'expected': "'','valid',''",
-            'description': 'Empty strings in list'
+class TestFormatExclusionList:
+    def test_normal_list(self):
+        assert format_exclusion_list(['123', '456', '789']) == "'123','456','789'"
+
+    def test_empty_list(self):
+        assert format_exclusion_list([]) == "''"
+
+    def test_single_quote_escape(self):
+        assert format_exclusion_list(["O'Reilly"]) == "'O''Reilly'"
+
+    def test_single_item(self):
+        assert format_exclusion_list(['123']) == "'123'"
+
+    def test_integer_values(self):
+        assert format_exclusion_list([123, 456]) == "'123','456'"
+
+    def test_empty_strings(self):
+        assert format_exclusion_list(['', 'valid', '']) == "'','valid',''"
+
+
+class TestFormatSqlIdentifier:
+    def test_simple(self):
+        assert format_sql_identifier('Visit Date') == '"Visit Date"'
+
+    def test_already_quoted(self):
+        assert format_sql_identifier('Col"Name') == '"Col""Name"'
+
+
+class TestFormatDuration:
+    def test_zero(self):
+        assert format_duration(0) == '0s'
+
+    def test_seconds_only(self):
+        assert format_duration(45) == '45s'
+
+    def test_minutes_seconds(self):
+        assert format_duration(90) == '1m 30s'
+
+    def test_hours_minutes_seconds(self):
+        assert format_duration(3661) == '1h 1m 1s'
+
+    def test_exact_hour(self):
+        assert format_duration(3600) == '1h'
+
+    def test_exact_minutes(self):
+        assert format_duration(480) == '8m'
+
+    def test_float_value(self):
+        assert format_duration(486.7) == '8m 6s'
+
+
+class TestEstimateMemoryMb:
+    def test_5k_rows(self):
+        result = estimate_memory_mb(5000, 100)
+        assert abs(result - 35.8) < 0.2
+
+    def test_zero_rows(self):
+        assert estimate_memory_mb(0, 100) == 0.0
+
+    def test_large_dataset(self):
+        result = estimate_memory_mb(545497, 100)
+        assert result > 3800  # ~3.8 GB
+
+
+class TestChunkList:
+    def test_even_split(self):
+        assert list(chunk_list([1, 2, 3, 4], 2)) == [[1, 2], [3, 4]]
+
+    def test_uneven_split(self):
+        assert list(chunk_list([1, 2, 3, 4, 5], 2)) == [[1, 2], [3, 4], [5]]
+
+    def test_single_chunk(self):
+        assert list(chunk_list([1, 2], 10)) == [[1, 2]]
+
+    def test_empty(self):
+        assert list(chunk_list([], 5)) == []
+
+
+# ============================================================================
+# 2. Conditional Flag Logic (using actual ConflictProcessor._has_changes)
+# ============================================================================
+
+class TestConditionalFlags:
+    """Tests the conditional flag logic as implemented in _has_changes."""
+
+    def test_flag_n_to_y_updates(self, processor):
+        """When existing flag is 'N' and new is 'Y', change should be detected."""
+        existing = {
+            'SameSchTimeFlag': 'N', 'SameVisitTimeFlag': 'N',
+            'SchAndVisitTimeSameFlag': 'N', 'SchOverAnotherSchTimeFlag': 'N',
+            'VisitTimeOverAnotherVisitTimeFlag': 'N',
+            'SchTimeOverVisitTimeFlag': 'N', 'DistanceFlag': 'N',
+            'ProviderID': 'P1', 'ConProviderID': 'P2', 'VisitDate': '2026-01-01',
         }
-    ]
-    
-    all_passed = True
-    
-    for test_case in test_cases:
-        input_val = test_case['input']
-        expected = test_case['expected']
-        description = test_case['description']
-        
-        result = format_exclusion_list(input_val)
-        
-        if result == expected:
-            print(f"  [PASS] {description}")
-            print(f"         Input: {input_val}")
-            print(f"         Output: {result}")
-        else:
-            print(f"  [FAIL] {description}")
-            print(f"         Input: {input_val}")
-            print(f"         Expected: {expected}")
-            print(f"         Got: {result}")
-            all_passed = False
-    
-    print("\n" + "=" * 70)
-    print(f"TEST 4: {'PASSED' if all_passed else 'FAILED'}")
-    print("=" * 70)
-    
-    return all_passed
+        new_row = dict(existing)
+        new_row['SameSchTimeFlag'] = 'Y'
+        assert processor._has_changes(new_row, existing) is True
 
-
-# ============================================================================
-# TEST 5: MPH Lookup Injection
-# ============================================================================
-
-def test_mph_lookup_injection():
-    """Test MPH data injection as inline CTE"""
-    
-    print("\n" + "=" * 70)
-    print("TEST 5: MPH LOOKUP INJECTION")
-    print("=" * 70)
-    
-    # Simulate the MPH injection logic from query_builder.py
-    def build_mph_lookup_sql(mph_data):
-        mph_selects = []
-        for row in mph_data:
-            from_val = row.get('From') if row.get('From') is not None else 0
-            to_val = row.get('To') if row.get('To') is not None else 0
-            mph_val = row.get('AverageMilesPerHour') if row.get('AverageMilesPerHour') is not None else 1
-            
-            if from_val is None or to_val is None or mph_val is None:
-                continue
-            
-            mph_selects.append(
-                f'  SELECT {from_val} AS "From", {to_val} AS "To", {mph_val} AS "AverageMilesPerHour"'
-            )
-        
-        if not mph_selects:
-            return '  SELECT -999999 AS "From", -999999 AS "To", 1 AS "AverageMilesPerHour"'
-        
-        return '\n  UNION ALL\n'.join(mph_selects)
-    
-    test_cases = [
-        {
-            'mph_data': [
-                {'From': 0, 'To': 10, 'AverageMilesPerHour': 25},
-                {'From': 10, 'To': 25, 'AverageMilesPerHour': 35}
-            ],
-            'expected_lines': 2,
-            'should_contain': ['SELECT 0', 'SELECT 10', 'UNION ALL'],
-            'description': 'Normal MPH data'
-        },
-        {
-            'mph_data': [],
-            'expected_lines': 1,
-            'should_contain': ['SELECT -999999', '-999999'],
-            'description': 'Empty MPH data (dummy row)'
-        },
-        {
-            'mph_data': [
-                {'From': None, 'To': 10, 'AverageMilesPerHour': 25}
-            ],
-            'expected_lines': 1,
-            'should_contain': ['SELECT 0'],  # None defaults to 0, so valid row is created
-            'description': 'None From value (defaults to 0, creates valid row)'
-        },
-        {
-            'mph_data': [
-                {'From': 0, 'To': 10, 'AverageMilesPerHour': 25}
-            ],
-            'expected_lines': 1,
-            'should_contain': ['SELECT 0'],
-            'should_not_contain': ['UNION ALL'],
-            'description': 'Single MPH row (no UNION)'
+    def test_flag_y_existing_no_downgrade(self, processor):
+        """When existing flag is 'Y' and new is 'N', no change (conditional: only N->Y)."""
+        existing = {
+            'SameSchTimeFlag': 'Y', 'SameVisitTimeFlag': 'N',
+            'SchAndVisitTimeSameFlag': 'N', 'SchOverAnotherSchTimeFlag': 'N',
+            'VisitTimeOverAnotherVisitTimeFlag': 'N',
+            'SchTimeOverVisitTimeFlag': 'N', 'DistanceFlag': 'N',
+            'ProviderID': 'P1', 'ConProviderID': 'P2', 'VisitDate': '2026-01-01',
         }
-    ]
-    
-    all_passed = True
-    
-    for test_case in test_cases:
-        mph_data = test_case['mph_data']
-        expected_lines = test_case['expected_lines']
-        should_contain = test_case.get('should_contain', [])
-        should_not_contain = test_case.get('should_not_contain', [])
-        description = test_case['description']
-        
-        result = build_mph_lookup_sql(mph_data)
-        actual_lines = result.count('SELECT')
-        
-        passed = True
-        
-        # Check line count
-        if actual_lines != expected_lines:
-            print(f"  [FAIL] {description}: Expected {expected_lines} SELECT, got {actual_lines}")
-            passed = False
-        
-        # Check contents
-        for text in should_contain:
-            if text not in result:
-                print(f"  [FAIL] {description}: Missing '{text}'")
-                passed = False
-        
-        for text in should_not_contain:
-            if text in result:
-                print(f"  [FAIL] {description}: Should not contain '{text}'")
-                passed = False
-        
-        if passed:
-            print(f"  [PASS] {description}")
-        else:
-            print(f"         Generated: {result[:100]}...")
-        
-        all_passed = all_passed and passed
-    
-    print("\n" + "=" * 70)
-    print(f"TEST 5: {'PASSED' if all_passed else 'FAILED'}")
-    print("=" * 70)
-    
-    return all_passed
+        new_row = dict(existing)
+        new_row['SameSchTimeFlag'] = 'N'  # Y->N: not a change under conditional logic
+        assert processor._has_changes(new_row, existing) is False
 
-
-# ============================================================================
-# TEST 6: UPDATE Statement Building
-# ============================================================================
-
-def test_update_statement_structure():
-    """Test UPDATE statement building with various scenarios"""
-    
-    print("\n" + "=" * 70)
-    print("TEST 6: UPDATE STATEMENT STRUCTURE")
-    print("=" * 70)
-    
-    test_cases = [
-        {
-            'name': 'Simple update with preserved StatusFlag',
-            'conflict_row': {
-                'VisitID': 'V123',
-                'ConVisitID': 'V456',
-                'CONFLICTID': 'C-001',
-                'SSN': '123-45-6789',
-                'ProviderName': 'Provider A',
-                'StatusFlag': 'N',
-                'SameSchTimeFlag': 'Y'
-            },
-            'existing_row': {
-                'StatusFlag': 'W',  # Whitelist - should be preserved
-                'SameSchTimeFlag': 'N'  # Should be updated
-            },
-            'expected_updates': {
-                'StatusFlag': 'not_updated',  # Should NOT appear in SET clause
-                'SameSchTimeFlag': 'updated',  # Should appear
-                'SSN': 'updated',  # Should appear
-                'ProviderName': 'updated'  # Should appear
-            },
-            'expected_params_count': 7,  # SSN, ProviderName, CONFLICTID, SameSchTimeFlag + 4 WHERE params
-            'description': 'Whitelist preserved, other fields updated'
-        },
-        {
-            'name': 'All flags preserved',
-            'conflict_row': {
-                'VisitID': 'V789',
-                'ConVisitID': 'V012',
-                'StatusFlag': 'I',
-                'SameSchTimeFlag': 'Y',
-                'DistanceFlag': 'Y'
-            },
-            'existing_row': {
-                'StatusFlag': 'I',  # Should preserve
-                'SameSchTimeFlag': 'Y',  # Should preserve
-                'DistanceFlag': 'Y'  # Should preserve
-            },
-            'expected_updates': {
-                'StatusFlag': 'not_updated',
-                'SameSchTimeFlag': 'not_updated',
-                'DistanceFlag': 'not_updated'
-            },
-            'description': 'All flags preserved (I status, all Y flags)'
+    def test_all_flags_match_no_change(self, processor):
+        """Identical rows should produce no change."""
+        row = {
+            'SameSchTimeFlag': 'Y', 'SameVisitTimeFlag': 'N',
+            'SchAndVisitTimeSameFlag': 'N', 'SchOverAnotherSchTimeFlag': 'N',
+            'VisitTimeOverAnotherVisitTimeFlag': 'N',
+            'SchTimeOverVisitTimeFlag': 'N', 'DistanceFlag': 'N',
+            'ProviderID': 'P1', 'ConProviderID': 'P2', 'VisitDate': '2026-01-01',
         }
-    ]
-    
-    all_passed = True
-    
-    for test_case in test_cases:
-        print(f"\n{test_case['description']}")
-        print("-" * 70)
-        
-        # Simulate the conditional logic
-        conflict_row = test_case['conflict_row']
-        existing_row = test_case['existing_row']
-        expected = test_case['expected_updates']
-        
-        set_clauses = []
-        params = []
-        
-        conditional_flags = [
-            'SameSchTimeFlag', 'SameVisitTimeFlag', 'SchAndVisitTimeSameFlag',
-            'SchOverAnotherSchTimeFlag', 'VisitTimeOverAnotherVisitTimeFlag',
-            'SchTimeOverVisitTimeFlag', 'DistanceFlag'
+        assert processor._has_changes(row, dict(row)) is False
+
+    def test_business_column_change_detected(self, processor):
+        """A change in a business column (not a flag) should be detected."""
+        existing = {
+            'SameSchTimeFlag': 'Y', 'SameVisitTimeFlag': 'N',
+            'SchAndVisitTimeSameFlag': 'N', 'SchOverAnotherSchTimeFlag': 'N',
+            'VisitTimeOverAnotherVisitTimeFlag': 'N',
+            'SchTimeOverVisitTimeFlag': 'N', 'DistanceFlag': 'N',
+            'ProviderID': 'P1', 'ConProviderID': 'P2', 'VisitDate': '2026-01-01',
+        }
+        new_row = dict(existing)
+        new_row['ProviderID'] = 'P999'  # business column changed
+        assert processor._has_changes(new_row, existing) is True
+
+    def test_skip_unchanged_disabled_always_true(self, processor):
+        """When skip_unchanged_records=False, _has_changes always returns True."""
+        processor.skip_unchanged_records = False
+        row = {'SameSchTimeFlag': 'N', 'ProviderID': 'P1'}
+        assert processor._has_changes(row, dict(row)) is True
+
+    def test_multiple_flags_n_to_y_detects_first(self, processor):
+        """When multiple flags flip N->Y, change detected on the first."""
+        existing = {
+            'SameSchTimeFlag': 'N', 'SameVisitTimeFlag': 'N',
+            'SchAndVisitTimeSameFlag': 'N', 'SchOverAnotherSchTimeFlag': 'N',
+            'VisitTimeOverAnotherVisitTimeFlag': 'N',
+            'SchTimeOverVisitTimeFlag': 'N', 'DistanceFlag': 'N',
+            'ProviderID': 'P1', 'ConProviderID': 'P2', 'VisitDate': '2026-01-01',
+        }
+        new_row = dict(existing)
+        new_row['SameVisitTimeFlag'] = 'Y'
+        new_row['DistanceFlag'] = 'Y'
+        assert processor._has_changes(new_row, existing) is True
+
+
+# ============================================================================
+# 3. StatusFlag Logic (using actual build_update_statement)
+# ============================================================================
+
+class TestStatusFlagLogic:
+    """Tests StatusFlag preservation via actual build_update_statement."""
+
+    def _build(self, processor, existing_status):
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        conflict_row = {
+            'VisitID': 'V123', 'ConVisitID': 'V456', 'CONFLICTID': 'C-001',
+            'SSN': '111-22-3333', 'StatusFlag': 'N',
+        }
+        existing_row = {'StatusFlag': existing_status, 'SameSchTimeFlag': 'N'}
+        sql, params = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        return sql, params
+
+    def test_status_n_becomes_u(self, processor):
+        sql, params = self._build(processor, 'N')
+        assert '"StatusFlag" = %s' in sql
+        assert 'U' in params
+
+    def test_status_w_preserved(self, processor):
+        sql, params = self._build(processor, 'W')
+        assert '"StatusFlag" = %s' not in sql
+
+    def test_status_i_preserved(self, processor):
+        sql, params = self._build(processor, 'I')
+        assert '"StatusFlag" = %s' not in sql
+
+    def test_status_u_stays_u(self, processor):
+        sql, params = self._build(processor, 'U')
+        assert '"StatusFlag" = %s' in sql
+        assert 'U' in params
+
+    def test_status_r_becomes_u(self, processor):
+        """Resolved ('R') records should be re-activated to 'U'."""
+        sql, params = self._build(processor, 'R')
+        assert '"StatusFlag" = %s' in sql
+        assert 'U' in params
+
+
+# ============================================================================
+# 4. Column Name Mapping
+# ============================================================================
+
+class TestColumnNameMapping:
+    def test_etaravleminutes_mapped(self, processor):
+        """ETATravleMinutes (Snowflake typo) should map to ETATravelMinutes in Postgres."""
+        conflict_row = {
+            'VisitID': 'V1', 'ConVisitID': 'V2', 'CONFLICTID': 'C-1',
+            'ETATravleMinutes': 42.5,
+        }
+        existing_row = {'StatusFlag': 'N'}
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, params = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"ETATravelMinutes"' in sql
+        assert '"ETATravleMinutes"' not in sql
+
+    def test_schvisittimesame_mapped(self, processor):
+        """SchVisitTimeSame should map to SchAndVisitTimeSameFlag."""
+        conflict_row = {
+            'VisitID': 'V1', 'ConVisitID': 'V2', 'CONFLICTID': 'C-1',
+            'SchVisitTimeSame': 'Y',
+        }
+        existing_row = {'StatusFlag': 'N', 'SchAndVisitTimeSameFlag': 'N'}
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, params = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"SchAndVisitTimeSameFlag"' in sql
+
+    def test_unmapped_column_passes_through(self, processor):
+        """Columns not in the map should appear as-is."""
+        conflict_row = {
+            'VisitID': 'V1', 'ConVisitID': 'V2',
+            'CaregiverID': 'CG-100',
+        }
+        existing_row = {'StatusFlag': 'N'}
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, params = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"CaregiverID"' in sql
+
+
+# ============================================================================
+# 5. WHERE Clause / Key Generation
+# ============================================================================
+
+class TestWhereClauseMatching:
+    def test_both_ids_present(self):
+        existing = {('V123', 'V456'): {'CONFLICTID': 'C-001'}}
+        assert ('V123', 'V456') in existing
+
+    def test_con_visit_id_none(self):
+        existing = {('V789', None): {'CONFLICTID': 'C-002'}}
+        assert ('V789', None) in existing
+
+    def test_mismatch_con_visit_id(self):
+        existing = {('V123', 'V456'): {'CONFLICTID': 'C-001'}}
+        assert ('V123', 'V999') not in existing
+
+    def test_key_generation_from_row(self):
+        row = {'VisitID': 'V123', 'ConVisitID': 'V456'}
+        visit_id = str(row.get('VisitID'))
+        con_visit_id = str(row.get('ConVisitID')) if row.get('ConVisitID') else None
+        assert (visit_id, con_visit_id) == ('V123', 'V456')
+
+    def test_key_generation_none_con_visit(self):
+        row = {'VisitID': 'V789', 'ConVisitID': None}
+        visit_id = str(row.get('VisitID'))
+        con_visit_id = str(row.get('ConVisitID')) if row.get('ConVisitID') else None
+        assert (visit_id, con_visit_id) == ('V789', None)
+
+    def test_key_generation_empty_string_con_visit(self):
+        row = {'VisitID': 'V999', 'ConVisitID': ''}
+        visit_id = str(row.get('VisitID'))
+        con_visit_id = str(row.get('ConVisitID')) if row.get('ConVisitID') else None
+        assert (visit_id, con_visit_id) == ('V999', None)
+
+
+# ============================================================================
+# 6. Query Builder v3 - Template Loading and Formatting
+# ============================================================================
+
+class TestQueryBuilderV3:
+    """Tests build_conflict_detection_query_v3 with actual templates."""
+
+    def _build_queries(self, query_builder, db_names, sample_excluded_agencies,
+                       sample_settings, sample_mph_data, asymmetric):
+        return query_builder.build_conflict_detection_query_v3(
+            db_names=db_names,
+            excluded_agencies=sample_excluded_agencies,
+            excluded_ssns=[],
+            settings_data=sample_settings,
+            mph_data=sample_mph_data,
+            lookback_years=2,
+            lookforward_days=45,
+            lookback_hours=36,
+            enable_asymmetric_join=asymmetric,
+        )
+
+    # ---- Return structure ----
+
+    def test_symmetric_returns_all_keys(self, query_builder, db_names,
+                                         sample_excluded_agencies, sample_settings,
+                                         sample_mph_data):
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=False
+        )
+        assert 'step0_create' in queries
+        assert 'step1' in queries
+        assert 'step2' in queries
+        assert 'step2d' in queries
+        assert 'step3' in queries
+        # Symmetric should NOT have step2_asym_insert
+        assert 'step2_asym_insert' not in queries
+
+    def test_asymmetric_returns_all_keys(self, query_builder, db_names,
+                                          sample_excluded_agencies, sample_settings,
+                                          sample_mph_data):
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        assert 'step0_create' in queries
+        assert 'step1' in queries
+        assert 'step2' in queries
+        assert 'step2_asym_insert' in queries
+        assert 'step2d' in queries
+        assert 'step3' in queries
+
+    # ---- Step 1: delta_keys ----
+
+    def test_step1_contains_lookback(self, query_builder, db_names,
+                                      sample_excluded_agencies, sample_settings,
+                                      sample_mph_data):
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        assert 'DATEADD(HOUR, -36' in queries['step1']
+        assert 'delta_keys' in queries['step1']
+
+    def test_step1_has_excluded_agencies(self, query_builder, db_names,
+                                          sample_excluded_agencies, sample_settings,
+                                          sample_mph_data):
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        for agency in sample_excluded_agencies:
+            assert f"'{agency}'" in queries['step1']
+
+    # ---- Step 2: base_visits ----
+
+    def test_step2_creates_base_visits(self, query_builder, db_names,
+                                        sample_excluded_agencies, sample_settings,
+                                        sample_mph_data):
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        assert 'CREATE TEMPORARY TABLE' in queries['step2']
+        assert 'base_visits' in queries['step2']
+        assert '1 AS "is_delta"' in queries['step2']
+
+    def test_step2_asym_insert_has_is_delta_0(self, query_builder, db_names,
+                                               sample_excluded_agencies, sample_settings,
+                                               sample_mph_data):
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        assert 'INSERT INTO base_visits' in queries['step2_asym_insert']
+        assert '0 AS "is_delta"' in queries['step2_asym_insert']
+        assert 'INNER JOIN delta_keys' in queries['step2_asym_insert']
+
+    def test_step2_symmetric_has_timestamp_filter(self, query_builder, db_names,
+                                                    sample_excluded_agencies, sample_settings,
+                                                    sample_mph_data):
+        """In symmetric mode, base_visits only includes recently-changed rows (timestamp filter)."""
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=False
+        )
+        # Should filter by Visit Updated Timestamp
+        assert 'DATEADD' in queries['step2']
+
+    # ---- Step 3: final conflict detection ----
+
+    def test_step3_asymmetric_has_is_delta_where_condition(self, query_builder, db_names,
+                                                            sample_excluded_agencies,
+                                                            sample_settings, sample_mph_data):
+        """Asymmetric mode should have V1."is_delta" = 1 in the WHERE clause."""
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        assert 'V1."is_delta" = 1' in queries['step3']
+
+    def test_step3_symmetric_no_is_delta_where_condition(self, query_builder, db_names,
+                                                          sample_excluded_agencies,
+                                                          sample_settings, sample_mph_data):
+        """Symmetric mode should NOT have V1."is_delta" = 1 in the WHERE clause."""
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=False
+        )
+        # The WHERE condition for asymmetric filtering should not be present
+        assert 'V1."is_delta" = 1' not in queries['step3']
+
+    # ---- Step 3: conflict flag rules ----
+
+    def test_step3_has_all_7_conflict_rules(self, query_builder, db_names,
+                                             sample_excluded_agencies,
+                                             sample_settings, sample_mph_data):
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        sql = queries['step3']
+        for flag in ['"SameSchTimeFlag"', '"SameVisitTimeFlag"', '"SchVisitTimeSame"',
+                     '"SchOverAnotherSchTimeFlag"', '"VisitTimeOverAnotherVisitTimeFlag"',
+                     '"SchTimeOverVisitTimeFlag"', '"DistanceFlag"']:
+            assert flag in sql, f"Missing flag rule: {flag}"
+
+    def test_step3_no_redundant_providerid_in_flag_rules(self, query_builder, db_names,
+                                                           sample_excluded_agencies,
+                                                           sample_settings, sample_mph_data):
+        """ProviderID != ConProviderID should NOT appear in conflicts_with_flags CTE rules."""
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        sql = queries['step3']
+        cte_start = sql.find('conflicts_with_flags')
+        cte_end = sql.find('final_conflicts')
+        cte_section = sql[cte_start:cte_end]
+        assert 'CE."ProviderID" != CE."ConProviderID"' not in cte_section
+
+    def test_step3_no_concat_in_flag_rules(self, query_builder, db_names,
+                                            sample_excluded_agencies,
+                                            sample_settings, sample_mph_data):
+        """Time comparisons should use direct = not CONCAT."""
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        sql = queries['step3']
+        cte_start = sql.find('conflicts_with_flags')
+        cte_end = sql.find('final_conflicts')
+        cte_section = sql[cte_start:cte_end]
+        assert 'CONCAT(' not in cte_section
+
+    # ---- MPH data ----
+
+    def test_mph_data_injected(self, query_builder, db_names,
+                                sample_excluded_agencies, sample_settings,
+                                sample_mph_data):
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        sql = queries['step3']
+        assert 'mph_data' in sql
+        assert 'UNION ALL' in sql  # Multiple MPH rows joined
+
+    def test_empty_mph_uses_dummy(self, query_builder, db_names,
+                                   sample_excluded_agencies, sample_settings):
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, [], asymmetric=True
+        )
+        assert '-999999' in queries['step3']
+
+    # ---- Placeholder resolution ----
+
+    def test_no_unresolved_placeholders(self, query_builder, db_names,
+                                         sample_excluded_agencies, sample_settings,
+                                         sample_mph_data):
+        """All {placeholders} should be resolved."""
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        for key, sql in queries.items():
+            if isinstance(sql, str):
+                assert '{' not in sql, f"Unresolved placeholder in {key}"
+
+    def test_no_unresolved_placeholders_symmetric(self, query_builder, db_names,
+                                                    sample_excluded_agencies,
+                                                    sample_settings, sample_mph_data):
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=False
+        )
+        for key, sql in queries.items():
+            if isinstance(sql, str):
+                assert '{' not in sql, f"Unresolved placeholder in {key} (symmetric)"
+
+
+# ============================================================================
+# 7. SSN Batch Insert Generation
+# ============================================================================
+
+class TestSSNBatchInserts:
+    def test_empty_ssns(self):
+        assert QueryBuilder._build_ssn_insert_batches([]) == []
+
+    def test_single_batch(self):
+        ssns = ['111-22-3333', '444-55-6666']
+        result = QueryBuilder._build_ssn_insert_batches(ssns, batch_size=1000)
+        assert len(result) == 1
+        assert 'INSERT INTO excluded_ssns_temp' in result[0]
+        assert '111-22-3333' in result[0]
+        assert '444-55-6666' in result[0]
+
+    def test_multiple_batches(self):
+        ssns = [f'SSN-{i}' for i in range(5)]
+        result = QueryBuilder._build_ssn_insert_batches(ssns, batch_size=2)
+        assert len(result) == 3  # 2 + 2 + 1
+
+    def test_single_quote_escape(self):
+        ssns = ["O'Brien"]
+        result = QueryBuilder._build_ssn_insert_batches(ssns)
+        assert len(result) == 1
+        assert "O''Brien" in result[0]  # SQL-escaped
+
+    def test_large_batch(self):
+        ssns = [f'SSN-{i:05d}' for i in range(7500)]
+        result = QueryBuilder._build_ssn_insert_batches(ssns, batch_size=1000)
+        assert len(result) == 8  # ceil(7500/1000)
+        for stmt in result:
+            assert stmt.startswith('INSERT INTO excluded_ssns_temp')
+
+
+# ============================================================================
+# 8. UPDATE Statement Structure
+# ============================================================================
+
+class TestUpdateStatementStructure:
+    def test_where_clause_has_visitid_and_convisitid(self, processor):
+        conflict_row = {
+            'VisitID': 'V1', 'ConVisitID': 'V2', 'CONFLICTID': 'C-1', 'SSN': '123',
+        }
+        existing_row = {'StatusFlag': 'N'}
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, params = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"VisitID" = %s' in sql
+        assert '"ConVisitID" = %s' in sql
+        assert 'cd.conflictvisitmaps' in sql
+
+    def test_where_clause_handles_null_convisitid(self, processor):
+        """WHERE clause includes IS NULL fallback for ConVisitID."""
+        conflict_row = {'VisitID': 'V1', 'ConVisitID': None, 'CONFLICTID': 'C-1'}
+        existing_row = {'StatusFlag': 'N'}
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, params = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"ConVisitID" IS NULL' in sql
+
+    def test_always_sets_updateflag_null(self, processor):
+        conflict_row = {'VisitID': 'V1', 'ConVisitID': 'V2', 'CONFLICTID': 'C-1'}
+        existing_row = {'StatusFlag': 'N'}
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, _ = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"UpdateFlag" = NULL' in sql
+
+    def test_always_sets_updateddate(self, processor):
+        conflict_row = {'VisitID': 'V1', 'ConVisitID': 'V2', 'CONFLICTID': 'C-1'}
+        existing_row = {'StatusFlag': 'N'}
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, _ = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"UpdatedDate" = CURRENT_TIMESTAMP' in sql
+
+    def test_always_sets_resolvedate_null(self, processor):
+        conflict_row = {'VisitID': 'V1', 'ConVisitID': 'V2', 'CONFLICTID': 'C-1'}
+        existing_row = {'StatusFlag': 'N'}
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, _ = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"ResolveDate" = NULL' in sql
+
+    def test_conditional_flag_preserved_when_y(self, processor):
+        """Flag with existing='Y' should NOT appear in SET clause."""
+        conflict_row = {
+            'VisitID': 'V1', 'ConVisitID': 'V2', 'CONFLICTID': 'C-1',
+            'SameSchTimeFlag': 'Y',
+        }
+        existing_row = {'StatusFlag': 'N', 'SameSchTimeFlag': 'Y'}
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, params = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"SameSchTimeFlag" = %s' not in sql
+
+    def test_conditional_flag_updated_when_n(self, processor):
+        """Flag with existing='N' should appear in SET clause."""
+        conflict_row = {
+            'VisitID': 'V1', 'ConVisitID': 'V2', 'CONFLICTID': 'C-1',
+            'SameSchTimeFlag': 'Y',
+        }
+        existing_row = {'StatusFlag': 'N', 'SameSchTimeFlag': 'N'}
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, params = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"SameSchTimeFlag" = %s' in sql
+
+    def test_multiple_conditional_flags(self, processor):
+        """Multiple flags should be independently conditional."""
+        conflict_row = {
+            'VisitID': 'V1', 'ConVisitID': 'V2', 'CONFLICTID': 'C-1',
+            'SameSchTimeFlag': 'Y', 'DistanceFlag': 'Y', 'SameVisitTimeFlag': 'N',
+        }
+        existing_row = {
+            'StatusFlag': 'N',
+            'SameSchTimeFlag': 'N',      # will update -> Y
+            'DistanceFlag': 'Y',          # won't update (already Y)
+            'SameVisitTimeFlag': 'N',     # new is N, existing is N -> no change
+        }
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, params = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"SameSchTimeFlag" = %s' in sql
+        assert '"DistanceFlag" = %s' not in sql
+        # SameVisitTimeFlag: existing='N', new='N' -> same value, but code checks if existing_flag == 'N'
+        # and then adds the column unconditionally -> it WILL appear in SET
+        assert '"SameVisitTimeFlag" = %s' in sql
+
+
+# ============================================================================
+# 9. Statistics Structure
+# ============================================================================
+
+class TestStatistics:
+    def test_initial_stats_shape(self, processor):
+        stats = processor.get_statistics()
+        expected_keys = [
+            'rows_fetched', 'rows_processed', 'rows_updated',
+            'rows_skipped_no_changes', 'batches_processed', 'errors',
+            'unique_visits', 'matched_in_postgres', 'new_conflicts',
+            'stale_conflicts_reset', 'delta_ssns_count', 'delta_dates_count',
+            'delta_pairs_count', 'delta_keys_count', 'modified_visit_ids_count',
+            'records_marked_for_update', 'stale_conflicts_resolved',
+            'update_rate', 'match_rate', 'efficiency_rate',
         ]
-        
-        for col in conflict_row:
-            if col in ('VisitID', 'ConVisitID'):
-                continue
-            
-            # StatusFlag
-            if col == 'StatusFlag':
-                if existing_row.get('StatusFlag', '') not in ('W', 'I'):
-                    set_clauses.append(f'"{col}" = %s')
-                    params.append('U')
-                continue
-            
-            # Conditional flags
-            if col in conditional_flags:
-                if existing_row.get(col, 'N') == 'N':
-                    set_clauses.append(f'"{col}" = %s')
-                    params.append(conflict_row[col])
-                continue
-            
-            # Regular columns
-            set_clauses.append(f'"{col}" = %s')
-            params.append(conflict_row[col])
-        
-        # Validate
-        passed = True
-        for col, expectation in expected.items():
-            col_in_set = any(f'"{col}"' in clause for clause in set_clauses)
-            
-            if expectation == 'updated' and not col_in_set:
-                print(f"  [FAIL] {col}: Expected in SET clause, but not found")
-                passed = False
-            elif expectation == 'not_updated' and col_in_set:
-                print(f"  [FAIL] {col}: Should NOT be in SET clause, but found")
-                passed = False
-            else:
-                status = 'in SET clause' if col_in_set else 'preserved (not in SET)'
-                print(f"  [PASS] {col}: {status}")
-        
-        print(f"  Generated {len(set_clauses)} SET clauses, {len(params)} params")
-        print(f"  Result: {'PASS' if passed else 'FAIL'}")
-        
-        all_passed = all_passed and passed
-    
-    print("\n" + "=" * 70)
-    print(f"TEST 6: {'PASSED' if all_passed else 'FAILED'}")
-    print("=" * 70)
-    
-    return all_passed
+        for key in expected_keys:
+            assert key in stats, f"Missing key: {key}"
+
+    def test_initial_stats_zeros(self, processor):
+        stats = processor.get_statistics()
+        assert stats['rows_fetched'] == 0
+        assert stats['rows_updated'] == 0
+        assert stats['errors'] == 0
+
+    def test_backward_compat_aliases(self, processor):
+        """delta_keys_count should alias delta_pairs_count."""
+        stats = processor.get_statistics()
+        assert stats['delta_keys_count'] == stats['delta_pairs_count']
+        assert stats['modified_visit_ids_count'] == stats['delta_ssns_count']
+
+    def test_rate_calculations_zero_safe(self, processor):
+        """Rate calculations should not divide by zero."""
+        stats = processor.get_statistics()
+        assert stats['update_rate'] == 0.0
+        assert stats['match_rate'] == 0.0
+        assert stats['efficiency_rate'] == 0.0
 
 
 # ============================================================================
-# TEST 7: Batch Key Generation
+# 10. SQL Template File Loading
 # ============================================================================
 
-def test_batch_key_generation():
-    """Test (VisitID, ConVisitID) tuple key generation for various data types"""
-    
-    print("\n" + "=" * 70)
-    print("TEST 7: BATCH KEY GENERATION")
-    print("=" * 70)
-    
-    test_cases = [
-        {
-            'conflict': {'VisitID': 'V123', 'ConVisitID': 'V456'},
-            'expected_key': ('V123', 'V456'),
-            'description': 'Normal case: both IDs present'
-        },
-        {
-            'conflict': {'VisitID': 'V789', 'ConVisitID': None},
-            'expected_key': ('V789', None),
-            'description': 'ConVisitID is None'
-        },
-        {
-            'conflict': {'VisitID': 123, 'ConVisitID': 456},
-            'expected_key': ('123', '456'),
-            'description': 'Integer IDs (converted to string)'
-        },
-        {
-            'conflict': {'VisitID': 'V999', 'ConVisitID': ''},
-            'expected_key': ('V999', None),
-            'description': 'Empty string ConVisitID (treated as None)'
-        }
-    ]
-    
-    all_passed = True
-    
-    for test_case in test_cases:
-        conflict = test_case['conflict']
-        expected_key = test_case['expected_key']
-        description = test_case['description']
-        
-        # Apply key generation logic
-        visit_id = str(conflict.get('VisitID'))
-        con_visit_id = str(conflict.get('ConVisitID')) if conflict.get('ConVisitID') else None
-        actual_key = (visit_id, con_visit_id)
-        
-        if actual_key == expected_key:
-            print(f"  [PASS] {description}")
-            print(f"         Key: {actual_key}")
-        else:
-            print(f"  [FAIL] {description}")
-            print(f"         Expected: {expected_key}")
-            print(f"         Got: {actual_key}")
-            all_passed = False
-    
-    print("\n" + "=" * 70)
-    print(f"TEST 7: {'PASSED' if all_passed else 'FAILED'}")
-    print("=" * 70)
-    
-    return all_passed
+class TestTemplateLoading:
+    def test_step1_template_loads(self, query_builder):
+        sql = query_builder.load_sql_file('sf_task02_v3_step1_delta_keys.sql')
+        assert 'delta_keys' in sql
+        assert '{lookback_hours}' in sql
 
+    def test_step2_template_loads(self, query_builder):
+        sql = query_builder.load_sql_file('sf_task02_v3_step2_base_visits.sql')
+        assert '{TABLE_CLAUSE}' in sql
+        assert '{is_delta_value}' in sql
+        assert '{DELTA_KEYS_JOIN}' in sql
+        assert '{TIMESTAMP_CONDITION}' in sql
 
-# ============================================================================
-# TEST 8: Duration Formatting
-# ============================================================================
+    def test_step3_template_loads(self, query_builder):
+        sql = query_builder.load_sql_file('sf_task02_v3_step3_final_query.sql')
+        assert '{ASYMMETRIC_JOIN_CONDITION}' in sql
+        assert '{mph_lookup}' in sql
+        assert 'conflicts_with_flags' in sql
+        assert 'final_conflicts' in sql
 
-def test_duration_formatting():
-    """Test format_duration utility function"""
-    
-    print("\n" + "=" * 70)
-    print("TEST 8: DURATION FORMATTING")
-    print("=" * 70)
-    
-    def format_duration(seconds: float) -> str:
-        hours = int(seconds // 3600)
-        minutes = int((seconds % 3600) // 60)
-        secs = int(seconds % 60)
-        
-        parts = []
-        if hours > 0:
-            parts.append(f"{hours}h")
-        if minutes > 0:
-            parts.append(f"{minutes}m")
-        if secs > 0 or not parts:
-            parts.append(f"{secs}s")
-        
-        return ' '.join(parts)
-    
-    test_cases = [
-        {'input': 0, 'expected': '0s', 'description': 'Zero seconds'},
-        {'input': 45, 'expected': '45s', 'description': '45 seconds'},
-        {'input': 90, 'expected': '1m 30s', 'description': '1 minute 30 seconds'},
-        {'input': 3661, 'expected': '1h 1m 1s', 'description': '1 hour 1 minute 1 second'},
-        {'input': 3600, 'expected': '1h', 'description': 'Exactly 1 hour'},
-        {'input': 7200, 'expected': '2h', 'description': 'Exactly 2 hours'},
-        {'input': 480, 'expected': '8m', 'description': 'Exactly 8 minutes'},
-        {'input': 486.7, 'expected': '8m 6s', 'description': 'Float value (8 min 6.7 sec)'},
-    ]
-    
-    all_passed = True
-    
-    for test_case in test_cases:
-        input_val = test_case['input']
-        expected = test_case['expected']
-        description = test_case['description']
-        
-        result = format_duration(input_val)
-        
-        if result == expected:
-            print(f"  [PASS] {description}: {input_val}s -> '{result}'")
-        else:
-            print(f"  [FAIL] {description}: Expected '{expected}', Got '{result}'")
-            all_passed = False
-    
-    print("\n" + "=" * 70)
-    print(f"TEST 8: {'PASSED' if all_passed else 'FAILED'}")
-    print("=" * 70)
-    
-    return all_passed
+    def test_missing_template_raises(self, query_builder):
+        with pytest.raises(FileNotFoundError):
+            query_builder.load_sql_file('nonexistent.sql')
 
+    def test_reference_queries_load(self, query_builder):
+        for name in ['pg_fetch_excluded_agencies.sql', 'pg_fetch_excluded_ssns.sql',
+                      'pg_fetch_mph.sql', 'pg_fetch_settings.sql']:
+            sql = query_builder.load_sql_file(name)
+            assert len(sql) > 0, f"Empty template: {name}"
 
-# ============================================================================
-# TEST 9: Memory Estimation
-# ============================================================================
-
-def test_memory_estimation():
-    """Test estimate_memory_mb utility function"""
-    
-    print("\n" + "=" * 70)
-    print("TEST 9: MEMORY ESTIMATION")
-    print("=" * 70)
-    
-    def estimate_memory_mb(row_count: int, column_count: int, avg_bytes_per_cell: int = 50) -> float:
-        total_bytes = row_count * column_count * avg_bytes_per_cell
-        total_bytes = total_bytes * 1.5  # 50% Python overhead
-        return total_bytes / (1024 * 1024)
-    
-    test_cases = [
-        {
-            'rows': 5000,
-            'cols': 100,
-            'expected_mb': 35.8,  # 5000 * 100 * 50 * 1.5 / 1024 / 1024
-            'description': '5K rows, 100 columns'
-        },
-        {
-            'rows': 545497,
-            'cols': 100,
-            'expected_mb': 3898.1,  # ~3.8 GB
-            'description': 'Full production dataset'
-        },
-        {
-            'rows': 0,
-            'cols': 100,
-            'expected_mb': 0.0,
-            'description': 'Zero rows'
-        }
-    ]
-    
-    all_passed = True
-    
-    for test_case in test_cases:
-        rows = test_case['rows']
-        cols = test_case['cols']
-        expected_mb = test_case['expected_mb']
-        description = test_case['description']
-        
-        result = estimate_memory_mb(rows, cols)
-        
-        # Allow 1% tolerance for rounding
-        if abs(result - expected_mb) < (expected_mb * 0.01 + 0.1):
-            print(f"  [PASS] {description}: {result:.1f} MB")
-        else:
-            print(f"  [FAIL] {description}: Expected {expected_mb:.1f} MB, Got {result:.1f} MB")
-            all_passed = False
-    
-    print("\n" + "=" * 70)
-    print(f"TEST 9: {'PASSED' if all_passed else 'FAILED'}")
-    print("=" * 70)
-    
-    return all_passed
-
-
-# ============================================================================
-# TEST 10: Reference Data Extraction
-# ============================================================================
-
-def test_reference_data_extraction():
-    """Test reference data extraction and formatting"""
-    
-    print("\n" + "=" * 70)
-    print("TEST 10: REFERENCE DATA EXTRACTION")
-    print("=" * 70)
-    
-    # Simulate database query results (list of tuples)
-    test_cases = [
-        {
-            'name': 'Excluded Agencies',
-            'query_result': [('PROV1',), ('PROV2',), ('PROV3',), (None,)],
-            'extraction': lambda rows: [row[0] for row in rows if row[0]],
-            'expected': ['PROV1', 'PROV2', 'PROV3'],
-            'description': 'Filter out None values'
-        },
-        {
-            'name': 'Excluded SSNs',
-            'query_result': [('123-45-6789',), ('987-65-4321',), ('',)],
-            'extraction': lambda rows: [row[0] for row in rows if row[0]],
-            'expected': ['123-45-6789', '987-65-4321'],
-            'description': 'Filter out empty strings'
-        },
-        {
-            'name': 'Settings',
-            'query_result': [(100,)],
-            'extraction': lambda rows: dict(zip(['ExtraDistancePer'], rows[0])) if rows else {},
-            'expected': {'ExtraDistancePer': 100},
-            'description': 'Convert to dict'
-        },
-        {
-            'name': 'Settings (empty)',
-            'query_result': [],
-            'extraction': lambda rows: dict(zip(['ExtraDistancePer'], rows[0])) if rows else {},
-            'expected': {},
-            'description': 'Handle empty result with default'
-        },
-        {
-            'name': 'MPH Data',
-            'query_result': [(0, 10, 25), (10, 25, 35), (25, 50, 45)],
-            'extraction': lambda rows: [{'From': r[0], 'To': r[1], 'AverageMilesPerHour': r[2]} for r in rows],
-            'expected': [
-                {'From': 0, 'To': 10, 'AverageMilesPerHour': 25},
-                {'From': 10, 'To': 25, 'AverageMilesPerHour': 35},
-                {'From': 25, 'To': 50, 'AverageMilesPerHour': 45}
-            ],
-            'description': 'Convert tuples to dicts'
-        }
-    ]
-    
-    all_passed = True
-    
-    for test_case in test_cases:
-        name = test_case['name']
-        query_result = test_case['query_result']
-        extraction = test_case['extraction']
-        expected = test_case['expected']
-        description = test_case['description']
-        
-        result = extraction(query_result)
-        
-        if result == expected:
-            print(f"  [PASS] {name}: {description}")
-            print(f"         Result: {result}")
-        else:
-            print(f"  [FAIL] {name}: {description}")
-            print(f"         Expected: {expected}")
-            print(f"         Got: {result}")
-            all_passed = False
-    
-    print("\n" + "=" * 70)
-    print(f"TEST 10: {'PASSED' if all_passed else 'FAILED'}")
-    print("=" * 70)
-    
-    return all_passed
-
-
-# ============================================================================
-# MAIN TEST RUNNER
-# ============================================================================
-
-if __name__ == '__main__':
-    print("\n" + "=" * 70)
-    print("COMPREHENSIVE TEST SUITE: Conditional Update Logic")
-    print("=" * 70)
-    print("\nRunning 10 test suites...")
-    print("These tests validate the core logic without requiring database connections.")
-    
-    results = []
-    
-    # Run all tests
-    results.append(('Test 1: All Conditional Flags', test_all_conditional_flags()))
-    results.append(('Test 2: StatusFlag Edge Cases', test_statusflag_edge_cases()))
-    results.append(('Test 3: WHERE Clause Matching', test_where_clause_matching()))
-    results.append(('Test 4: format_exclusion_list', test_format_exclusion_list()))
-    results.append(('Test 5: MPH Lookup Injection', test_mph_lookup_injection()))
-    results.append(('Test 6: UPDATE Statement Structure', test_update_statement_structure()))
-    results.append(('Test 7: Batch Key Generation', test_batch_key_generation()))
-    results.append(('Test 8: Duration Formatting', test_duration_formatting()))
-    results.append(('Test 9: Memory Estimation', test_memory_estimation()))
-    results.append(('Test 10: Reference Data Extraction', test_reference_data_extraction()))
-    
-    # Summary
-    print("\n" + "=" * 70)
-    print("FINAL RESULTS")
-    print("=" * 70)
-    
-    for test_name, passed in results:
-        status = '[PASS]' if passed else '[FAIL]'
-        print(f"{status} {test_name}")
-    
-    all_passed = all(result[1] for result in results)
-    passed_count = sum(1 for _, passed in results if passed)
-    
-    print("\n" + "=" * 70)
-    print(f"OVERALL: {passed_count}/{len(results)} tests passed")
-    print("=" * 70)
-    
-    if all_passed:
-        print("\n[OK] ALL TESTS PASSED")
-        print("\nThe implementation correctly handles:")
-        print("  1. All 7 conditional rule flags")
-        print("  2. StatusFlag preservation for W/I values")
-        print("  3. CONFLICTID preservation from existing records")
-        print("  4. WHERE clause matching with NULL handling")
-        print("  5. Utility functions (formatting, extraction)")
-        print("  6. Edge cases (None, empty, invalid values)")
-        print("\nImplementation is 100% compliant and robust.")
-    else:
-        print("\n[ERROR] SOME TESTS FAILED")
-        print("\nPlease review the test results above.")
-    
-    print("=" * 70)
-    
-    # Exit with proper code
-    exit(0 if all_passed else 1)
+    def test_reference_queries_have_schema_placeholder(self, query_builder):
+        """Reference queries should have {pg_schema} placeholder."""
+        for name in ['pg_fetch_excluded_agencies.sql', 'pg_fetch_excluded_ssns.sql',
+                      'pg_fetch_mph.sql', 'pg_fetch_settings.sql']:
+            sql = query_builder.load_sql_file(name)
+            assert '{pg_schema}' in sql, f"Missing {{pg_schema}} in {name}"

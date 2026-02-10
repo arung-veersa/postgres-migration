@@ -10,7 +10,7 @@ from contextlib import contextmanager
 import snowflake.connector
 from snowflake.connector import SnowflakeConnection
 import psycopg2
-from psycopg2.extras import execute_batch
+
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
 
@@ -226,75 +226,6 @@ class PostgresConnectionManager:
         finally:
             cursor.close()
             conn.close()
-    
-    def execute_batch_update(self, update_statements: List[Tuple[str, tuple]], 
-                            database: Optional[str] = None, batch_size: int = 1000):
-        """
-        Execute batch UPDATE statements efficiently
-        
-        Args:
-            update_statements: List of (sql, params) tuples
-            database: Database name
-            batch_size: Number of statements per batch
-        
-        Returns:
-            Number of rows updated
-        """
-        if not update_statements:
-            return 0
-        
-        conn = self.get_connection(database)
-        cursor = conn.cursor()
-        total_updated = 0
-        
-        try:
-            # Group by SQL statement for efficient batching
-            grouped = {}
-            for sql, params in update_statements:
-                if sql not in grouped:
-                    grouped[sql] = []
-                grouped[sql].append(params)
-            
-            # Execute each group in batches
-            for sql, params_list in grouped.items():
-                execute_batch(cursor, sql, params_list, page_size=batch_size)
-                total_updated += cursor.rowcount
-            
-            conn.commit()
-            self.logger.info(f"✓ Batch update completed: {total_updated} rows updated")
-            return total_updated
-            
-        except Exception as e:
-            conn.rollback()
-            self.logger.error(f"Batch update failed: {e}")
-            raise
-        finally:
-            cursor.close()
-            conn.close()
-    
-    def fetch_reference_data(self, table_name: str, columns: str = '*', 
-                           where_clause: str = '1=1', 
-                           database: Optional[str] = None) -> List[Tuple]:
-        """
-        Fetch reference data from Postgres tables
-        
-        Args:
-            table_name: Table name
-            columns: Column list (default: *)
-            where_clause: WHERE condition
-            database: Database name
-        
-        Returns:
-            List of result tuples
-        """
-        schema = self.conflict_schema
-        query = f"""
-            SELECT {columns}
-            FROM {schema}.{table_name}
-            WHERE {where_clause}
-        """
-        
-        return self.execute_query(query, database=database)
     
     def close_all(self):
         """Close all connections"""

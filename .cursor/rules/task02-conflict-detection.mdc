@@ -14,11 +14,14 @@ alwaysApply: false
 ## Key Files (under Scripts12/tasks/)
 
 - `scripts/lambda_handler.py` -- Entry point, orchestration, parameter handling
-- `lib/conflict_processor.py` -- Core logic: streaming, batch updates, stale cleanup
-- `lib/query_builder.py` -- Builds Snowflake SQL from templates, v3 multi-step approach
-- `lib/connections.py` -- Snowflake and PostgreSQL connection managers
+- `lib/conflict_processor.py` -- Core logic: v3 streaming, batch updates, stale cleanup (v2 method removed)
+- `lib/query_builder.py` -- Builds Snowflake SQL from v3 templates only (v2 builder removed)
+- `lib/connections.py` -- Snowflake and PostgreSQL connection managers (utility methods only, batch updates via persistent conn in processor)
+- `lib/utils.py` -- Logging, formatting, memory estimation utilities
 - `config/config.json` -- Runtime config (lookback_hours=36, batch_size=5000)
 - `sql/sf_task02_v3_step*.sql` -- Snowflake SQL templates for steps 1/2/3
+- `tests/sql/sf_task02_v3-*-defaults.sql` -- Standalone test queries for manual Snowflake testing
+- `tests/generate_v3_test_queries.py` -- Regenerates test queries from production templates
 
 ## v3 Execution Flow
 
@@ -32,17 +35,25 @@ alwaysApply: false
 
 ## Critical Design Decisions
 
-- **Two-part base_visits**: Avoids `OR + IN` subquery that prevented Snowflake partition pruning
+- **Two-part base_visits (CREATE + INSERT, not UNION ALL)**: Same SQL template formatted twice with different placeholders. Two separate statements give per-leg timing in logs and avoid the `OR + IN` subquery that prevented Snowflake partition pruning. Both parts share 120 columns + 11 dimension JOINs -- duplication is unavoidable since Step 3 needs resolved columns.
 - **`is_delta` flag**: Constrains self-join to Delta-vs-All (not All-vs-All on 9.6M rows)
-- **Pair-precise stale cleanup**: Uses exact `(VisitDate, SSN)` pairs, NOT separate DISTINCT lists (cross-product of 507K SSNs x 597 dates = 302M combos caused 3.9M false stale positives)
+- **Streaming cursor + batch processing**: Step 3 results streamed from Snowflake (not fetched all at once). Batches of 5,000 rows: fetch existing PG records, detect changes (7 flags + 40 columns), UPDATE dirty rows only, commit per batch. Single-threaded by design (bottleneck is Snowflake query time, not Python processing).
+- **Pair-precise stale cleanup**: Uses exact `(VisitDate, SSN)` pairs streamed via chunked COPY (100K/chunk), NOT separate DISTINCT lists (cross-product caused 3.9M false stale positives)
 - **UUID type matching**: `_tmp_seen_conflicts` uses UUID columns to match `conflictvisitmaps` indexes
-- **StatusFlag values**: 'N'=New/Active, 'R'=Resolved/Stale, 'W'=Whitelisted, 'I'=Ignored (W and I never overwritten)
+- **Conflict flag simplification**: 7 rules omit redundant `ProviderID != ConProviderID` (enforced by JOIN). Direct column `=` comparison instead of CONCAT-based string ops.
+- **StatusFlag values**: 'N'=New/Active, 'U'=Updated (set on re-detection), 'R'=Resolved/Stale, 'W'=Whitelisted, 'I'=Ignored (W and I never overwritten)
 
 ## Stats Fields (backward compat aliases)
 
 - `delta_keys_count` -> alias for `delta_pairs_count`
 - `modified_visit_ids_count` -> alias for `delta_ssns_count`
 - `stale_conflicts_reset` -> alias for `stale_conflicts_resolved`
+
+## Code Cleanup Notes
+
+- v2 methods removed: `stream_and_process_conflicts()`, `build_conflict_detection_query()`, `_build_symmetric_conflict_pairs()`, `_build_asymmetric_conflict_pairs()`, `execute_batch_update()`, `fetch_reference_data()`
+- v1/v2 SQL template and default files deleted (no longer referenced by any code)
+- `delta_keys` (step1) is always created in both modes (needed for stale cleanup scoping, not just asymmetric join)
 
 ## Current State (as of 2026-02-08)
 
