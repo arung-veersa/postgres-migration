@@ -1,0 +1,35 @@
+# Tests and documentation
+tests/
+docs/
+
+# Deployment scripts (not needed in container)
+deploy/
+
+# Environment files (secrets injected via ECS)
+.env
+.env.*
+.env.example
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Logs and temp files
+*.log
+*.tmp
+*.temp
+
+# Git
+.git/
+.gitignore

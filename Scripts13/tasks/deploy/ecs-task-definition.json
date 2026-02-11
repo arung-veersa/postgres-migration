@@ -1,0 +1,40 @@
+{
+  "family": "task02-conflict-updater",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "task02-conflict-updater",
+      "image": "<ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/<REPOSITORY_NAME>:latest",
+      "essential": true,
+      "environment": [
+        { "name": "ACTION", "value": "" },
+        { "name": "ENVIRONMENT", "value": "dev" },
+        { "name": "LOG_LEVEL", "value": "INFO" },
+        { "name": "SNOWFLAKE_ACCOUNT", "value": "<YOUR_SNOWFLAKE_ACCOUNT>" },
+        { "name": "SNOWFLAKE_USER", "value": "<YOUR_SNOWFLAKE_USER>" },
+        { "name": "SNOWFLAKE_WAREHOUSE", "value": "<YOUR_SNOWFLAKE_WAREHOUSE>" },
+        { "name": "SNOWFLAKE_PRIVATE_KEY", "value": "<YOUR_SNOWFLAKE_PRIVATE_KEY>" },
+        { "name": "POSTGRES_HOST", "value": "<YOUR_POSTGRES_HOST>" },
+        { "name": "POSTGRES_USER", "value": "<YOUR_POSTGRES_USER>" },
+        { "name": "POSTGRES_PASSWORD", "value": "<YOUR_POSTGRES_PASSWORD>" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/task02-conflict-updater",
+          "awslogs-region": "<REGION>",
+          "awslogs-stream-prefix": "task02"
+        }
+      },
+      "stopTimeout": 30
+    }
+  ],
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  }
+}

@@ -16,11 +16,37 @@ This repo contains independent mini-projects in `ScriptsNN/` folders. Each is a 
 - `Scripts08/` - S3 data migration
 - `Scripts09/` - SQL task scripts
 - `Scripts10-CrossState/` - Cross-state conflict cleanup
-- `Scripts12/` - **Active**: Task 02 Conflict Detection Lambda (Snowflake + PostgreSQL)
+- `Scripts12/` - Task 02 Conflict Detection Lambda (Snowflake + PostgreSQL) -- **v3 UPDATE+stale cleanup complete, frozen**
+- `Scripts13/` - **Active**: Task 02 Conflict Detection containerized for AWS ECS/ECR (copied from Scripts12, evolving)
 
 ## Conventions
 
-- Python 3.11 for Lambda functions
+- Python 3.11 runtime
 - SQL templates loaded from `sql/` dirs, parameterized with `.format()`
 - Config via `config/config.json` with `${ENV_VAR}` placeholders
-- AWS Lambda timeout: 15 minutes (900 seconds)
+
+## Scripts12 → Scripts13 Migration Context
+
+Scripts13 was copied from Scripts12 and repackaged as a **Docker container** deployable via AWS Elastic Container Service (ECS) with images stored in AWS Elastic Container Registry (ECR). This removes the 15-minute Lambda timeout constraint and enables longer-running operations.
+
+### What's done in Scripts13 (ECS):
+- v3 multi-step Snowflake query architecture (delta_keys → base_visits → self-join)
+- Asymmetric join with is_delta flag optimization
+- Streaming cursor + 5K-row batch processing with commit-per-batch
+- Conditional flag updates (7 flags: only N→Y, StatusFlag W/I preserved)
+- Pair-precise stale cleanup (12.5M pairs, seen-based anti-join, StatusFlag='R')
+- Change detection (_has_changes: 7 flags + 40 business columns)
+- Excluded SSNs loaded from PostgreSQL into Snowflake temp table
+- Column name mapping (ETATravleMinutes→ETATravelMinutes, SchVisitTimeSame→SchAndVisitTimeSameFlag)
+- 81 pytest tests covering all of the above
+- **Docker/ECS containerization complete**: Dockerfile, ECS task definition, ECR deployment
+- **Container entry point** (`scripts/main.py`): comma-separated ACTION env var, DEFAULT_ACTIONS pipeline, SIGTERM graceful shutdown
+- **JSON-safe env var substitution** in `settings.py` (handles RSA keys with newlines)
+- **Interactive deploy script** (`deploy/build-and-push-ecr.ps1`): build, push, run with action overrides
+- Successfully deployed and tested on ECS Fargate (~8 min full pipeline)
+
+### What's NOT yet done (to be implemented in Scripts13):
+- INSERT logic for new conflicts (~102K detected but not inserted per run)
+- Conflicts table aggregation
+- UpdateFlag cleanup
+- AWS Secrets Manager integration (currently using plain environment variables)

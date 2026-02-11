@@ -1,0 +1,834 @@
+"""
+Comprehensive test suite for Task 02 Conflict Detection (v3).
+Tests actual code from lib/ -- no logic reimplementation.
+
+Run with: python -m pytest tests/ -v   (from Scripts13/tasks/)
+"""
+
+import sys
+import os
+import types
+import pytest
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+# ---------------------------------------------------------------------------
+# Mock heavy database driver modules BEFORE importing any lib code.
+# This lets tests run on dev machines that don't have snowflake-connector
+# or psycopg2 installed.  We use MagicMock so that any attribute access
+# (e.g. ``from snowflake.connector import SnowflakeConnection``) succeeds.
+# ---------------------------------------------------------------------------
+_MOCK_MODULES = [
+    'snowflake', 'snowflake.connector',
+    'psycopg2', 'psycopg2.extras', 'psycopg2.pool',
+    'cryptography', 'cryptography.hazmat',
+    'cryptography.hazmat.primitives', 'cryptography.hazmat.primitives.serialization',
+    'cryptography.hazmat.backends',
+]
+for mod_name in _MOCK_MODULES:
+    if mod_name not in sys.modules:
+        sys.modules[mod_name] = MagicMock()
+
+# Add tasks directory to path for imports
+tasks_dir = str(Path(__file__).parent.parent)
+if tasks_dir not in sys.path:
+    sys.path.insert(0, tasks_dir)
+
+from lib.utils import (
+    format_exclusion_list,
+    format_sql_identifier,
+    format_duration,
+    estimate_memory_mb,
+    chunk_list,
+)
+from lib.query_builder import QueryBuilder
+from lib.conflict_processor import ConflictProcessor
+
+
+# ============================================================================
+# Fixtures
+# ============================================================================
+
+@pytest.fixture
+def query_builder():
+    """QueryBuilder pointed at the real sql/ templates."""
+    sql_dir = os.path.join(tasks_dir, 'sql')
+    return QueryBuilder(sql_dir=sql_dir)
+
+
+@pytest.fixture
+def db_names():
+    return {
+        'sf_database': 'ANALYTICS', 'sf_schema': 'BI',
+        'pg_database': 'conflict_management', 'pg_schema': 'conflict_dev',
+    }
+
+
+@pytest.fixture
+def sample_mph_data():
+    return [
+        {'From': 0, 'To': 2, 'AverageMilesPerHour': 2},
+        {'From': 2, 'To': 5, 'AverageMilesPerHour': 6},
+        {'From': 5, 'To': 10, 'AverageMilesPerHour': 15},
+        {'From': 10, 'To': 25, 'AverageMilesPerHour': 25},
+    ]
+
+
+@pytest.fixture
+def sample_settings():
+    return {'ExtraDistancePer': 100}
+
+
+@pytest.fixture
+def sample_excluded_agencies():
+    return ['10039', '10040', '10041']
+
+
+@pytest.fixture
+def processor():
+    """ConflictProcessor with mocked database managers."""
+    sf_manager = MagicMock()
+    pg_manager = MagicMock()
+    qb = QueryBuilder(sql_dir=os.path.join(tasks_dir, 'sql'))
+    db = {
+        'sf_database': 'ANALYTICS', 'sf_schema': 'BI',
+        'pg_database': 'conflict_management', 'pg_schema': 'conflict_dev',
+    }
+    return ConflictProcessor(
+        sf_manager=sf_manager,
+        pg_manager=pg_manager,
+        query_builder=qb,
+        db_names=db,
+        batch_size=5000,
+        skip_unchanged_records=True,
+        enable_asymmetric_join=True,
+        enable_stale_cleanup=True,
+    )
+
+
+# ============================================================================
+# 1. Utility Functions (import real code, no reimplementation)
+# ============================================================================
+
+class TestFormatExclusionList:
+    def test_normal_list(self):
+        assert format_exclusion_list(['123', '456', '789']) == "'123','456','789'"
+
+    def test_empty_list(self):
+        assert format_exclusion_list([]) == "''"
+
+    def test_single_quote_escape(self):
+        assert format_exclusion_list(["O'Reilly"]) == "'O''Reilly'"
+
+    def test_single_item(self):
+        assert format_exclusion_list(['123']) == "'123'"
+
+    def test_integer_values(self):
+        assert format_exclusion_list([123, 456]) == "'123','456'"
+
+    def test_empty_strings(self):
+        assert format_exclusion_list(['', 'valid', '']) == "'','valid',''"
+
+
+class TestFormatSqlIdentifier:
+    def test_simple(self):
+        assert format_sql_identifier('Visit Date') == '"Visit Date"'
+
+    def test_already_quoted(self):
+        assert format_sql_identifier('Col"Name') == '"Col""Name"'
+
+
+class TestFormatDuration:
+    def test_zero(self):
+        assert format_duration(0) == '0s'
+
+    def test_seconds_only(self):
+        assert format_duration(45) == '45s'
+
+    def test_minutes_seconds(self):
+        assert format_duration(90) == '1m 30s'
+
+    def test_hours_minutes_seconds(self):
+        assert format_duration(3661) == '1h 1m 1s'
+
+    def test_exact_hour(self):
+        assert format_duration(3600) == '1h'
+
+    def test_exact_minutes(self):
+        assert format_duration(480) == '8m'
+
+    def test_float_value(self):
+        assert format_duration(486.7) == '8m 6s'
+
+
+class TestEstimateMemoryMb:
+    def test_5k_rows(self):
+        result = estimate_memory_mb(5000, 100)
+        assert abs(result - 35.8) < 0.2
+
+    def test_zero_rows(self):
+        assert estimate_memory_mb(0, 100) == 0.0
+
+    def test_large_dataset(self):
+        result = estimate_memory_mb(545497, 100)
+        assert result > 3800  # ~3.8 GB
+
+
+class TestChunkList:
+    def test_even_split(self):
+        assert list(chunk_list([1, 2, 3, 4], 2)) == [[1, 2], [3, 4]]
+
+    def test_uneven_split(self):
+        assert list(chunk_list([1, 2, 3, 4, 5], 2)) == [[1, 2], [3, 4], [5]]
+
+    def test_single_chunk(self):
+        assert list(chunk_list([1, 2], 10)) == [[1, 2]]
+
+    def test_empty(self):
+        assert list(chunk_list([], 5)) == []
+
+
+# ============================================================================
+# 2. Conditional Flag Logic (using actual ConflictProcessor._has_changes)
+# ============================================================================
+
+class TestConditionalFlags:
+    """Tests the conditional flag logic as implemented in _has_changes."""
+
+    def test_flag_n_to_y_updates(self, processor):
+        """When existing flag is 'N' and new is 'Y', change should be detected."""
+        existing = {
+            'SameSchTimeFlag': 'N', 'SameVisitTimeFlag': 'N',
+            'SchAndVisitTimeSameFlag': 'N', 'SchOverAnotherSchTimeFlag': 'N',
+            'VisitTimeOverAnotherVisitTimeFlag': 'N',
+            'SchTimeOverVisitTimeFlag': 'N', 'DistanceFlag': 'N',
+            'ProviderID': 'P1', 'ConProviderID': 'P2', 'VisitDate': '2026-01-01',
+        }
+        new_row = dict(existing)
+        new_row['SameSchTimeFlag'] = 'Y'
+        assert processor._has_changes(new_row, existing) is True
+
+    def test_flag_y_existing_no_downgrade(self, processor):
+        """When existing flag is 'Y' and new is 'N', no change (conditional: only N->Y)."""
+        existing = {
+            'SameSchTimeFlag': 'Y', 'SameVisitTimeFlag': 'N',
+            'SchAndVisitTimeSameFlag': 'N', 'SchOverAnotherSchTimeFlag': 'N',
+            'VisitTimeOverAnotherVisitTimeFlag': 'N',
+            'SchTimeOverVisitTimeFlag': 'N', 'DistanceFlag': 'N',
+            'ProviderID': 'P1', 'ConProviderID': 'P2', 'VisitDate': '2026-01-01',
+        }
+        new_row = dict(existing)
+        new_row['SameSchTimeFlag'] = 'N'  # Y->N: not a change under conditional logic
+        assert processor._has_changes(new_row, existing) is False
+
+    def test_all_flags_match_no_change(self, processor):
+        """Identical rows should produce no change."""
+        row = {
+            'SameSchTimeFlag': 'Y', 'SameVisitTimeFlag': 'N',
+            'SchAndVisitTimeSameFlag': 'N', 'SchOverAnotherSchTimeFlag': 'N',
+            'VisitTimeOverAnotherVisitTimeFlag': 'N',
+            'SchTimeOverVisitTimeFlag': 'N', 'DistanceFlag': 'N',
+            'ProviderID': 'P1', 'ConProviderID': 'P2', 'VisitDate': '2026-01-01',
+        }
+        assert processor._has_changes(row, dict(row)) is False
+
+    def test_business_column_change_detected(self, processor):
+        """A change in a business column (not a flag) should be detected."""
+        existing = {
+            'SameSchTimeFlag': 'Y', 'SameVisitTimeFlag': 'N',
+            'SchAndVisitTimeSameFlag': 'N', 'SchOverAnotherSchTimeFlag': 'N',
+            'VisitTimeOverAnotherVisitTimeFlag': 'N',
+            'SchTimeOverVisitTimeFlag': 'N', 'DistanceFlag': 'N',
+            'ProviderID': 'P1', 'ConProviderID': 'P2', 'VisitDate': '2026-01-01',
+        }
+        new_row = dict(existing)
+        new_row['ProviderID'] = 'P999'  # business column changed
+        assert processor._has_changes(new_row, existing) is True
+
+    def test_skip_unchanged_disabled_always_true(self, processor):
+        """When skip_unchanged_records=False, _has_changes always returns True."""
+        processor.skip_unchanged_records = False
+        row = {'SameSchTimeFlag': 'N', 'ProviderID': 'P1'}
+        assert processor._has_changes(row, dict(row)) is True
+
+    def test_multiple_flags_n_to_y_detects_first(self, processor):
+        """When multiple flags flip N->Y, change detected on the first."""
+        existing = {
+            'SameSchTimeFlag': 'N', 'SameVisitTimeFlag': 'N',
+            'SchAndVisitTimeSameFlag': 'N', 'SchOverAnotherSchTimeFlag': 'N',
+            'VisitTimeOverAnotherVisitTimeFlag': 'N',
+            'SchTimeOverVisitTimeFlag': 'N', 'DistanceFlag': 'N',
+            'ProviderID': 'P1', 'ConProviderID': 'P2', 'VisitDate': '2026-01-01',
+        }
+        new_row = dict(existing)
+        new_row['SameVisitTimeFlag'] = 'Y'
+        new_row['DistanceFlag'] = 'Y'
+        assert processor._has_changes(new_row, existing) is True
+
+
+# ============================================================================
+# 3. StatusFlag Logic (using actual build_update_statement)
+# ============================================================================
+
+class TestStatusFlagLogic:
+    """Tests StatusFlag preservation via actual build_update_statement."""
+
+    def _build(self, processor, existing_status):
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        conflict_row = {
+            'VisitID': 'V123', 'ConVisitID': 'V456', 'CONFLICTID': 'C-001',
+            'SSN': '111-22-3333', 'StatusFlag': 'N',
+        }
+        existing_row = {'StatusFlag': existing_status, 'SameSchTimeFlag': 'N'}
+        sql, params = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        return sql, params
+
+    def test_status_n_becomes_u(self, processor):
+        sql, params = self._build(processor, 'N')
+        assert '"StatusFlag" = %s' in sql
+        assert 'U' in params
+
+    def test_status_w_preserved(self, processor):
+        sql, params = self._build(processor, 'W')
+        assert '"StatusFlag" = %s' not in sql
+
+    def test_status_i_preserved(self, processor):
+        sql, params = self._build(processor, 'I')
+        assert '"StatusFlag" = %s' not in sql
+
+    def test_status_u_stays_u(self, processor):
+        sql, params = self._build(processor, 'U')
+        assert '"StatusFlag" = %s' in sql
+        assert 'U' in params
+
+    def test_status_r_becomes_u(self, processor):
+        """Resolved ('R') records should be re-activated to 'U'."""
+        sql, params = self._build(processor, 'R')
+        assert '"StatusFlag" = %s' in sql
+        assert 'U' in params
+
+
+# ============================================================================
+# 4. Column Name Mapping
+# ============================================================================
+
+class TestColumnNameMapping:
+    def test_etaravleminutes_mapped(self, processor):
+        """ETATravleMinutes (Snowflake typo) should map to ETATravelMinutes in Postgres."""
+        conflict_row = {
+            'VisitID': 'V1', 'ConVisitID': 'V2', 'CONFLICTID': 'C-1',
+            'ETATravleMinutes': 42.5,
+        }
+        existing_row = {'StatusFlag': 'N'}
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, params = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"ETATravelMinutes"' in sql
+        assert '"ETATravleMinutes"' not in sql
+
+    def test_schvisittimesame_mapped(self, processor):
+        """SchVisitTimeSame should map to SchAndVisitTimeSameFlag."""
+        conflict_row = {
+            'VisitID': 'V1', 'ConVisitID': 'V2', 'CONFLICTID': 'C-1',
+            'SchVisitTimeSame': 'Y',
+        }
+        existing_row = {'StatusFlag': 'N', 'SchAndVisitTimeSameFlag': 'N'}
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, params = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"SchAndVisitTimeSameFlag"' in sql
+
+    def test_unmapped_column_passes_through(self, processor):
+        """Columns not in the map should appear as-is."""
+        conflict_row = {
+            'VisitID': 'V1', 'ConVisitID': 'V2',
+            'CaregiverID': 'CG-100',
+        }
+        existing_row = {'StatusFlag': 'N'}
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, params = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"CaregiverID"' in sql
+
+
+# ============================================================================
+# 5. WHERE Clause / Key Generation
+# ============================================================================
+
+class TestWhereClauseMatching:
+    def test_both_ids_present(self):
+        existing = {('V123', 'V456'): {'CONFLICTID': 'C-001'}}
+        assert ('V123', 'V456') in existing
+
+    def test_con_visit_id_none(self):
+        existing = {('V789', None): {'CONFLICTID': 'C-002'}}
+        assert ('V789', None) in existing
+
+    def test_mismatch_con_visit_id(self):
+        existing = {('V123', 'V456'): {'CONFLICTID': 'C-001'}}
+        assert ('V123', 'V999') not in existing
+
+    def test_key_generation_from_row(self):
+        row = {'VisitID': 'V123', 'ConVisitID': 'V456'}
+        visit_id = str(row.get('VisitID'))
+        con_visit_id = str(row.get('ConVisitID')) if row.get('ConVisitID') else None
+        assert (visit_id, con_visit_id) == ('V123', 'V456')
+
+    def test_key_generation_none_con_visit(self):
+        row = {'VisitID': 'V789', 'ConVisitID': None}
+        visit_id = str(row.get('VisitID'))
+        con_visit_id = str(row.get('ConVisitID')) if row.get('ConVisitID') else None
+        assert (visit_id, con_visit_id) == ('V789', None)
+
+    def test_key_generation_empty_string_con_visit(self):
+        row = {'VisitID': 'V999', 'ConVisitID': ''}
+        visit_id = str(row.get('VisitID'))
+        con_visit_id = str(row.get('ConVisitID')) if row.get('ConVisitID') else None
+        assert (visit_id, con_visit_id) == ('V999', None)
+
+
+# ============================================================================
+# 6. Query Builder v3 - Template Loading and Formatting
+# ============================================================================
+
+class TestQueryBuilderV3:
+    """Tests build_conflict_detection_query_v3 with actual templates."""
+
+    def _build_queries(self, query_builder, db_names, sample_excluded_agencies,
+                       sample_settings, sample_mph_data, asymmetric):
+        return query_builder.build_conflict_detection_query_v3(
+            db_names=db_names,
+            excluded_agencies=sample_excluded_agencies,
+            excluded_ssns=[],
+            settings_data=sample_settings,
+            mph_data=sample_mph_data,
+            lookback_years=2,
+            lookforward_days=45,
+            lookback_hours=36,
+            enable_asymmetric_join=asymmetric,
+        )
+
+    # ---- Return structure ----
+
+    def test_symmetric_returns_all_keys(self, query_builder, db_names,
+                                         sample_excluded_agencies, sample_settings,
+                                         sample_mph_data):
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=False
+        )
+        assert 'step0_create' in queries
+        assert 'step1' in queries
+        assert 'step2' in queries
+        assert 'step2d' in queries
+        assert 'step3' in queries
+        # Symmetric should NOT have step2_asym_insert
+        assert 'step2_asym_insert' not in queries
+
+    def test_asymmetric_returns_all_keys(self, query_builder, db_names,
+                                          sample_excluded_agencies, sample_settings,
+                                          sample_mph_data):
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        assert 'step0_create' in queries
+        assert 'step1' in queries
+        assert 'step2' in queries
+        assert 'step2_asym_insert' in queries
+        assert 'step2d' in queries
+        assert 'step3' in queries
+
+    # ---- Step 1: delta_keys ----
+
+    def test_step1_contains_lookback(self, query_builder, db_names,
+                                      sample_excluded_agencies, sample_settings,
+                                      sample_mph_data):
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        assert 'DATEADD(HOUR, -36' in queries['step1']
+        assert 'delta_keys' in queries['step1']
+
+    def test_step1_has_excluded_agencies(self, query_builder, db_names,
+                                          sample_excluded_agencies, sample_settings,
+                                          sample_mph_data):
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        for agency in sample_excluded_agencies:
+            assert f"'{agency}'" in queries['step1']
+
+    # ---- Step 2: base_visits ----
+
+    def test_step2_creates_base_visits(self, query_builder, db_names,
+                                        sample_excluded_agencies, sample_settings,
+                                        sample_mph_data):
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        assert 'CREATE TEMPORARY TABLE' in queries['step2']
+        assert 'base_visits' in queries['step2']
+        assert '1 AS "is_delta"' in queries['step2']
+
+    def test_step2_asym_insert_has_is_delta_0(self, query_builder, db_names,
+                                               sample_excluded_agencies, sample_settings,
+                                               sample_mph_data):
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        assert 'INSERT INTO base_visits' in queries['step2_asym_insert']
+        assert '0 AS "is_delta"' in queries['step2_asym_insert']
+        assert 'INNER JOIN delta_keys' in queries['step2_asym_insert']
+
+    def test_step2_symmetric_has_timestamp_filter(self, query_builder, db_names,
+                                                    sample_excluded_agencies, sample_settings,
+                                                    sample_mph_data):
+        """In symmetric mode, base_visits only includes recently-changed rows (timestamp filter)."""
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=False
+        )
+        # Should filter by Visit Updated Timestamp
+        assert 'DATEADD' in queries['step2']
+
+    # ---- Step 3: final conflict detection ----
+
+    def test_step3_asymmetric_has_is_delta_where_condition(self, query_builder, db_names,
+                                                            sample_excluded_agencies,
+                                                            sample_settings, sample_mph_data):
+        """Asymmetric mode should have V1."is_delta" = 1 in the WHERE clause."""
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        assert 'V1."is_delta" = 1' in queries['step3']
+
+    def test_step3_symmetric_no_is_delta_where_condition(self, query_builder, db_names,
+                                                          sample_excluded_agencies,
+                                                          sample_settings, sample_mph_data):
+        """Symmetric mode should NOT have V1."is_delta" = 1 in the WHERE clause."""
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=False
+        )
+        # The WHERE condition for asymmetric filtering should not be present
+        assert 'V1."is_delta" = 1' not in queries['step3']
+
+    # ---- Step 3: conflict flag rules ----
+
+    def test_step3_has_all_7_conflict_rules(self, query_builder, db_names,
+                                             sample_excluded_agencies,
+                                             sample_settings, sample_mph_data):
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        sql = queries['step3']
+        for flag in ['"SameSchTimeFlag"', '"SameVisitTimeFlag"', '"SchVisitTimeSame"',
+                     '"SchOverAnotherSchTimeFlag"', '"VisitTimeOverAnotherVisitTimeFlag"',
+                     '"SchTimeOverVisitTimeFlag"', '"DistanceFlag"']:
+            assert flag in sql, f"Missing flag rule: {flag}"
+
+    def test_step3_no_redundant_providerid_in_flag_rules(self, query_builder, db_names,
+                                                           sample_excluded_agencies,
+                                                           sample_settings, sample_mph_data):
+        """ProviderID != ConProviderID should NOT appear in conflicts_with_flags CTE rules."""
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        sql = queries['step3']
+        cte_start = sql.find('conflicts_with_flags')
+        cte_end = sql.find('final_conflicts')
+        cte_section = sql[cte_start:cte_end]
+        assert 'CE."ProviderID" != CE."ConProviderID"' not in cte_section
+
+    def test_step3_no_concat_in_flag_rules(self, query_builder, db_names,
+                                            sample_excluded_agencies,
+                                            sample_settings, sample_mph_data):
+        """Time comparisons should use direct = not CONCAT."""
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        sql = queries['step3']
+        cte_start = sql.find('conflicts_with_flags')
+        cte_end = sql.find('final_conflicts')
+        cte_section = sql[cte_start:cte_end]
+        assert 'CONCAT(' not in cte_section
+
+    # ---- MPH data ----
+
+    def test_mph_data_injected(self, query_builder, db_names,
+                                sample_excluded_agencies, sample_settings,
+                                sample_mph_data):
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        sql = queries['step3']
+        assert 'mph_data' in sql
+        assert 'UNION ALL' in sql  # Multiple MPH rows joined
+
+    def test_empty_mph_uses_dummy(self, query_builder, db_names,
+                                   sample_excluded_agencies, sample_settings):
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, [], asymmetric=True
+        )
+        assert '-999999' in queries['step3']
+
+    # ---- Placeholder resolution ----
+
+    def test_no_unresolved_placeholders(self, query_builder, db_names,
+                                         sample_excluded_agencies, sample_settings,
+                                         sample_mph_data):
+        """All {placeholders} should be resolved."""
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=True
+        )
+        for key, sql in queries.items():
+            if isinstance(sql, str):
+                assert '{' not in sql, f"Unresolved placeholder in {key}"
+
+    def test_no_unresolved_placeholders_symmetric(self, query_builder, db_names,
+                                                    sample_excluded_agencies,
+                                                    sample_settings, sample_mph_data):
+        queries = self._build_queries(
+            query_builder, db_names, sample_excluded_agencies,
+            sample_settings, sample_mph_data, asymmetric=False
+        )
+        for key, sql in queries.items():
+            if isinstance(sql, str):
+                assert '{' not in sql, f"Unresolved placeholder in {key} (symmetric)"
+
+
+# ============================================================================
+# 7. SSN Batch Insert Generation
+# ============================================================================
+
+class TestSSNBatchInserts:
+    def test_empty_ssns(self):
+        assert QueryBuilder._build_ssn_insert_batches([]) == []
+
+    def test_single_batch(self):
+        ssns = ['111-22-3333', '444-55-6666']
+        result = QueryBuilder._build_ssn_insert_batches(ssns, batch_size=1000)
+        assert len(result) == 1
+        assert 'INSERT INTO excluded_ssns_temp' in result[0]
+        assert '111-22-3333' in result[0]
+        assert '444-55-6666' in result[0]
+
+    def test_multiple_batches(self):
+        ssns = [f'SSN-{i}' for i in range(5)]
+        result = QueryBuilder._build_ssn_insert_batches(ssns, batch_size=2)
+        assert len(result) == 3  # 2 + 2 + 1
+
+    def test_single_quote_escape(self):
+        ssns = ["O'Brien"]
+        result = QueryBuilder._build_ssn_insert_batches(ssns)
+        assert len(result) == 1
+        assert "O''Brien" in result[0]  # SQL-escaped
+
+    def test_large_batch(self):
+        ssns = [f'SSN-{i:05d}' for i in range(7500)]
+        result = QueryBuilder._build_ssn_insert_batches(ssns, batch_size=1000)
+        assert len(result) == 8  # ceil(7500/1000)
+        for stmt in result:
+            assert stmt.startswith('INSERT INTO excluded_ssns_temp')
+
+
+# ============================================================================
+# 8. UPDATE Statement Structure
+# ============================================================================
+
+class TestUpdateStatementStructure:
+    def test_where_clause_has_visitid_and_convisitid(self, processor):
+        conflict_row = {
+            'VisitID': 'V1', 'ConVisitID': 'V2', 'CONFLICTID': 'C-1', 'SSN': '123',
+        }
+        existing_row = {'StatusFlag': 'N'}
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, params = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"VisitID" = %s' in sql
+        assert '"ConVisitID" = %s' in sql
+        assert 'cd.conflictvisitmaps' in sql
+
+    def test_where_clause_handles_null_convisitid(self, processor):
+        """WHERE clause includes IS NULL fallback for ConVisitID."""
+        conflict_row = {'VisitID': 'V1', 'ConVisitID': None, 'CONFLICTID': 'C-1'}
+        existing_row = {'StatusFlag': 'N'}
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, params = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"ConVisitID" IS NULL' in sql
+
+    def test_always_sets_updateflag_null(self, processor):
+        conflict_row = {'VisitID': 'V1', 'ConVisitID': 'V2', 'CONFLICTID': 'C-1'}
+        existing_row = {'StatusFlag': 'N'}
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, _ = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"UpdateFlag" = NULL' in sql
+
+    def test_always_sets_updateddate(self, processor):
+        conflict_row = {'VisitID': 'V1', 'ConVisitID': 'V2', 'CONFLICTID': 'C-1'}
+        existing_row = {'StatusFlag': 'N'}
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, _ = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"UpdatedDate" = CURRENT_TIMESTAMP' in sql
+
+    def test_always_sets_resolvedate_null(self, processor):
+        conflict_row = {'VisitID': 'V1', 'ConVisitID': 'V2', 'CONFLICTID': 'C-1'}
+        existing_row = {'StatusFlag': 'N'}
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, _ = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"ResolveDate" = NULL' in sql
+
+    def test_conditional_flag_preserved_when_y(self, processor):
+        """Flag with existing='Y' should NOT appear in SET clause."""
+        conflict_row = {
+            'VisitID': 'V1', 'ConVisitID': 'V2', 'CONFLICTID': 'C-1',
+            'SameSchTimeFlag': 'Y',
+        }
+        existing_row = {'StatusFlag': 'N', 'SameSchTimeFlag': 'Y'}
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, params = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"SameSchTimeFlag" = %s' not in sql
+
+    def test_conditional_flag_updated_when_n(self, processor):
+        """Flag with existing='N' should appear in SET clause."""
+        conflict_row = {
+            'VisitID': 'V1', 'ConVisitID': 'V2', 'CONFLICTID': 'C-1',
+            'SameSchTimeFlag': 'Y',
+        }
+        existing_row = {'StatusFlag': 'N', 'SameSchTimeFlag': 'N'}
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, params = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"SameSchTimeFlag" = %s' in sql
+
+    def test_multiple_conditional_flags(self, processor):
+        """Multiple flags should be independently conditional."""
+        conflict_row = {
+            'VisitID': 'V1', 'ConVisitID': 'V2', 'CONFLICTID': 'C-1',
+            'SameSchTimeFlag': 'Y', 'DistanceFlag': 'Y', 'SameVisitTimeFlag': 'N',
+        }
+        existing_row = {
+            'StatusFlag': 'N',
+            'SameSchTimeFlag': 'N',      # will update -> Y
+            'DistanceFlag': 'Y',          # won't update (already Y)
+            'SameVisitTimeFlag': 'N',     # new is N, existing is N -> no change
+        }
+        db = {'pg_database': 'cm', 'pg_schema': 'cd'}
+        sql, params = processor.query_builder.build_update_statement(
+            conflict_row, db, existing_row
+        )
+        assert '"SameSchTimeFlag" = %s' in sql
+        assert '"DistanceFlag" = %s' not in sql
+        # SameVisitTimeFlag: existing='N', new='N' -> same value, but code checks if existing_flag == 'N'
+        # and then adds the column unconditionally -> it WILL appear in SET
+        assert '"SameVisitTimeFlag" = %s' in sql
+
+
+# ============================================================================
+# 9. Statistics Structure
+# ============================================================================
+
+class TestStatistics:
+    def test_initial_stats_shape(self, processor):
+        stats = processor.get_statistics()
+        expected_keys = [
+            'rows_fetched', 'rows_processed', 'rows_updated',
+            'rows_skipped_no_changes', 'batches_processed', 'errors',
+            'unique_visits', 'matched_in_postgres', 'new_conflicts',
+            'stale_conflicts_reset', 'delta_ssns_count', 'delta_dates_count',
+            'delta_pairs_count', 'delta_keys_count', 'modified_visit_ids_count',
+            'records_marked_for_update', 'stale_conflicts_resolved',
+            'update_rate', 'match_rate', 'efficiency_rate',
+        ]
+        for key in expected_keys:
+            assert key in stats, f"Missing key: {key}"
+
+    def test_initial_stats_zeros(self, processor):
+        stats = processor.get_statistics()
+        assert stats['rows_fetched'] == 0
+        assert stats['rows_updated'] == 0
+        assert stats['errors'] == 0
+
+    def test_backward_compat_aliases(self, processor):
+        """delta_keys_count should alias delta_pairs_count."""
+        stats = processor.get_statistics()
+        assert stats['delta_keys_count'] == stats['delta_pairs_count']
+        assert stats['modified_visit_ids_count'] == stats['delta_ssns_count']
+
+    def test_rate_calculations_zero_safe(self, processor):
+        """Rate calculations should not divide by zero."""
+        stats = processor.get_statistics()
+        assert stats['update_rate'] == 0.0
+        assert stats['match_rate'] == 0.0
+        assert stats['efficiency_rate'] == 0.0
+
+
+# ============================================================================
+# 10. SQL Template File Loading
+# ============================================================================
+
+class TestTemplateLoading:
+    def test_step1_template_loads(self, query_builder):
+        sql = query_builder.load_sql_file('sf_task02_v3_step1_delta_keys.sql')
+        assert 'delta_keys' in sql
+        assert '{lookback_hours}' in sql
+
+    def test_step2_template_loads(self, query_builder):
+        sql = query_builder.load_sql_file('sf_task02_v3_step2_base_visits.sql')
+        assert '{TABLE_CLAUSE}' in sql
+        assert '{is_delta_value}' in sql
+        assert '{DELTA_KEYS_JOIN}' in sql
+        assert '{TIMESTAMP_CONDITION}' in sql
+
+    def test_step3_template_loads(self, query_builder):
+        sql = query_builder.load_sql_file('sf_task02_v3_step3_final_query.sql')
+        assert '{ASYMMETRIC_JOIN_CONDITION}' in sql
+        assert '{mph_lookup}' in sql
+        assert 'conflicts_with_flags' in sql
+        assert 'final_conflicts' in sql
+
+    def test_missing_template_raises(self, query_builder):
+        with pytest.raises(FileNotFoundError):
+            query_builder.load_sql_file('nonexistent.sql')
+
+    def test_reference_queries_load(self, query_builder):
+        for name in ['pg_fetch_excluded_agencies.sql', 'pg_fetch_excluded_ssns.sql',
+                      'pg_fetch_mph.sql', 'pg_fetch_settings.sql']:
+            sql = query_builder.load_sql_file(name)
+            assert len(sql) > 0, f"Empty template: {name}"
+
+    def test_reference_queries_have_schema_placeholder(self, query_builder):
+        """Reference queries should have {pg_schema} placeholder."""
+        for name in ['pg_fetch_excluded_agencies.sql', 'pg_fetch_excluded_ssns.sql',
+                      'pg_fetch_mph.sql', 'pg_fetch_settings.sql']:
+            sql = query_builder.load_sql_file(name)
+            assert '{pg_schema}' in sql, f"Missing {{pg_schema}} in {name}"

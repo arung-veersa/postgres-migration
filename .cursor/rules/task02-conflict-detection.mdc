@@ -1,27 +1,31 @@
 ---
-description: Scripts12 Task 02 - conflict detection v3 architecture, execution flow, and implementation details
-globs: Scripts12/**/*.py, Scripts12/**/*.sql, Scripts12/**/*.json
+description: Task 02 - conflict detection v3 architecture, execution flow, and ECS container implementation
+globs: Scripts12/**/*.py, Scripts12/**/*.sql, Scripts12/**/*.json, Scripts13/**/*.py, Scripts13/**/*.sql, Scripts13/**/*.json
 alwaysApply: false
 ---
 
-# Scripts12: Task 02 Conflict Detection (v3)
+# Task 02 Conflict Detection (v3) -- Scripts12 (Lambda) / Scripts13 (ECS)
 
 ## Databases
 
 - **Snowflake (read-only source)**: `ANALYTICS.BI.FACTVISITCALLPERFORMANCE_CR` view with dimension joins. RSA key auth, streaming cursor. Temp tables require `database` and `schema` on connection.
 - **PostgreSQL (read/write target)**: `conflict_management.conflict_dev` schema. Tables: `conflicts` (parent), `conflictvisitmaps` (detail with 7 conflict flags). psycopg2 driver. All column names double-quoted (case-sensitive).
 
-## Key Files (under Scripts12/tasks/)
+## Key Files (under Scripts13/tasks/)
 
-- `scripts/lambda_handler.py` -- Entry point, orchestration, parameter handling
-- `lib/conflict_processor.py` -- Core logic: v3 streaming, batch updates, stale cleanup (v2 method removed)
-- `lib/query_builder.py` -- Builds Snowflake SQL from v3 templates only (v2 builder removed)
-- `lib/connections.py` -- Snowflake and PostgreSQL connection managers (utility methods only, batch updates via persistent conn in processor)
+- `scripts/main.py` -- ECS container entry point, ACTION dispatching, SIGTERM handling
+- `lib/conflict_processor.py` -- Core logic: v3 streaming, batch updates, stale cleanup
+- `lib/query_builder.py` -- Builds Snowflake SQL from v3 templates
+- `lib/connections.py` -- Snowflake and PostgreSQL connection managers
 - `lib/utils.py` -- Logging, formatting, memory estimation utilities
-- `config/config.json` -- Runtime config (lookback_hours=36, batch_size=5000)
+- `config/config.json` -- Runtime config (lookback_hours=36, batch_size=5000, env var substitution)
+- `config/settings.py` -- Config loader with JSON-safe env var substitution
 - `sql/sf_task02_v3_step*.sql` -- Snowflake SQL templates for steps 1/2/3
+- `Dockerfile` -- Container image definition (python:3.11-slim)
+- `deploy/build-and-push-ecr.ps1` -- Interactive build/push/run PowerShell script
+- `deploy/ecs-task-definition.json` -- ECS Fargate task definition template
+- `tests/test_comprehensive.py` -- 81 pytest tests
 - `tests/sql/sf_task02_v3-*-defaults.sql` -- Standalone test queries for manual Snowflake testing
-- `tests/generate_v3_test_queries.py` -- Regenerates test queries from production templates
 
 ## v3 Execution Flow
 
@@ -55,10 +59,66 @@ alwaysApply: false
 - v1/v2 SQL template and default files deleted (no longer referenced by any code)
 - `delta_keys` (step1) is always created in both modes (needed for stale cleanup scoping, not just asymmetric join)
 
-## Current State (as of 2026-02-08)
+## Latest Performance Run (2026-02-10, asymmetric + stale cleanup)
 
-- Asymmetric join + pair-precise stale cleanup: WORKING (~6 min for 36h lookback)
+| Metric | Value |
+|---|---|
+| Total time | 8m 29s (509s) |
+| Rows fetched from Snowflake | 153,901 |
+| Matched in Postgres | 51,612 (33.5%) |
+| New conflicts (not in PG) | 102,289 (66.5%) |
+| Changes detected | 6,134 (5,202 flag + 932 business) |
+| Rows actually updated | 216 |
+| Rows skipped (no changes) | 45,478 (88.1%) |
+| Stale conflicts resolved | 9,294 → StatusFlag='R' |
+| Delta pairs (stale scope) | 12,517,521 (640K SSNs × 596 dates) |
+| Peak memory | 455 MB of 5,120 MB allocated |
+| Errors | 0 |
+
+### Time breakdown:
+- Step 0 (excluded SSNs): ~6s
+- Step 1 (delta_keys): ~5s
+- Step 2 (base_visits A+B): ~148s
+- Step 2d (delta pairs → PG): ~92s
+- Step 3 (conflict detection + streaming batches): ~140s
+- Step 4 (stale cleanup): ~117s (84s identify + 32s update)
+
+## Current State (as of 2026-02-10)
+
+### Scripts12 (Lambda) -- FROZEN
+- Asymmetric join + pair-precise stale cleanup: WORKING
 - UPDATE logic with conditional flags and change detection: WORKING
-- INSERT logic for new conflicts (~99K detected but not inserted): NOT YET IMPLEMENTED
+- 81 pytest tests passing
+- No further development planned here
+
+### Scripts13 (ECS) -- ACTIVE DEVELOPMENT
+- **ECS containerization COMPLETE**: Dockerfile, task definition, ECR deployment, interactive deploy script
+- Entry point: `scripts/main.py` with comma-separated ACTION env var and DEFAULT_ACTIONS pipeline
+- JSON-safe env var substitution in `settings.py` (handles RSA keys with newlines)
+- Graceful SIGTERM shutdown handling
+- Successfully deployed and tested on ECS Fargate (~8 min full pipeline)
+- INSERT logic for new conflicts (~102K detected but not inserted): NOT YET IMPLEMENTED
 - Conflicts table aggregation: NOT YET IMPLEMENTED
 - UpdateFlag cleanup: DEFERRED
+- AWS Secrets Manager integration: NOT YET IMPLEMENTED (using plain env vars)
+
+## Scripts13 ECS Architecture Notes
+
+### Container Entry Point (`scripts/main.py`)
+- `ACTION=""` (default): runs full pipeline `validate_config -> test_connections -> task02_00_run_conflict_update`
+- `ACTION="test_connections"`: runs single action
+- `ACTION="validate_config,test_connections"`: comma-separated sequential execution
+- SIGTERM handler for graceful ECS shutdown (30s stop timeout)
+- All parameters from env vars with config.json defaults as fallback
+
+### Deployment
+- `deploy/build-and-push-ecr.ps1`: Interactive PowerShell script (SSO login, Docker build, ECR push, ECS run-task)
+- `deploy/ecs-task-definition.json`: Template with placeholders for account ID, region, credentials
+- CloudWatch log group `/ecs/task02-conflict-updater` must be created manually before first run
+
+### What stays the same from Scripts12:
+- All Python code in `lib/` (conflict_processor, query_builder, connections, utils)
+- SQL templates in `sql/`
+- Snowflake and PostgreSQL connection logic
+- v3 execution flow (Steps 0-4)
+- Test suite in `tests/`
