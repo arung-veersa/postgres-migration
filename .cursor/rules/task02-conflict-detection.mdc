@@ -22,8 +22,9 @@ alwaysApply: false
 - `config/settings.py` -- Config loader with JSON-safe env var substitution
 - `sql/sf_task02_v3_step*.sql` -- Snowflake SQL templates for steps 1/2/3
 - `Dockerfile` -- Container image definition (python:3.11-slim)
-- `deploy/build-and-push-ecr.ps1` -- Interactive build/push/run PowerShell script
-- `deploy/ecs-task-definition.json` -- ECS Fargate task definition template
+- `deploy/build-and-push-ecr.ps1` -- Interactive deploy script (SSO, build, push, register task def, run)
+- `deploy/ecs-task-definition.json` -- ECS Fargate task definition template (placeholders resolved from .env)
+- `deploy/.env.example` -- Template for deploy/.env with all required secret/config keys
 - `tests/test_comprehensive.py` -- 81 pytest tests
 - `tests/sql/sf_task02_v3-*-defaults.sql` -- Standalone test queries for manual Snowflake testing
 
@@ -112,8 +113,17 @@ alwaysApply: false
 - All parameters from env vars with config.json defaults as fallback
 
 ### Deployment
-- `deploy/build-and-push-ecr.ps1`: Interactive PowerShell script (SSO login, Docker build, ECR push, ECS run-task)
-- `deploy/ecs-task-definition.json`: Template with placeholders for account ID, region, credentials
+- `deploy/build-and-push-ecr.ps1`: Interactive PowerShell script with 5 steps:
+  1. SSO login (optional)
+  2. Docker build
+  3. ECR push (with timestamp tag)
+  4. **Register task definition** (resolves `ecs-task-definition.json` template + `deploy/.env` secrets, shows masked summary, registers via `aws ecs register-task-definition`)
+  5. ECS run-task (with action selection menu)
+- `deploy/ecs-task-definition.json`: Template with `<ACCOUNT_ID>`, `<REGION>`, `<YOUR_*>` placeholders for all env vars
+- `deploy/.env`: Secret values for template resolution (gitignored). Copy from `deploy/.env.example`.
+- `deploy/.env.example`: Template .env with placeholder values for onboarding
+- `deploy/.generated-taskdef.json`: Resolved task definition output (gitignored, written by script)
+- `deploy/ecs-task-definition.dev.json`: Manually-maintained dev reference copy (gitignored)
 - CloudWatch log group `/ecs/task02-conflict-updater` must be created manually before first run
 
 ### What stays the same from Scripts12:

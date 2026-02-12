@@ -20,7 +20,10 @@
         { "name": "SNOWFLAKE_PRIVATE_KEY", "value": "<YOUR_SNOWFLAKE_PRIVATE_KEY>" },
         { "name": "POSTGRES_HOST", "value": "<YOUR_POSTGRES_HOST>" },
         { "name": "POSTGRES_USER", "value": "<YOUR_POSTGRES_USER>" },
-        { "name": "POSTGRES_PASSWORD", "value": "<YOUR_POSTGRES_PASSWORD>" }
+        { "name": "POSTGRES_PASSWORD", "value": "<YOUR_POSTGRES_PASSWORD>" },
+        { "name": "AWS_REGION", "value": "<YOUR_AWS_REGION>" },
+        { "name": "EMAIL_SENDER", "value": "<YOUR_EMAIL_SENDER>" },
+        { "name": "EMAIL_RECIPIENTS", "value": "<YOUR_EMAIL_RECIPIENTS>" }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",

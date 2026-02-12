@@ -445,7 +445,39 @@ To override default parameters, add them as **Container overrides** → **Enviro
 
 ## Redeploying After Code Changes
 
-When you make code changes and need to update the running image:
+### Option A: Automated Deploy Script (Recommended)
+
+The interactive PowerShell script handles the full workflow:
+
+```powershell
+cd Scripts13\tasks\deploy
+.\build-and-push-ecr.ps1
+```
+
+The script walks you through 5 steps, each with a Y/n prompt:
+
+1. **SSO Login** -- Authenticates to AWS (skip if session is still active)
+2. **Build Docker Image** -- Builds from `Scripts13/tasks/Dockerfile`
+3. **Push to ECR** -- Tags with `latest` + timestamp, pushes both tags
+4. **Register Task Definition** -- Resolves `ecs-task-definition.json` template with secrets from `deploy/.env`, shows a masked summary, and registers with ECS via `aws ecs register-task-definition`
+5. **Run ECS Task** -- Interactive menu to run the default pipeline, individual actions, or custom action combinations
+
+**First-time setup for the deploy script:**
+
+1. Copy the example env file and fill in your credentials:
+   ```powershell
+   cd Scripts13\tasks\deploy
+   copy .env.example .env
+   # Edit .env with real Snowflake, PostgreSQL, AWS, and email values
+   ```
+2. Verify prerequisites (see comments at the top of `build-and-push-ecr.ps1` for the full list):
+   - Docker Desktop installed and running
+   - AWS CLI v2 with SSO profile configured
+   - ECR repository, ECS cluster, CloudWatch log group, and IAM role created
+
+### Option B: Manual AWS Console Steps
+
+When you make code changes and need to update the running image manually:
 
 1. **Rebuild** the image locally:
    ```powershell

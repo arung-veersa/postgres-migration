@@ -1,15 +1,43 @@
-# Build, push, and optionally run Task 02 Conflict Updater on ECS
+# Build, push, register task definition, and optionally run on ECS
 # ================================================================
 #
 # Interactive script -- prompts for what you want to do:
 #   1. SSO login (optional)
 #   2. Build Docker image
 #   3. Push to ECR
-#   4. Run ECS task (optional, with action selection)
+#   4. Register ECS task definition (from template + .env)
+#   5. Run ECS task (optional, with action selection)
 #
 # Usage:
 #   cd Scripts13\tasks\deploy
 #   .\build-and-push-ecr.ps1
+#
+# Pre-requisites:
+#   - PowerShell 5.1+ (Windows) or PowerShell 7+ (cross-platform)
+#   - Docker Desktop installed and RUNNING (required for steps 2-3)
+#       Download: https://www.docker.com/products/docker-desktop
+#       Verify:   docker --version
+#   - AWS CLI v2 installed and configured with an SSO profile (required for steps 1, 3-5)
+#       Download: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
+#       Verify:   aws --version
+#   - AWS SSO profile configured matching the $Profile variable below
+#       Setup:    aws configure sso --profile <profile-name>
+#   - deploy/.env file with secret values (required for step 4)
+#       Create:   copy deploy\.env.example deploy\.env
+#       Then fill in real values for Snowflake, PostgreSQL, and email settings.
+#       See .env.example for the full list of required variables.
+#   - ECR repository must already exist in your AWS account
+#       The repository name is set in $RepositoryName below.
+#   - ECS cluster must already exist with Fargate capacity
+#       The cluster name is set in $Cluster below.
+#   - CloudWatch log group "/ecs/task02-conflict-updater" must exist
+#       Create manually in the AWS Console or via:
+#       aws logs create-log-group --log-group-name /ecs/task02-conflict-updater --profile <profile>
+#   - IAM role "ecsTaskExecutionRole" must exist with permissions for:
+#       ECR pull, CloudWatch Logs, and (if using Secrets Manager later) secrets access.
+#   - Network: VPC subnets and security group configured in $Subnets / $SecurityGroups
+#       Security group must allow outbound HTTPS (443) for Snowflake and ECR,
+#       and outbound to PostgreSQL on port 5432.
 #
 # All settings are pre-configured below. Edit the CONFIGURATION section
 # if your account, cluster, or networking details change.
@@ -24,16 +52,22 @@ $Region         = "us-east-1"
 $Profile        = "HHA-DEV-CONFLICT-MGMT-354073143602"
 $RepositoryName = "conflict-snowflake"
 $Cluster        = "conflict-batch-1"
-$TaskDefinition = "task02-conflict-updater"
+$TaskFamily     = "task02-conflict-updater"
 $Subnets        = "subnet-0bf69a7a22a445997,subnet-07b70458a1e90f658,subnet-0e558920a2b805a7f,subnet-0213fe32b2341360b"
 $SecurityGroups = "sg-0af84ea45bd095351"
 $AssignPublicIp = "DISABLED"
 # =====================================================================
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$TasksDir  = Split-Path -Parent $ScriptDir
-$EcrUri    = "$AccountId.dkr.ecr.$Region.amazonaws.com"
-$RepoUri   = "$EcrUri/$RepositoryName"
+$ScriptDir          = Split-Path -Parent $MyInvocation.MyCommand.Path
+$TasksDir           = Split-Path -Parent $ScriptDir
+$EcrUri             = "$AccountId.dkr.ecr.$Region.amazonaws.com"
+$RepoUri            = "$EcrUri/$RepositoryName"
+$TemplatePath       = Join-Path $ScriptDir "ecs-task-definition.json"
+$EnvFilePath        = Join-Path $ScriptDir ".env"
+$GeneratedPath      = Join-Path $ScriptDir ".generated-taskdef.json"
+
+# Task definition to use for run-task (updated by Do-RegisterTaskDef)
+$script:TaskDefinition = $TaskFamily
 
 function Show-Banner {
     Write-Host ""
@@ -117,6 +151,247 @@ function Do-Push {
     return $true
 }
 
+# =====================================================================
+# Task Definition Registration
+# =====================================================================
+
+function Read-EnvFile {
+    <#
+    .SYNOPSIS
+        Parse a .env file into a hashtable. Skips comments and blank lines.
+    #>
+    param([string]$Path)
+
+    $envVars = @{}
+    if (-not (Test-Path $Path)) {
+        return $envVars
+    }
+
+    foreach ($line in Get-Content $Path) {
+        $trimmed = $line.Trim()
+        # Skip comments and blank lines
+        if ($trimmed -eq '' -or $trimmed.StartsWith('#')) { continue }
+
+        # Split on first '=' only
+        $eqIdx = $trimmed.IndexOf('=')
+        if ($eqIdx -le 0) { continue }
+
+        $key   = $trimmed.Substring(0, $eqIdx).Trim()
+        $value = $trimmed.Substring($eqIdx + 1).Trim()
+
+        # Strip surrounding quotes if present
+        if (($value.StartsWith('"') -and $value.EndsWith('"')) -or
+            ($value.StartsWith("'") -and $value.EndsWith("'"))) {
+            $value = $value.Substring(1, $value.Length - 2)
+        }
+
+        $envVars[$key] = $value
+    }
+    return $envVars
+}
+
+function Mask-Secret {
+    <#
+    .SYNOPSIS
+        Mask a secret value for display. Shows first 4 and last 4 chars.
+    #>
+    param([string]$Value)
+
+    if ($Value.Length -le 12) {
+        return ("*" * $Value.Length)
+    }
+    $first = $Value.Substring(0, 4)
+    $last  = $Value.Substring($Value.Length - 4)
+    $stars = "*" * [Math]::Min(($Value.Length - 8), 20)
+    return "${first}${stars}${last}"
+}
+
+function Is-SensitiveKey {
+    <#
+    .SYNOPSIS
+        Check if an env var key contains sensitive data.
+    #>
+    param([string]$Key)
+
+    $sensitivePatterns = @('PASSWORD', 'PRIVATE_KEY', 'SECRET', 'TOKEN')
+    foreach ($pattern in $sensitivePatterns) {
+        if ($Key.ToUpper().Contains($pattern)) { return $true }
+    }
+    return $false
+}
+
+function Do-RegisterTaskDef {
+    Write-Host "`n--- Register ECS Task Definition ---" -ForegroundColor Yellow
+
+    # Check template exists
+    if (-not (Test-Path $TemplatePath)) {
+        Write-Host "  Template not found: $TemplatePath" -ForegroundColor Red
+        return $false
+    }
+
+    # Check .env exists
+    if (-not (Test-Path $EnvFilePath)) {
+        Write-Host "  .env file not found: $EnvFilePath" -ForegroundColor Red
+        Write-Host "  Copy .env.example to .env and fill in real values:" -ForegroundColor Yellow
+        Write-Host "    cp deploy\.env.example deploy\.env" -ForegroundColor Gray
+        return $false
+    }
+
+    # Read template
+    Write-Host "  Reading template: $TemplatePath"
+    $templateJson = Get-Content $TemplatePath -Raw
+
+    # Read .env
+    Write-Host "  Reading .env: $EnvFilePath"
+    $envVars = Read-EnvFile -Path $EnvFilePath
+
+    if ($envVars.Count -eq 0) {
+        Write-Host "  .env file is empty or has no valid entries" -ForegroundColor Red
+        return $false
+    }
+
+    Write-Host "  Loaded $($envVars.Count) variable(s) from .env" -ForegroundColor Green
+
+    # ---- Step 1: Replace infrastructure placeholders from PS1 config ----
+    $resolved = $templateJson
+    $resolved = $resolved.Replace('<ACCOUNT_ID>', $AccountId)
+    $resolved = $resolved.Replace('<REGION>', $Region)
+    $resolved = $resolved.Replace('<REPOSITORY_NAME>', $RepositoryName)
+
+    # ---- Step 2: Replace <YOUR_*> env var placeholders from .env ----
+    # Mapping: template placeholder -> .env key
+    $placeholderMap = @{
+        '<YOUR_SNOWFLAKE_ACCOUNT>'     = 'SNOWFLAKE_ACCOUNT'
+        '<YOUR_SNOWFLAKE_USER>'        = 'SNOWFLAKE_USER'
+        '<YOUR_SNOWFLAKE_WAREHOUSE>'   = 'SNOWFLAKE_WAREHOUSE'
+        '<YOUR_SNOWFLAKE_PRIVATE_KEY>' = 'SNOWFLAKE_PRIVATE_KEY'
+        '<YOUR_POSTGRES_HOST>'         = 'POSTGRES_HOST'
+        '<YOUR_POSTGRES_USER>'         = 'POSTGRES_USER'
+        '<YOUR_POSTGRES_PASSWORD>'     = 'POSTGRES_PASSWORD'
+        '<YOUR_AWS_REGION>'            = 'AWS_REGION'
+        '<YOUR_EMAIL_SENDER>'          = 'EMAIL_SENDER'
+        '<YOUR_EMAIL_RECIPIENTS>'      = 'EMAIL_RECIPIENTS'
+    }
+
+    $missingKeys = @()
+    foreach ($placeholder in $placeholderMap.Keys) {
+        $envKey = $placeholderMap[$placeholder]
+        if ($envVars.ContainsKey($envKey)) {
+            # JSON-escape the value:
+            #   1. Convert literal \n (two chars) to real newlines (for RSA keys stored as single-line in .env)
+            #   2. Escape double-quotes for JSON
+            #   3. Convert real newlines back to JSON \n escape sequences
+            #   4. Strip carriage returns (Windows line endings)
+            $escapedValue = $envVars[$envKey] -replace '\\n', "`n"
+            $escapedValue = $escapedValue -replace '"', '\"' -replace "`r", '' -replace "`n", '\n'
+            $resolved = $resolved.Replace($placeholder, $escapedValue)
+        }
+        else {
+            $missingKeys += $envKey
+        }
+    }
+
+    if ($missingKeys.Count -gt 0) {
+        Write-Host ""
+        Write-Host "  WARNING: Missing .env keys:" -ForegroundColor Yellow
+        foreach ($key in $missingKeys) {
+            Write-Host "    - $key" -ForegroundColor Yellow
+        }
+        Write-Host "  Placeholders for these will remain unresolved." -ForegroundColor Yellow
+    }
+
+    # ---- Step 3: Validate JSON ----
+    try {
+        $parsedJson = $resolved | ConvertFrom-Json
+    }
+    catch {
+        Write-Host "  Resolved JSON is invalid: $_" -ForegroundColor Red
+        Write-Host "  Writing raw output to $GeneratedPath for debugging" -ForegroundColor Yellow
+        $resolved | Out-File -Encoding utf8 -FilePath $GeneratedPath
+        return $false
+    }
+
+    # ---- Step 4: Write generated file ----
+    $resolved | Out-File -Encoding utf8 -FilePath $GeneratedPath
+    Write-Host "  Generated: $GeneratedPath" -ForegroundColor Green
+
+    # ---- Step 5: Display summary with masked secrets ----
+    Write-Host ""
+    Write-Host "  Task Definition Summary:" -ForegroundColor Cyan
+    Write-Host "  -------------------------"
+    Write-Host "  Family:          $($parsedJson.family)"
+    Write-Host "  CPU:             $($parsedJson.cpu)"
+    Write-Host "  Memory:          $($parsedJson.memory) MB"
+    Write-Host "  Image:           $($parsedJson.containerDefinitions[0].image)"
+    Write-Host "  Log group:       $($parsedJson.containerDefinitions[0].logConfiguration.options.'awslogs-group')"
+    Write-Host "  Stop timeout:    $($parsedJson.containerDefinitions[0].stopTimeout)s"
+    Write-Host ""
+    Write-Host "  Environment Variables:" -ForegroundColor Cyan
+
+    foreach ($envEntry in $parsedJson.containerDefinitions[0].environment) {
+        $displayValue = $envEntry.value
+        if ((Is-SensitiveKey -Key $envEntry.name) -and $displayValue.Length -gt 0) {
+            $displayValue = Mask-Secret -Value $displayValue
+        }
+        # Truncate long values for display
+        if ($displayValue.Length -gt 80) {
+            $displayValue = $displayValue.Substring(0, 77) + "..."
+        }
+        $padding = " " * [Math]::Max(0, (24 - $envEntry.name.Length))
+        Write-Host "    $($envEntry.name)${padding}= $displayValue"
+    }
+
+    # Check for unresolved placeholders
+    $unresolvedMatches = [regex]::Matches($resolved, '<[A-Z_]+>')
+    if ($unresolvedMatches.Count -gt 0) {
+        Write-Host ""
+        Write-Host "  WARNING: Unresolved placeholders found:" -ForegroundColor Yellow
+        $unresolvedMatches | ForEach-Object { Write-Host "    - $($_.Value)" -ForegroundColor Yellow }
+    }
+
+    # ---- Step 6: Prompt for confirmation ----
+    Write-Host ""
+    $confirm = Read-Host "  Register this task definition? (Y/n)"
+    if ($confirm -eq 'n') {
+        Write-Host "  Skipping registration." -ForegroundColor Yellow
+        return $true  # Not a failure, user chose to skip
+    }
+
+    # ---- Step 7: Register with ECS ----
+    Write-Host "  Registering task definition..."
+    $registerOutput = aws ecs register-task-definition `
+        --cli-input-json "file://$GeneratedPath" `
+        --profile $Profile 2>&1
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  Registration failed:" -ForegroundColor Red
+        Write-Host "  $registerOutput" -ForegroundColor Red
+        return $false
+    }
+
+    # Parse the output to get the new revision
+    try {
+        $registerResult = $registerOutput | ConvertFrom-Json
+        $newRevision = $registerResult.taskDefinition.revision
+        $fullArn = $registerResult.taskDefinition.taskDefinitionArn
+        Write-Host "  Registered: $TaskFamily`:$newRevision" -ForegroundColor Green
+        Write-Host "  ARN: $fullArn" -ForegroundColor Gray
+
+        # Update the task definition for subsequent run-task calls
+        $script:TaskDefinition = "${TaskFamily}:${newRevision}"
+        Write-Host "  Using $($script:TaskDefinition) for run-task" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "  Registered successfully (could not parse revision from output)" -ForegroundColor Green
+    }
+
+    return $true
+}
+
+# =====================================================================
+# Run Task
+# =====================================================================
+
 function Do-RunTask {
     param([string]$Action = "")
 
@@ -124,12 +399,13 @@ function Do-RunTask {
 
     if ($Action) {
         Write-Host "`n--- Running ECS Task: $Action ---" -ForegroundColor Yellow
+        Write-Host "  Task definition: $($script:TaskDefinition)"
 
         # Write overrides to temp file (avoids PowerShell JSON escaping issues)
         $OverrideJson = @{
             containerOverrides = @(
                 @{
-                    name = $TaskDefinition
+                    name = $TaskFamily
                     environment = @(
                         @{ name = "ACTION"; value = $Action }
                     )
@@ -142,7 +418,7 @@ function Do-RunTask {
 
         aws ecs run-task `
             --cluster $Cluster `
-            --task-definition $TaskDefinition `
+            --task-definition $script:TaskDefinition `
             --launch-type FARGATE `
             --network-configuration $NetworkConfig `
             --overrides "file://$OverrideFile" `
@@ -150,10 +426,11 @@ function Do-RunTask {
     }
     else {
         Write-Host "`n--- Running ECS Task: default pipeline ---" -ForegroundColor Yellow
+        Write-Host "  Task definition: $($script:TaskDefinition)"
 
         aws ecs run-task `
             --cluster $Cluster `
-            --task-definition $TaskDefinition `
+            --task-definition $script:TaskDefinition `
             --launch-type FARGATE `
             --network-configuration $NetworkConfig `
             --profile $Profile
@@ -196,16 +473,25 @@ if ($doPush -ne 'n') {
     if (-not $ok) { exit 1 }
 }
 
-# Step 4: Run?
+# Step 4: Register task definition?
+$doRegister = Read-Host "Register task definition from template + .env? (Y/n)"
+if ($doRegister -ne 'n') {
+    $ok = Do-RegisterTaskDef
+    if (-not $ok) { exit 1 }
+}
+
+# Step 5: Run?
 Write-Host ""
 Write-Host "Run ECS task?" -ForegroundColor Cyan
+Write-Host "  Using: $($script:TaskDefinition)" -ForegroundColor Gray
 Write-Host "  0) Skip - don't run"
-Write-Host "  1) Default pipeline (validate_config -> test_connections -> task02_00_run_conflict_update)"
+Write-Host "  1) Default pipeline (full: preflight -> ... -> postflight)"
 Write-Host "  2) validate_config only"
 Write-Host "  3) test_connections only"
 Write-Host "  4) task02_00_run_conflict_update only"
-Write-Host "  5) Custom action(s) - you type the action name(s)"
-$runChoice = Read-Host "Choice (0-5)"
+Write-Host "  5) task02_01_run_conflict_insert only"
+Write-Host "  6) Custom action(s) - you type the action name(s)"
+$runChoice = Read-Host "Choice (0-6)"
 
 switch ($runChoice) {
     '0' { Write-Host "`nSkipping task run." }
@@ -213,7 +499,8 @@ switch ($runChoice) {
     '2' { Do-RunTask -Action "validate_config" }
     '3' { Do-RunTask -Action "test_connections" }
     '4' { Do-RunTask -Action "task02_00_run_conflict_update" }
-    '5' {
+    '5' { Do-RunTask -Action "task02_01_run_conflict_insert" }
+    '6' {
         $customAction = Read-Host "Enter action name(s) (comma-separated)"
         Do-RunTask -Action $customAction
     }

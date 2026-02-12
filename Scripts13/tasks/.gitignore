@@ -38,6 +38,7 @@ wheels/
 deploy/package/
 deploy/*.zip
 deploy/*.dev.json
+deploy/.generated-taskdef.json
 
 # Logs
 *.log

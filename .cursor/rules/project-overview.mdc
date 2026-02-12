@@ -42,7 +42,8 @@ Scripts13 was copied from Scripts12 and repackaged as a **Docker container** dep
 - **Docker/ECS containerization complete**: Dockerfile, ECS task definition, ECR deployment
 - **Container entry point** (`scripts/main.py`): comma-separated ACTION env var, DEFAULT_ACTIONS pipeline, SIGTERM graceful shutdown
 - **JSON-safe env var substitution** in `settings.py` (handles RSA keys with newlines)
-- **Interactive deploy script** (`deploy/build-and-push-ecr.ps1`): build, push, run with action overrides
+- **Interactive deploy script** (`deploy/build-and-push-ecr.ps1`): SSO login, Docker build, ECR push, **task definition registration** (template + `.env` -> resolved JSON -> `aws ecs register-task-definition`), ECS run with action overrides
+- **Deploy .env pattern**: `deploy/.env.example` template, `deploy/.env` for secrets (gitignored), `deploy/.generated-taskdef.json` output (gitignored)
 - Successfully deployed and tested on ECS Fargate (~8 min full pipeline)
 
 ### What's NOT yet done (to be implemented in Scripts13):
