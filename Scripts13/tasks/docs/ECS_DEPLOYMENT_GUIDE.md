@@ -251,7 +251,7 @@ arn:aws:iam::123456789012:role/ecsTaskExecutionRole
       "image": "<ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/conflict-snowflake:latest",
       "essential": true,
       "environment": [
-        { "name": "ACTION", "value": "task02_00_run_conflict_update" },
+        { "name": "ACTION", "value": "task02_00_conflict_update" },
         { "name": "ENVIRONMENT", "value": "dev" },
         { "name": "LOG_LEVEL", "value": "INFO" }
       ],
@@ -369,7 +369,7 @@ On the task detail page, scroll to the **Containers** section:
 Once the connection test passes:
 
 1. Go to **ECS** → **Clusters** → **conflict-batch-1** → **Tasks** tab → **Run new task**
-2. Same settings as Step 7a, **except do not add the ACTION override** (it defaults to `task02_00_run_conflict_update`)
+2. Same settings as Step 7a, **except do not add the ACTION override** (it defaults to the full pipeline: `task00_preflight` → `task01_copy_to_staging` → `task02_00_conflict_update` → `task99_postflight`)
 3. Click **Create**
 
 ### Monitor the full run
@@ -381,7 +381,7 @@ Once the connection test passes:
 
    ```
    TASK 02 CONFLICT UPDATER - ECS CONTAINER
-   Action: task02_00_run_conflict_update
+   Action: task02_00_conflict_update
    ...
    Step 0 (excluded SSNs): ~6s
    Step 1 (delta_keys): ~5s

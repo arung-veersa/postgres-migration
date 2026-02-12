@@ -7,7 +7,7 @@ All parameters are read from environment variables or config.json defaults.
 
 ACTION environment variable supports:
   - Single action:   ACTION=test_connections
-  - Comma-separated: ACTION=validate_config,test_connections,task02_00_run_conflict_update
+  - Comma-separated: ACTION=validate_config,test_connections,task02_00_conflict_update
   - Default:         ACTION not set  →  runs full DEFAULT_ACTIONS pipeline
 
 Actions are executed sequentially. If any action fails, execution stops
@@ -15,28 +15,31 @@ and the container exits with code 1.
 
 Special actions:
   - task00_preflight:  Pre-run validation, disables pg_cron, sets InProgressFlag=1
+  - task01_copy_to_staging: Sync PPR from Snowflake dims, populate staging table
   - task99_postflight: Post-run cleanup, VACUUM/ANALYZE, re-enables pg_cron, sends email
     Postflight receives all previous action results for the status email.
 """
 
 import sys
 import os
-import json
 import time
 import signal
 from pathlib import Path
-from typing import Optional, Dict, Callable, List
+from typing import Dict, Callable, List
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config.settings import Settings
-from lib.connections import ConnectionFactory
-from lib.query_builder import QueryBuilder
-from lib.conflict_processor import ConflictProcessor
 from lib.utils import get_logger, format_duration
-from scripts.actions.preflight import run_preflight
-from scripts.actions.postflight import run_postflight
+
+# Action implementations -- pattern: from scripts.actions.<key> import run_<key>
+from scripts.actions.task00_preflight import run_task00_preflight
+from scripts.actions.task01_copy_to_staging import run_task01_copy_to_staging
+from scripts.actions.task02_00_conflict_update import run_task02_00_conflict_update
+from scripts.actions.task99_postflight import run_task99_postflight
+from scripts.actions.validate_config import run_validate_config
+from scripts.actions.test_connections import run_test_connections
 
 logger = get_logger(__name__)
 
@@ -45,18 +48,6 @@ logger = get_logger(__name__)
 # We use this to log final state and close database connections cleanly.
 
 _shutdown_requested = False
-_conn_factory: Optional[ConnectionFactory] = None
-
-# Default pipeline: runs all tasks sequentially when ACTION is not set.
-# Add new tasks to this list as they are developed.
-# Note: validate_config and test_connections are included in preflight,
-# so they don't appear in the default pipeline. They remain in
-# ACTION_REGISTRY for standalone use (e.g. ACTION=validate_config).
-DEFAULT_ACTIONS = [
-    'task00_preflight',
-    'task02_00_run_conflict_update',
-    'task99_postflight',
-]
 
 
 def _handle_sigterm(signum, frame):
@@ -69,261 +60,49 @@ def _handle_sigterm(signum, frame):
 signal.signal(signal.SIGTERM, _handle_sigterm)
 
 
-def _get_env_int(name: str, default: Optional[int] = None) -> Optional[int]:
-    """Read an environment variable as an integer, or return default."""
-    value = os.environ.get(name)
-    if value is None:
-        return default
-    try:
-        return int(value)
-    except ValueError:
-        logger.warning(f"Invalid integer for env var {name}={value!r}, using default={default}")
-        return default
-
-
-def _get_env_bool(name: str, default: Optional[bool] = None) -> Optional[bool]:
-    """Read an environment variable as a boolean, or return default."""
-    value = os.environ.get(name)
-    if value is None:
-        return default
-    return value.lower() in ('true', '1', 'yes')
-
-
-# ---------------------------------------------------------------------------
-# Actions
-# ---------------------------------------------------------------------------
-
-def validate_config(settings: Settings) -> dict:
-    """Validate configuration and print summary."""
-    task_params = settings.get_task02_parameters()
-    db_names = settings.get_database_names()
-
-    logger.info("Configuration validated successfully")
-    logger.info(f"  Databases: {json.dumps(db_names, indent=2)}")
-    logger.info(f"  Task parameters: {json.dumps(task_params, indent=2)}")
-
-    return {
-        'status': 'success',
-        'message': 'Configuration validated successfully',
-        'databases': db_names,
-        'task_parameters': task_params,
-    }
-
-
-def test_connections(settings: Settings) -> dict:
-    """Test Snowflake and PostgreSQL connectivity."""
-    global _conn_factory
-
-    sf_config = settings.get_snowflake_config()
-    pg_config = settings.get_postgres_config()
-    db_names = settings.get_database_names()
-
-    _conn_factory = ConnectionFactory(sf_config, pg_config)
-
-    try:
-        # Snowflake
-        sf_manager = _conn_factory.get_snowflake_manager()
-        sf_conn = sf_manager.get_connection()
-        cursor = sf_conn.cursor()
-        cursor.execute("SELECT CURRENT_VERSION()")
-        sf_version = cursor.fetchone()[0]
-        cursor.close()
-        logger.info(f"Snowflake connection successful: {sf_version}")
-
-        # PostgreSQL
-        pg_manager = _conn_factory.get_postgres_manager()
-        pg_conn = pg_manager.get_connection(db_names['pg_database'])
-        cursor = pg_conn.cursor()
-        cursor.execute("SELECT version()")
-        pg_version = cursor.fetchone()[0]
-        cursor.close()
-        pg_conn.close()
-        logger.info("PostgreSQL connection successful")
-
-        # Reference tables
-        logger.info("Testing reference table access...")
-        pg_conn = pg_manager.get_connection(db_names['pg_database'])
-        cursor = pg_conn.cursor()
-
-        list_tables_query = """
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = %s 
-            AND table_type = 'BASE TABLE'
-            ORDER BY table_name
-        """
-        cursor.execute(list_tables_query, (db_names['pg_schema'],))
-        available_tables = [row[0] for row in cursor.fetchall()]
-        logger.info(
-            f"Available tables in schema '{db_names['pg_schema']}': "
-            f"{', '.join(available_tables) if available_tables else 'None'}"
-        )
-
-        reference_tables = {}
-        test_tables = {
-            'SETTINGS': 'settings',
-            'EXCLUDED_AGENCY': 'excluded_agency',
-            'EXCLUDED_SSN': 'excluded_ssn',
-            'MPH': 'mph',
-            'CONFLICTVISITMAPS': 'conflictvisitmaps',
-        }
-
-        for display_name, table_name in test_tables.items():
-            if table_name in available_tables:
-                try:
-                    count_query = f'SELECT COUNT(*) FROM {db_names["pg_schema"]}.{table_name}'
-                    cursor.execute(count_query)
-                    count = cursor.fetchone()[0]
-                    reference_tables[display_name] = {'name': table_name, 'count': count}
-                    logger.info(f"  {display_name} table accessible as '{table_name}': {count} row(s)")
-                except Exception as table_err:
-                    logger.warning(f"  Found {table_name} but couldn't query it: {table_err}")
-            else:
-                logger.warning(f"  {display_name} table (expected as '{table_name}') not found")
-
-        cursor.close()
-        pg_conn.close()
-
-        return {
-            'status': 'success',
-            'message': 'All connections tested successfully',
-            'snowflake': {
-                'connected': True,
-                'version': sf_version,
-                'database': db_names['sf_database'],
-                'schema': db_names['sf_schema'],
-            },
-            'postgres': {
-                'connected': True,
-                'version': pg_version[:80],
-                'database': db_names['pg_database'],
-                'schema': db_names['pg_schema'],
-                'available_tables': available_tables,
-            },
-            'reference_tables': reference_tables,
-        }
-
-    finally:
-        _conn_factory.close_all()
-
-
-def run_conflict_update(settings: Settings) -> dict:
-    """Execute the full v3 conflict detection and update pipeline."""
-    global _conn_factory
-
-    sf_config = settings.get_snowflake_config()
-    pg_config = settings.get_postgres_config()
-    task_params = settings.get_task02_parameters()
-    db_names = settings.get_database_names()
-
-    # Parameters: env-var overrides > config.json values > hardcoded defaults
-    lookback_hours = _get_env_int('LOOKBACK_HOURS', task_params.get('lookback_hours', 36))
-    lookback_years = _get_env_int('LOOKBACK_YEARS', task_params.get('lookback_years', 2))
-    lookforward_days = _get_env_int('LOOKFORWARD_DAYS', task_params.get('lookforward_days', 45))
-    batch_size = _get_env_int('BATCH_SIZE', task_params.get('batch_size', 5000))
-    skip_unchanged_records = _get_env_bool(
-        'SKIP_UNCHANGED_RECORDS', task_params.get('skip_unchanged_records', True)
-    )
-    enable_asymmetric_join = _get_env_bool(
-        'ENABLE_ASYMMETRIC_JOIN', task_params.get('enable_asymmetric_join', True)
-    )
-    enable_stale_cleanup = _get_env_bool(
-        'ENABLE_STALE_CLEANUP', task_params.get('enable_stale_cleanup', True)
-    )
-
-    logger.info("Configuration settings:")
-    logger.info(f"  Lookback: {lookback_years} years, +{lookforward_days} days")
-    logger.info(f"  Updates: last {lookback_hours} hours")
-    logger.info(f"  Batch size: {batch_size}")
-    logger.info(f"  Skip unchanged records: {'YES' if skip_unchanged_records else 'NO'}")
-    logger.info(f"  Asymmetric join: {'ENABLED' if enable_asymmetric_join else 'DISABLED'}")
-    logger.info(f"  Stale cleanup: {'ENABLED' if enable_stale_cleanup else 'DISABLED'}")
-
-    # Initialize connections
-    _conn_factory = ConnectionFactory(sf_config, pg_config)
-    sf_manager = _conn_factory.get_snowflake_manager()
-    pg_manager = _conn_factory.get_postgres_manager()
-
-    # Initialize query builder and processor
-    query_builder = QueryBuilder()
-    processor = ConflictProcessor(
-        sf_manager, pg_manager, query_builder, db_names, batch_size,
-        skip_unchanged_records=skip_unchanged_records,
-        enable_asymmetric_join=enable_asymmetric_join,
-        enable_stale_cleanup=enable_stale_cleanup,
-    )
-
-    # Step 1: Fetch reference data from Postgres
-    ref_data = processor.fetch_reference_data()
-
-    # Step 2: Build conflict detection query (v3 with temp tables)
-    queries = query_builder.build_conflict_detection_query_v3(
-        db_names=db_names,
-        excluded_agencies=ref_data['excluded_agencies'],
-        excluded_ssns=ref_data['excluded_ssns'],
-        settings_data=ref_data['settings'],
-        mph_data=ref_data['mph'],
-        lookback_years=lookback_years,
-        lookforward_days=lookforward_days,
-        lookback_hours=lookback_hours,
-        enable_asymmetric_join=enable_asymmetric_join,
-    )
-
-    # Step 3: Stream and process conflicts
-    # No timeout callback -- ECS has no 15-minute limit.
-    # Instead, check the _shutdown_requested flag for graceful SIGTERM handling.
-    def check_shutdown():
-        return _shutdown_requested
-
-    stats = processor.stream_and_process_conflicts_v3(
-        queries,
-        timeout_callback=check_shutdown,
-    )
-
-    # Close connections
-    _conn_factory.close_all()
-    _conn_factory = None
-
-    return {
-        'status': 'completed' if stats['errors'] == 0 else 'partial',
-        'statistics': stats,
-        'parameters': {
-            'lookback_hours': lookback_hours,
-            'lookback_years': lookback_years,
-            'lookforward_days': lookforward_days,
-            'batch_size': batch_size,
-            'skip_unchanged_records': skip_unchanged_records,
-            'enable_asymmetric_join': enable_asymmetric_join,
-            'enable_stale_cleanup': enable_stale_cleanup,
-        },
-    }
-
-
 # ---------------------------------------------------------------------------
 # Action Registry
 # ---------------------------------------------------------------------------
-# Maps action names to handler functions.
-# Add new actions here as they are implemented.
 
 # Pipeline results collected during execution.
 # Postflight reads this to generate the status email and row-count deltas.
 _pipeline_results: List[dict] = []
 
 
-def _run_postflight_wrapper(settings: Settings) -> dict:
+def _run_task99_postflight_wrapper(settings: Settings) -> dict:
     """Wrapper that passes accumulated pipeline results to postflight."""
-    return run_postflight(settings, pipeline_results=list(_pipeline_results))
+    return run_task99_postflight(settings, pipeline_results=list(_pipeline_results))
 
 
+def _run_task02_00_conflict_update_wrapper(settings: Settings) -> dict:
+    """Wrapper that passes shutdown check to conflict update."""
+    return run_task02_00_conflict_update(settings, shutdown_check=lambda: _shutdown_requested)
+
+
+# Default pipeline: runs all tasks sequentially when ACTION is not set.
+# Add new tasks to this list as they are developed.
+# Note: validate_config and test_connections are included in preflight,
+# so they don't appear in the default pipeline. They remain in
+# ACTION_REGISTRY for standalone use (e.g. ACTION=validate_config).
+DEFAULT_ACTIONS = [
+    'task00_preflight',
+    'task01_copy_to_staging',
+    'task02_00_conflict_update',
+    'task99_postflight',
+]
+
+# Maps action names to handler functions.
+# Pattern: key = file stem, handler = run_<key> (or wrapper around it).
+# Add new actions here as they are implemented.
 ACTION_REGISTRY: Dict[str, Callable[[Settings], dict]] = {
-    'task00_preflight': run_preflight,
-    'validate_config': validate_config,
-    'test_connections': test_connections,
-    'task02_00_run_conflict_update': run_conflict_update,
-    'task99_postflight': _run_postflight_wrapper,
+    'task00_preflight': run_task00_preflight,
+    'task01_copy_to_staging': run_task01_copy_to_staging,
+    'task02_00_conflict_update': _run_task02_00_conflict_update_wrapper,
+    'task99_postflight': _run_task99_postflight_wrapper,
+    'validate_config': run_validate_config,
+    'test_connections': run_test_connections,
     # Future actions:
-    # 'task01_copy_to_staging': run_task01,
-    # 'task02_01_run_conflict_insert': run_conflict_insert,
+    # 'task02_01_conflict_insert': run_task02_01_conflict_insert,
 }
 
 
@@ -333,7 +112,7 @@ def _parse_actions(action_str: str) -> List[str]:
 
     Supports:
       - Single action:   "test_connections"
-      - Comma-separated: "validate_config, test_connections, task02_00_run_conflict_update"
+      - Comma-separated: "validate_config, test_connections, task02_00_conflict_update"
       - Empty/unset:     falls back to DEFAULT_ACTIONS (full pipeline)
     """
     actions = [a.strip() for a in action_str.split(',') if a.strip()]
@@ -456,14 +235,6 @@ def main():
     except Exception as e:
         duration = time.time() - start_time
         logger.error(f"Container execution failed after {format_duration(duration)}: {e}", exc_info=True)
-
-        # Best-effort connection cleanup
-        if _conn_factory is not None:
-            try:
-                _conn_factory.close_all()
-            except Exception:
-                pass
-
         sys.exit(1)
 
 

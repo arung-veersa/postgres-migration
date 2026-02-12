@@ -262,7 +262,7 @@ def _capture_row_counts(
 # Main action entry point
 # ---------------------------------------------------------------------------
 
-def run_preflight(settings: Settings) -> dict:
+def run_task00_preflight(settings: Settings) -> dict:
     """
     Execute all preflight checks.
 

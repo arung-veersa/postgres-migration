@@ -11,6 +11,7 @@ Post-run cleanup and reporting after the pipeline tasks complete:
   7. Send status email via AWS SES (if configured)
 """
 
+import datetime
 import os
 import time
 from typing import Dict, Any, List, Optional
@@ -301,10 +302,83 @@ def _capture_row_counts(
 
 
 # ---------------------------------------------------------------------------
+# Pipeline summary (logged to stdout / CloudWatch)
+# ---------------------------------------------------------------------------
+
+def _log_pipeline_summary(
+    pipeline_results: List[Dict[str, Any]],
+    pre_counts: Dict[str, int],
+    post_counts: Dict[str, int],
+    total_duration: float,
+    overall_status: str,
+    environment: str,
+) -> None:
+    """
+    Log a plain-text version of the pipeline status summary.
+
+    Contains the same data as the HTML email -- action results, row count
+    deltas, and overall status -- so the information is always visible in
+    CloudWatch logs regardless of whether email is enabled.
+    """
+    now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+
+    logger.info("")
+    logger.info("=" * 70)
+    logger.info("PIPELINE STATUS SUMMARY")
+    logger.info("=" * 70)
+    logger.info(f"  Environment:    {environment}")
+    logger.info(f"  Completed:      {now}")
+    logger.info(f"  Total Duration: {format_duration(total_duration)}")
+    logger.info(f"  Overall Status: {overall_status.upper()}")
+
+    # --- Action Summary ---
+    if pipeline_results:
+        logger.info("")
+        logger.info("  --- Action Summary ---")
+        # Compute column widths
+        action_width = max(len(r.get('action', '')) for r in pipeline_results)
+        action_width = max(action_width, 6)  # minimum width for header "Action"
+        header = f"  {'Action':<{action_width}}  {'Status':<10}  {'Duration':>10}"
+        logger.info(header)
+        logger.info(f"  {'-' * action_width}  {'-' * 10}  {'-' * 10}")
+
+        for r in pipeline_results:
+            action = r.get('action', 'unknown')
+            status = r.get('status', 'unknown')
+            dur = format_duration(r.get('duration_seconds', 0))
+            logger.info(f"  {action:<{action_width}}  {status:<10}  {dur:>10}")
+
+    # --- Row Count Changes ---
+    all_tables = sorted(set(list(pre_counts.keys()) + list(post_counts.keys())))
+    if all_tables:
+        logger.info("")
+        logger.info("  --- Row Count Changes ---")
+        tbl_width = max(len(t) for t in all_tables)
+        tbl_width = max(tbl_width, 5)
+        header = f"  {'Table':<{tbl_width}}  {'Before':>14}  {'After':>14}  {'Delta':>14}"
+        logger.info(header)
+        logger.info(f"  {'-' * tbl_width}  {'-' * 14}  {'-' * 14}  {'-' * 14}")
+
+        for table in all_tables:
+            pre = pre_counts.get(table, -1)
+            post = post_counts.get(table, -1)
+            pre_str = f'{pre:,}' if pre >= 0 else 'N/A'
+            post_str = f'{post:,}' if post >= 0 else 'N/A'
+            if pre >= 0 and post >= 0:
+                delta = post - pre
+                delta_str = f'+{delta:,}' if delta >= 0 else f'{delta:,}'
+            else:
+                delta_str = '-'
+            logger.info(f"  {table:<{tbl_width}}  {pre_str:>14}  {post_str:>14}  {delta_str:>14}")
+
+    logger.info("=" * 70)
+
+
+# ---------------------------------------------------------------------------
 # Main action entry point
 # ---------------------------------------------------------------------------
 
-def run_postflight(settings: Settings, pipeline_results: Optional[List[dict]] = None) -> dict:
+def run_task99_postflight(settings: Settings, pipeline_results: Optional[List[dict]] = None) -> dict:
     """
     Execute all postflight cleanup tasks.
 
@@ -406,15 +480,21 @@ def run_postflight(settings: Settings, pipeline_results: Optional[List[dict]] = 
 
     conn_factory.close_all()
 
-    # --- 7. Send status email ---
+    # --- 7. Log pipeline summary + optionally send email ---
     total_duration = time.time() - preflight_data.get('start_time', start)
     all_ok = all(r.get('status') in ('success', 'completed') for r in pipeline_results)
     overall_status = 'completed' if all_ok else 'failed'
+    environment = os.environ.get('ENVIRONMENT', 'dev')
+
+    # Always log the plain-text summary (same data as the email)
+    _log_pipeline_summary(
+        pipeline_results, pre_counts, post_counts,
+        total_duration, overall_status, environment,
+    )
 
     email_sent = False
     if email_config.get('enabled', False):
         logger.info("Postflight: Sending status email...")
-        environment = os.environ.get('ENVIRONMENT', 'dev')
         email_sent = send_pipeline_email(
             email_config=email_config,
             pipeline_results=pipeline_results,

@@ -66,8 +66,17 @@ Scripts13/tasks/
 │   └── utils.py                             # Logging, formatting utilities
 ├── scripts/
 │   ├── __init__.py                          # Package metadata (version 2.0.0)
-│   └── main.py                              # ECS container entry point
+│   ├── main.py                              # ECS container entry point
+│   └── actions/                             # Pipeline action modules
+│       ├── __init__.py                      # Naming convention docs
+│       ├── task00_preflight.py              # Pre-run validation, pg_cron, InProgressFlag
+│       ├── task01_copy_to_staging.py        # PPR sync + staging populate
+│       ├── task02_00_conflict_update.py     # v3 conflict detection UPDATE pipeline
+│       ├── task99_postflight.py             # Cleanup, VACUUM, email, summary
+│       ├── validate_config.py              # Standalone config validation
+│       └── test_connections.py             # Standalone connectivity test
 ├── sql/                                     # Snowflake SQL templates
+│   ├── sf_task01_dim_payer_provider.sql     # Task 01: Payer-provider dimension query
 │   ├── sf_task02_v3_step1_delta_keys.sql    # Step 1: Delta keys extraction
 │   ├── sf_task02_v3_step2_base_visits.sql   # Step 2: Base visits materialization
 │   ├── sf_task02_v3_step3_final_query.sql   # Step 3: Conflict detection self-join
@@ -318,10 +327,13 @@ Parameters can be overridden via environment variables: `LOOKBACK_HOURS`, `BATCH
 
 | Value | Behavior |
 |-------|----------|
-| (empty/unset) | Runs full pipeline: `validate_config` -> `test_connections` -> `task02_00_run_conflict_update` |
-| `validate_config` | Print and validate config only |
-| `test_connections` | Test Snowflake and PostgreSQL connectivity |
-| `task02_00_run_conflict_update` | Run the conflict detection and update pipeline |
+| (empty/unset) | Runs full pipeline: `task00_preflight` -> `task01_copy_to_staging` -> `task02_00_conflict_update` -> `task99_postflight` |
+| `task00_preflight` | Pre-run validation, disable pg_cron, set InProgressFlag |
+| `task01_copy_to_staging` | Sync PPR from Snowflake dims, populate staging table |
+| `task02_00_conflict_update` | Run the conflict detection and update pipeline |
+| `task99_postflight` | Post-run cleanup, VACUUM/ANALYZE, email summary |
+| `validate_config` | Print and validate config only (standalone) |
+| `test_connections` | Test Snowflake and PostgreSQL connectivity (standalone) |
 | `validate_config,test_connections` | Comma-separated: run actions sequentially |
 
 ---
@@ -397,14 +409,15 @@ Or via AWS Console: ECS > Clusters > conflict-batch-1 > Run new task.
 
 ```
 CONFLICT MANAGEMENT - ECS CONTAINER
-Actions: validate_config -> test_connections -> task02_00_run_conflict_update
+Actions: task00_preflight -> task01_copy_to_staging -> task02_00_conflict_update -> task99_postflight
 ...
 EXECUTION SUMMARY
-  validate_config: success (0.12s)
-  test_connections: success (2.34s)
-  task02_00_run_conflict_update: completed (474.56s)
+  task00_preflight: success (4.82s)
+  task01_copy_to_staging: success (287.43s)
+  task02_00_conflict_update: completed (509.23s)
+  task99_postflight: success (18.61s)
 Overall: completed
-Total duration: 7m 54s
+Total duration: 13m 39s
 ```
 
 ---
@@ -446,7 +459,7 @@ Migrate sensitive environment variables to Secrets Manager for production securi
 
 ---
 
-**Version**: 2.0 (ECS Container)
-**Last Updated**: 2026-02-11
-**Status**: Production Ready (Asymmetric Mode + Stale Cleanup)
+**Version**: 2.1 (ECS Container)
+**Last Updated**: 2026-02-12
+**Status**: Production Ready (Asymmetric Mode + Stale Cleanup + Staging Pipeline)
 **History**: Migrated from Scripts12 (AWS Lambda) to Scripts13 (AWS ECS/Fargate)

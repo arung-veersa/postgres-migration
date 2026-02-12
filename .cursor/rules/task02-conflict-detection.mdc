@@ -14,15 +14,20 @@ alwaysApply: false
 ## Key Files (under Scripts13/tasks/)
 
 - `scripts/main.py` -- ECS container entry point, ACTION dispatching, SIGTERM handling
+- `scripts/actions/task00_preflight.py` -- Task 00: pre-run validation, pg_cron disable, InProgressFlag
+- `scripts/actions/task01_copy_to_staging.py` -- Task 01: PPR sync from Snowflake dims, staging populate
+- `scripts/actions/task02_00_conflict_update.py` -- Task 02.00: v3 conflict detection UPDATE pipeline
+- `scripts/actions/task99_postflight.py` -- Task 99: VACUUM/ANALYZE, pg_cron re-enable, email, log summary
+- `scripts/actions/validate_config.py` -- Standalone config validation
+- `scripts/actions/test_connections.py` -- Standalone connectivity test
 - `lib/conflict_processor.py` -- Core logic: v3 streaming, batch updates, stale cleanup
 - `lib/query_builder.py` -- Builds Snowflake SQL from v3 templates
 - `lib/connections.py` -- Snowflake and PostgreSQL connection managers
 - `lib/utils.py` -- Logging, formatting, memory estimation utilities
+- `lib/email_sender.py` -- AWS SES HTML email sender for pipeline status reports
 - `config/config.json` -- Runtime config (lookback_hours=36, batch_size=5000, pipeline, email, env var substitution)
 - `config/settings.py` -- Config loader with JSON-safe env var substitution
-- `scripts/actions/preflight.py` -- Task 00: pre-run validation, pg_cron disable, InProgressFlag
-- `scripts/actions/postflight.py` -- Task 99: materialized view refresh, pg_cron re-enable, VACUUM, ANALYZE, email
-- `lib/email_sender.py` -- AWS SES HTML email sender for pipeline status reports
+- `sql/sf_task01_dim_payer_provider.sql` -- Task 01: Snowflake payer-provider dimension query
 - `sql/sf_task02_v3_step*.sql` -- Snowflake SQL templates for steps 1/2/3
 - `Dockerfile` -- Container image definition (python:3.11-slim)
 - `deploy/build-and-push-ecr.ps1` -- Interactive deploy script (SSO, build, push, register task def, run)
@@ -87,7 +92,7 @@ alwaysApply: false
 - Step 3 (conflict detection + streaming batches): ~140s
 - Step 4 (stale cleanup): ~117s (84s identify + 32s update)
 
-## Current State (as of 2026-02-10)
+## Current State (as of 2026-02-12)
 
 ### Scripts12 (Lambda) -- FROZEN
 - Asymmetric join + pair-precise stale cleanup: WORKING
@@ -100,7 +105,10 @@ alwaysApply: false
 - Entry point: `scripts/main.py` with comma-separated ACTION env var and DEFAULT_ACTIONS pipeline
 - JSON-safe env var substitution in `settings.py` (handles RSA keys with newlines)
 - Graceful SIGTERM shutdown handling
-- Successfully deployed and tested on ECS Fargate (~8 min full pipeline)
+- **Modular action architecture**: main.py is a lean orchestrator; each action in `scripts/actions/<key>.py`
+- **task01_copy_to_staging COMPLETE**: PPR sync via temp-table + UPDATE FROM JOIN (~3s), staging populate (~280s for 8M rows)
+- **Pipeline summary logging**: Plain-text summary always logged to CloudWatch (independent of email)
+- Successfully deployed and tested on ECS Fargate (~14 min full pipeline with task01)
 - INSERT logic for new conflicts (~102K detected but not inserted): NOT YET IMPLEMENTED
 - Conflicts table aggregation: NOT YET IMPLEMENTED
 - UpdateFlag cleanup: DEFERRED
@@ -109,17 +117,23 @@ alwaysApply: false
 ## Scripts13 ECS Architecture Notes
 
 ### Container Entry Point (`scripts/main.py`)
-- `ACTION=""` (default): runs full pipeline `task00_preflight -> task02_00_run_conflict_update -> task99_postflight`
+- `ACTION=""` (default): runs full pipeline `task00_preflight -> task01_copy_to_staging -> task02_00_conflict_update -> task99_postflight`
 - `ACTION="test_connections"`: runs single action
 - `ACTION="validate_config,test_connections"`: comma-separated sequential execution
 - SIGTERM handler for graceful ECS shutdown (30s stop timeout)
 - All parameters from env vars with config.json defaults as fallback
 - **Postflight runs even on failure** (re-enables pg_cron, clears InProgressFlag)
 
+### Action Naming Convention
+- File: `<registry_key>.py` (e.g. `task01_copy_to_staging.py`)
+- Function: `run_<registry_key>()` (e.g. `run_task01_copy_to_staging()`)
+- Import: `from scripts.actions.<key> import run_<key>`
+
 ### Pipeline Actions (DEFAULT_ACTIONS)
 - `task00_preflight`: 1) Validate config params, 2) Verify Snowflake+PG connectivity, 3) Check required tables, 4) Disable pg_cron job, 5) Set InProgressFlag=1, 6) Capture pre-run row counts
-- `task02_00_run_conflict_update`: v3 conflict detection UPDATE pipeline
-- `task99_postflight`: 1) VACUUM all tables, 2) ANALYZE all tables, 3) Set InProgressFlag=0, 4) Refresh materialized view (CONCURRENTLY), 5) Re-enable pg_cron job, 6) Capture post-run row counts, 7) Send SES email
+- `task01_copy_to_staging`: 1) Sync payer_provider_reminders from Snowflake dims (temp-table + UPDATE FROM JOIN), 2) Truncate+populate conflictlog_staging from conflictvisitmaps+conflicts (date-filtered)
+- `task02_00_conflict_update`: v3 conflict detection UPDATE pipeline (streaming cursor, batch processing, stale cleanup)
+- `task99_postflight`: 1) VACUUM all tables, 2) ANALYZE all tables, 3) Set InProgressFlag=0, 4) Refresh materialized view (CONCURRENTLY), 5) Re-enable pg_cron job, 6) Capture post-run row counts, 7) Log pipeline summary, 8) Send SES email (if enabled)
 
 ### Standalone Actions (not in default pipeline, available via ACTION env var)
 - `validate_config`: Print and validate config summary (included in preflight)
