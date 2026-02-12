@@ -1,12 +1,15 @@
 # Build, push, register task definition, and optionally run on ECS
 # ================================================================
 #
-# Interactive script -- prompts for what you want to do:
-#   1. SSO login (optional)
-#   2. Build Docker image
-#   3. Push to ECR
-#   4. Register ECS task definition (from template + .env)
-#   5. Run ECS task (optional, with action selection)
+# Interactive script -- prompts for what you want to do.
+# Each prompt has a default shown in brackets [Y/n] or [y/N].
+# Just press Enter to accept the default.
+#
+#   1. SSO login            [default: No]
+#   2. Build Docker image   [default: Yes]
+#   3. Push to ECR          [default: Yes]
+#   4. Register task def    [default: No -- only needed when env vars or CPU/memory change]
+#   5. Run ECS task         [default: Skip]
 #
 # Usage:
 #   cd Scripts13\tasks\deploy
@@ -53,6 +56,8 @@ $Profile        = "HHA-DEV-CONFLICT-MGMT-354073143602"
 $RepositoryName = "conflict-snowflake"
 $Cluster        = "conflict-batch-1"
 $TaskFamily     = "task02-conflict-updater"
+$Cpu            = "1024"        # Fargate vCPU units (256/512/1024/2048/4096)
+$Memory         = "2048"        # Fargate memory in MB (must match CPU -- see AWS docs)
 $Subnets        = "subnet-0bf69a7a22a445997,subnet-07b70458a1e90f658,subnet-0e558920a2b805a7f,subnet-0213fe32b2341360b"
 $SecurityGroups = "sg-0af84ea45bd095351"
 $AssignPublicIp = "DISABLED"
@@ -257,6 +262,8 @@ function Do-RegisterTaskDef {
     $resolved = $resolved.Replace('<ACCOUNT_ID>', $AccountId)
     $resolved = $resolved.Replace('<REGION>', $Region)
     $resolved = $resolved.Replace('<REPOSITORY_NAME>', $RepositoryName)
+    $resolved = $resolved.Replace('<CPU>', $Cpu)
+    $resolved = $resolved.Replace('<MEMORY>', $Memory)
 
     # ---- Step 2: Replace <YOUR_*> env var placeholders from .env ----
     # Mapping: template placeholder -> .env key
@@ -350,9 +357,10 @@ function Do-RegisterTaskDef {
     }
 
     # ---- Step 6: Prompt for confirmation ----
+    #   Default: Yes (just press Enter to register)
     Write-Host ""
-    $confirm = Read-Host "  Register this task definition? (Y/n)"
-    if ($confirm -eq 'n') {
+    $confirm = Read-Host "  Register this task definition? [Y/n]"
+    if ($confirm -eq 'n' -or $confirm -eq 'N') {
         Write-Host "  Skipping registration." -ForegroundColor Yellow
         return $true  # Not a failure, user chose to skip
     }
@@ -396,6 +404,7 @@ function Do-RunTask {
     param([string]$Action = "")
 
     $NetworkConfig = "awsvpcConfiguration={subnets=[$Subnets],securityGroups=[$SecurityGroups],assignPublicIp=$AssignPublicIp}"
+    $runOutput = $null
 
     if ($Action) {
         Write-Host "`n--- Running ECS Task: $Action ---" -ForegroundColor Yellow
@@ -416,33 +425,64 @@ function Do-RunTask {
         $OverrideFile = Join-Path $env:TEMP "ecs-override.json"
         $OverrideJson | Out-File -Encoding ascii -FilePath $OverrideFile
 
-        aws ecs run-task `
+        $runOutput = aws ecs run-task `
             --cluster $Cluster `
             --task-definition $script:TaskDefinition `
             --launch-type FARGATE `
             --network-configuration $NetworkConfig `
             --overrides "file://$OverrideFile" `
-            --profile $Profile
+            --profile $Profile 2>&1
     }
     else {
         Write-Host "`n--- Running ECS Task: default pipeline ---" -ForegroundColor Yellow
         Write-Host "  Task definition: $($script:TaskDefinition)"
 
-        aws ecs run-task `
+        $runOutput = aws ecs run-task `
             --cluster $Cluster `
             --task-definition $script:TaskDefinition `
             --launch-type FARGATE `
             --network-configuration $NetworkConfig `
-            --profile $Profile
+            --profile $Profile 2>&1
     }
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "  Task launch failed" -ForegroundColor Red
+        Write-Host "  Task launch failed:" -ForegroundColor Red
+        Write-Host "  $runOutput" -ForegroundColor Red
         return $false
     }
 
-    Write-Host "  Task launched successfully" -ForegroundColor Green
-    Write-Host "  View logs: CloudWatch > /ecs/task02-conflict-updater" -ForegroundColor Cyan
+    # Parse the response and show a clean summary instead of raw JSON
+    try {
+        $runResult = $runOutput | ConvertFrom-Json
+        $task = $runResult.tasks[0]
+        $taskArn = $task.taskArn
+        # Extract short task ID from ARN (last segment after /)
+        $taskId = $taskArn.Split('/')[-1]
+        Write-Host "  Task launched successfully" -ForegroundColor Green
+        Write-Host "  Task ID:     $taskId" -ForegroundColor Green
+        Write-Host "  Status:      $($task.lastStatus)" -ForegroundColor Green
+        Write-Host "  Task def:    $($script:TaskDefinition)"
+        Write-Host "  Cluster:     $Cluster"
+        Write-Host ""
+        Write-Host "  Monitor:" -ForegroundColor Cyan
+        Write-Host "    Logs:    CloudWatch > /ecs/task02-conflict-updater"
+        Write-Host "    Console: https://$Region.console.aws.amazon.com/ecs/v2/clusters/$Cluster/tasks/$taskId"
+
+        # Show failures if any
+        if ($runResult.failures -and $runResult.failures.Count -gt 0) {
+            Write-Host ""
+            Write-Host "  Failures:" -ForegroundColor Red
+            foreach ($failure in $runResult.failures) {
+                Write-Host "    - $($failure.reason)" -ForegroundColor Red
+            }
+        }
+    }
+    catch {
+        # Fallback if JSON parsing fails
+        Write-Host "  Task launched successfully" -ForegroundColor Green
+        Write-Host "  View logs: CloudWatch > /ecs/task02-conflict-updater" -ForegroundColor Cyan
+    }
+
     return $true
 }
 
@@ -453,58 +493,92 @@ function Do-RunTask {
 Show-Banner
 
 # Step 1: SSO login?
-$doLogin = Read-Host "SSO login needed? (y/N)"
-if ($doLogin -eq 'y') {
+#   Default: No (just press Enter to skip)
+$doLogin = Read-Host "SSO login needed? [y/N]"
+if ($doLogin -eq 'y' -or $doLogin -eq 'Y') {
     $ok = Do-SsoLogin
     if (-not $ok) { exit 1 }
 }
 
 # Step 2: Build?
-$doBuild = Read-Host "Build Docker image? (Y/n)"
-if ($doBuild -ne 'n') {
+#   Default: Yes (just press Enter to build)
+$didBuild = $false
+$doBuild = Read-Host "Build Docker image? [Y/n]"
+if ($doBuild -eq 'n' -or $doBuild -eq 'N') {
+    Write-Host "  Skipping build." -ForegroundColor Gray
+}
+else {
     $ok = Do-Build
     if (-not $ok) { exit 1 }
+    $didBuild = $true
 }
 
 # Step 3: Push?
-$doPush = Read-Host "Push to ECR? (Y/n)"
-if ($doPush -ne 'n') {
-    $ok = Do-Push
-    if (-not $ok) { exit 1 }
+#   Default: Yes if we just built, No if build was skipped
+if ($didBuild) {
+    $doPush = Read-Host "Push to ECR? [Y/n]"
+    if ($doPush -eq 'n' -or $doPush -eq 'N') {
+        Write-Host "  Skipping push." -ForegroundColor Gray
+    }
+    else {
+        $ok = Do-Push
+        if (-not $ok) { exit 1 }
+    }
+}
+else {
+    $doPush = Read-Host "Push to ECR? (no new build -- push existing image?) [y/N]"
+    if ($doPush -eq 'y' -or $doPush -eq 'Y') {
+        $ok = Do-Push
+        if (-not $ok) { exit 1 }
+    }
+    else {
+        Write-Host "  Skipping push." -ForegroundColor Gray
+    }
 }
 
 # Step 4: Register task definition?
-$doRegister = Read-Host "Register task definition from template + .env? (Y/n)"
-if ($doRegister -ne 'n') {
+#   Default: No (just press Enter to skip -- only needed when env vars or CPU/memory change)
+$doRegister = Read-Host "Register task definition from template + .env? [y/N]"
+if ($doRegister -eq 'y' -or $doRegister -eq 'Y') {
     $ok = Do-RegisterTaskDef
     if (-not $ok) { exit 1 }
 }
+else {
+    Write-Host "  Skipping registration (using existing: $($script:TaskDefinition))." -ForegroundColor Gray
+}
 
 # Step 5: Run?
+#   Default: 0 (skip -- just press Enter)
 Write-Host ""
 Write-Host "Run ECS task?" -ForegroundColor Cyan
 Write-Host "  Using: $($script:TaskDefinition)" -ForegroundColor Gray
-Write-Host "  0) Skip - don't run"
-Write-Host "  1) Default pipeline (full: preflight -> ... -> postflight)"
-Write-Host "  2) validate_config only"
-Write-Host "  3) test_connections only"
-Write-Host "  4) task02_00_run_conflict_update only"
-Write-Host "  5) task02_01_run_conflict_insert only"
-Write-Host "  6) Custom action(s) - you type the action name(s)"
-$runChoice = Read-Host "Choice (0-6)"
+Write-Host "  0) Skip - don't run [default]"
+Write-Host "  1) Default pipeline (preflight -> task02 update -> postflight)"
+Write-Host "  2) task00_preflight only"
+Write-Host "  3) task02_00_run_conflict_update only"
+Write-Host "  4) task99_postflight only"
+Write-Host "  5) validate_config only (standalone)"
+Write-Host "  6) test_connections only (standalone)"
+Write-Host "  7) Custom action(s) - you type the action name(s)"
+$runChoice = Read-Host "Choice [0-7]"
 
 switch ($runChoice) {
-    '0' { Write-Host "`nSkipping task run." }
     '1' { Do-RunTask -Action "" }
-    '2' { Do-RunTask -Action "validate_config" }
-    '3' { Do-RunTask -Action "test_connections" }
-    '4' { Do-RunTask -Action "task02_00_run_conflict_update" }
-    '5' { Do-RunTask -Action "task02_01_run_conflict_insert" }
-    '6' {
+    '2' { Do-RunTask -Action "task00_preflight" }
+    '3' { Do-RunTask -Action "task02_00_run_conflict_update" }
+    '4' { Do-RunTask -Action "task99_postflight" }
+    '5' { Do-RunTask -Action "validate_config" }
+    '6' { Do-RunTask -Action "test_connections" }
+    '7' {
         $customAction = Read-Host "Enter action name(s) (comma-separated)"
-        Do-RunTask -Action $customAction
+        if ($customAction) {
+            Do-RunTask -Action $customAction
+        }
+        else {
+            Write-Host "`nNo action entered -- skipping." -ForegroundColor Gray
+        }
     }
-    default { Write-Host "`nSkipping task run." }
+    default { Write-Host "`nSkipping task run." -ForegroundColor Gray }
 }
 
 # Done

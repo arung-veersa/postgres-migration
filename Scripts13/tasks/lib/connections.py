@@ -160,12 +160,13 @@ class PostgresConnectionManager:
         self.conflict_schema = config.get('conflict_schema', 'PUBLIC')
         self.logger = logger
     
-    def get_connection(self, database: Optional[str] = None):
+    def get_connection(self, database: Optional[str] = None, autocommit: bool = False):
         """
         Get connection to specified database
         
         Args:
             database: Database name (defaults to conflict_database from config)
+            autocommit: If True, set autocommit mode (required for VACUUM, REFRESH MATERIALIZED VIEW CONCURRENTLY)
         
         Returns:
             psycopg2 connection
@@ -183,12 +184,16 @@ class PostgresConnectionManager:
                 options='-c synchronous_commit=off'
             )
             
+            if autocommit:
+                conn.autocommit = True
+            
             # Apply session-level optimizations
             cursor = conn.cursor()
             try:
                 cursor.execute("SET work_mem = '256MB'")
                 cursor.execute("SET maintenance_work_mem = '512MB'")
-                conn.commit()
+                if not autocommit:
+                    conn.commit()
             except Exception as e:
                 self.logger.warning(f"Could not set all session parameters: {e}")
             finally:

@@ -18,8 +18,11 @@ alwaysApply: false
 - `lib/query_builder.py` -- Builds Snowflake SQL from v3 templates
 - `lib/connections.py` -- Snowflake and PostgreSQL connection managers
 - `lib/utils.py` -- Logging, formatting, memory estimation utilities
-- `config/config.json` -- Runtime config (lookback_hours=36, batch_size=5000, env var substitution)
+- `config/config.json` -- Runtime config (lookback_hours=36, batch_size=5000, pipeline, email, env var substitution)
 - `config/settings.py` -- Config loader with JSON-safe env var substitution
+- `scripts/actions/preflight.py` -- Task 00: pre-run validation, pg_cron disable, InProgressFlag
+- `scripts/actions/postflight.py` -- Task 99: materialized view refresh, pg_cron re-enable, VACUUM, ANALYZE, email
+- `lib/email_sender.py` -- AWS SES HTML email sender for pipeline status reports
 - `sql/sf_task02_v3_step*.sql` -- Snowflake SQL templates for steps 1/2/3
 - `Dockerfile` -- Container image definition (python:3.11-slim)
 - `deploy/build-and-push-ecr.ps1` -- Interactive deploy script (SSO, build, push, register task def, run)
@@ -106,20 +109,41 @@ alwaysApply: false
 ## Scripts13 ECS Architecture Notes
 
 ### Container Entry Point (`scripts/main.py`)
-- `ACTION=""` (default): runs full pipeline `validate_config -> test_connections -> task02_00_run_conflict_update`
+- `ACTION=""` (default): runs full pipeline `task00_preflight -> task02_00_run_conflict_update -> task99_postflight`
 - `ACTION="test_connections"`: runs single action
 - `ACTION="validate_config,test_connections"`: comma-separated sequential execution
 - SIGTERM handler for graceful ECS shutdown (30s stop timeout)
 - All parameters from env vars with config.json defaults as fallback
+- **Postflight runs even on failure** (re-enables pg_cron, clears InProgressFlag)
+
+### Pipeline Actions (DEFAULT_ACTIONS)
+- `task00_preflight`: 1) Validate config params, 2) Verify Snowflake+PG connectivity, 3) Check required tables, 4) Disable pg_cron job, 5) Set InProgressFlag=1, 6) Capture pre-run row counts
+- `task02_00_run_conflict_update`: v3 conflict detection UPDATE pipeline
+- `task99_postflight`: 1) VACUUM all tables, 2) ANALYZE all tables, 3) Set InProgressFlag=0, 4) Refresh materialized view (CONCURRENTLY), 5) Re-enable pg_cron job, 6) Capture post-run row counts, 7) Send SES email
+
+### Standalone Actions (not in default pipeline, available via ACTION env var)
+- `validate_config`: Print and validate config summary (included in preflight)
+- `test_connections`: Test Snowflake and PostgreSQL connectivity (included in preflight)
+
+### Key Design: Preflight/Postflight
+- Config validation runs first (before any DB connections) to fail fast
+- pg_cron commands connect to `postgres` database (not `conflict_management`)
+- VACUUM/ANALYZE require `autocommit=True` on psycopg2 connections
+- VACUUM/ANALYZE and InProgressFlag=0 run before MV refresh and pg_cron re-enable (cleanup first, then restore)
+- Postflight runs even on pipeline failure (re-enables pg_cron, clears InProgressFlag)
+- Postflight receives all prior action results via `_pipeline_results` module-level list
+- Email via `boto3` SES with HTML template matching Snowflake SEND_TASK_STATUS_EMAIL format
+- `config.json` has `pipeline` section (pg_cron job name, materialized view, required tables) and `email` section (enabled, region, sender, recipients)
 
 ### Deployment
-- `deploy/build-and-push-ecr.ps1`: Interactive PowerShell script with 5 steps:
-  1. SSO login (optional)
-  2. Docker build
-  3. ECR push (with timestamp tag)
-  4. **Register task definition** (resolves `ecs-task-definition.json` template + `deploy/.env` secrets, shows masked summary, registers via `aws ecs register-task-definition`)
-  5. ECS run-task (with action selection menu)
-- `deploy/ecs-task-definition.json`: Template with `<ACCOUNT_ID>`, `<REGION>`, `<YOUR_*>` placeholders for all env vars
+- `deploy/build-and-push-ecr.ps1`: Interactive PowerShell script with 5 steps (each has a default, Enter to accept):
+  1. SSO login [default: No]
+  2. Docker build [default: Yes]
+  3. ECR push [default: Yes if built, No if skipped]
+  4. Register task definition [default: No -- only needed when env vars or CPU/memory change]
+  5. ECS run-task (action selection menu, default: Skip)
+- `deploy/ecs-task-definition.json`: Template with `<ACCOUNT_ID>`, `<REGION>`, `<CPU>`, `<MEMORY>`, `<YOUR_*>` placeholders
+- CPU/memory configurable via `$Cpu` / `$Memory` in the script's CONFIGURATION section
 - `deploy/.env`: Secret values for template resolution (gitignored). Copy from `deploy/.env.example`.
 - `deploy/.env.example`: Template .env with placeholder values for onboarding
 - `deploy/.generated-taskdef.json`: Resolved task definition output (gitignored, written by script)

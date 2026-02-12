@@ -78,6 +78,14 @@ class Settings:
         """Get Task 02 specific parameters"""
         return self.config.get('task02_parameters', {})
     
+    def get_pipeline_config(self) -> Dict[str, Any]:
+        """Get pipeline configuration (pg_cron job name, materialized view, required tables)"""
+        return self.config.get('pipeline', {})
+
+    def get_email_config(self) -> Dict[str, Any]:
+        """Get email configuration (SES settings, recipients, etc.)"""
+        return self.config.get('email', {})
+
     def get_logging_config(self) -> Dict[str, Any]:
         """Get logging configuration"""
         return self.config.get('logging', {})

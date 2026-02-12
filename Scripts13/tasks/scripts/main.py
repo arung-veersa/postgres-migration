@@ -1,5 +1,5 @@
 """
-ECS Container Entry Point for Task 02 Conflict Detection and Update
+ECS Container Entry Point for Conflict Management Pipeline
 Cross-database operation between Snowflake and PostgreSQL
 
 Container entry point for ECS/Fargate execution.
@@ -12,6 +12,11 @@ ACTION environment variable supports:
 
 Actions are executed sequentially. If any action fails, execution stops
 and the container exits with code 1.
+
+Special actions:
+  - task00_preflight:  Pre-run validation, disables pg_cron, sets InProgressFlag=1
+  - task99_postflight: Post-run cleanup, VACUUM/ANALYZE, re-enables pg_cron, sends email
+    Postflight receives all previous action results for the status email.
 """
 
 import sys
@@ -30,6 +35,8 @@ from lib.connections import ConnectionFactory
 from lib.query_builder import QueryBuilder
 from lib.conflict_processor import ConflictProcessor
 from lib.utils import get_logger, format_duration
+from scripts.actions.preflight import run_preflight
+from scripts.actions.postflight import run_postflight
 
 logger = get_logger(__name__)
 
@@ -42,10 +49,13 @@ _conn_factory: Optional[ConnectionFactory] = None
 
 # Default pipeline: runs all tasks sequentially when ACTION is not set.
 # Add new tasks to this list as they are developed.
+# Note: validate_config and test_connections are included in preflight,
+# so they don't appear in the default pipeline. They remain in
+# ACTION_REGISTRY for standalone use (e.g. ACTION=validate_config).
 DEFAULT_ACTIONS = [
-    'validate_config',
-    'test_connections',
+    'task00_preflight',
     'task02_00_run_conflict_update',
+    'task99_postflight',
 ]
 
 
@@ -295,15 +305,25 @@ def run_conflict_update(settings: Settings) -> dict:
 # Maps action names to handler functions.
 # Add new actions here as they are implemented.
 
+# Pipeline results collected during execution.
+# Postflight reads this to generate the status email and row-count deltas.
+_pipeline_results: List[dict] = []
+
+
+def _run_postflight_wrapper(settings: Settings) -> dict:
+    """Wrapper that passes accumulated pipeline results to postflight."""
+    return run_postflight(settings, pipeline_results=list(_pipeline_results))
+
+
 ACTION_REGISTRY: Dict[str, Callable[[Settings], dict]] = {
+    'task00_preflight': run_preflight,
     'validate_config': validate_config,
     'test_connections': test_connections,
     'task02_00_run_conflict_update': run_conflict_update,
+    'task99_postflight': _run_postflight_wrapper,
     # Future actions:
-    # 'task01_copy_to_temp': run_task01,
-    # 'task03_insert_new_conflicts': run_task03,
-    # 'task04_update_conflict_visit_maps': run_task04,
-    # 'task05_insert_conflicts': run_task05,
+    # 'task01_copy_to_staging': run_task01,
+    # 'task02_01_run_conflict_insert': run_conflict_insert,
 }
 
 
@@ -363,6 +383,8 @@ def main():
 
         # Execute actions sequentially
         results = []
+        _pipeline_results.clear()  # Reset for this run
+
         for i, action in enumerate(actions, 1):
             action_start = time.time()
             label = f"[{i}/{len(actions)}] " if len(actions) > 1 else ""
@@ -382,13 +404,36 @@ def main():
             result['action'] = action
             result['duration_seconds'] = round(action_duration, 2)
             results.append(result)
+            _pipeline_results.append(result)  # Accumulate for postflight
 
             status = result.get('status', 'unknown')
             logger.info(f"{label}FINISHED: {action} -- {status} ({format_duration(action_duration)})")
 
-            # Stop on failure
+            # Stop on failure -- but still run postflight if it's in the pipeline
             if status not in ('success', 'completed'):
                 logger.error(f"Action '{action}' failed with status '{status}' -- stopping pipeline")
+
+                # Run postflight for cleanup even on failure (re-enable pg_cron,
+                # clear InProgressFlag) if it's in the remaining actions
+                remaining = actions[i:]  # actions after the failed one (i is 1-based, already incremented)
+                if 'task99_postflight' in remaining:
+                    logger.info("")
+                    logger.info("-" * 70)
+                    logger.info("RUNNING: task99_postflight (cleanup after failure)")
+                    logger.info("-" * 70)
+                    try:
+                        pf_start = time.time()
+                        pf_result = ACTION_REGISTRY['task99_postflight'](settings)
+                        pf_duration = time.time() - pf_start
+                        pf_result['action'] = 'task99_postflight'
+                        pf_result['duration_seconds'] = round(pf_duration, 2)
+                        results.append(pf_result)
+                        _pipeline_results.append(pf_result)
+                        logger.info(f"FINISHED: task99_postflight -- {pf_result.get('status')} "
+                                    f"({format_duration(pf_duration)})")
+                    except Exception as pf_err:
+                        logger.error(f"Postflight cleanup failed: {pf_err}")
+
                 break
 
         # Final summary

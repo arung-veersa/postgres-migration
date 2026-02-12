@@ -2,8 +2,8 @@
   "family": "task02-conflict-updater",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
-  "cpu": "1024",
-  "memory": "2048",
+  "cpu": "<CPU>",
+  "memory": "<MEMORY>",
   "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ecsTaskExecutionRole",
   "containerDefinitions": [
     {

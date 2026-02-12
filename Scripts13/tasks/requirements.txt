@@ -1,7 +1,8 @@
-# Task 02 Conflict Detection - Container Dependencies
-# ====================================================
+# Conflict Management Pipeline - Container Dependencies
+# =====================================================
 # All dependencies bundled in the Docker image (no Lambda layers)
 
 snowflake-connector-python>=3.6.0
 psycopg2-binary>=2.9.9
 cryptography>=41.0.0
+boto3>=1.34.0
