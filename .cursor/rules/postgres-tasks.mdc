@@ -1,40 +1,70 @@
 ---
-description: Task 02 - conflict detection v3 architecture, execution flow, and ECS container implementation
-globs: Scripts12/**/*.py, Scripts12/**/*.sql, Scripts12/**/*.json, Scripts13/**/*.py, Scripts13/**/*.sql, Scripts13/**/*.json
+description: Conflict detection v3 architecture, execution flow, and ECS container implementation (Conflict/postgres)
+globs: Conflict/postgres/**/*.py, Conflict/postgres/**/*.sql, Conflict/postgres/**/*.json, Scripts13/**/*.py, Scripts13/**/*.sql, Scripts13/**/*.json
 alwaysApply: false
 ---
 
-# Task 02 Conflict Detection (v3) -- Scripts12 (Lambda) / Scripts13 (ECS)
+# Conflict Detection Pipeline -- ECS Container (Conflict/postgres)
+
+## Overview
+
+PostgreSQL conflict detection pipeline deployed as a Docker container on AWS ECS/ECR. Detects scheduling conflicts by comparing Snowflake visit data against PostgreSQL conflict tables, with streaming batch processing, conditional flag updates, and pair-precise stale cleanup.
 
 ## Databases
 
 - **Snowflake (read-only source)**: `ANALYTICS.BI.FACTVISITCALLPERFORMANCE_CR` view with dimension joins. RSA key auth, streaming cursor. Temp tables require `database` and `schema` on connection.
 - **PostgreSQL (read/write target)**: `conflict_management.conflict_dev` schema. Tables: `conflicts` (parent), `conflictvisitmaps` (detail with 7 conflict flags). psycopg2 driver. All column names double-quoted (case-sensitive).
 
-## Key Files (under Scripts13/tasks/)
+## Repository Structure (Conflict/postgres/)
 
-- `scripts/main.py` -- ECS container entry point, ACTION dispatching, SIGTERM handling
-- `scripts/actions/task00_preflight.py` -- Task 00: pre-run validation, pg_cron disable, InProgressFlag
-- `scripts/actions/task01_copy_to_staging.py` -- Task 01: PPR sync from Snowflake dims, staging populate
-- `scripts/actions/task02_00_conflict_update.py` -- Task 02.00: v3 conflict detection UPDATE pipeline
-- `scripts/actions/task99_postflight.py` -- Task 99: VACUUM/ANALYZE, pg_cron re-enable, email, log summary
-- `scripts/actions/validate_config.py` -- Standalone config validation
-- `scripts/actions/test_connections.py` -- Standalone connectivity test
-- `lib/conflict_processor.py` -- Core logic: v3 streaming, batch updates, stale cleanup
-- `lib/query_builder.py` -- Builds Snowflake SQL from v3 templates
-- `lib/connections.py` -- Snowflake and PostgreSQL connection managers
-- `lib/utils.py` -- Logging, formatting, memory estimation utilities
-- `lib/email_sender.py` -- AWS SES HTML email sender for pipeline status reports
-- `config/config.json` -- Runtime config (lookback_hours=36, batch_size=5000, pipeline, email, env var substitution)
-- `config/settings.py` -- Config loader with JSON-safe env var substitution
-- `sql/sf_task01_dim_payer_provider.sql` -- Task 01: Snowflake payer-provider dimension query
-- `sql/sf_task02_v3_step*.sql` -- Snowflake SQL templates for steps 1/2/3
-- `Dockerfile` -- Container image definition (python:3.11-slim)
-- `deploy/build-and-push-ecr.ps1` -- Interactive deploy script (SSO, build, push, register task def, run)
-- `deploy/ecs-task-definition.json` -- ECS Fargate task definition template (placeholders resolved from .env)
-- `deploy/.env.example` -- Template for deploy/.env with all required secret/config keys
-- `tests/test_comprehensive.py` -- 81 pytest tests
-- `tests/sql/sf_task02_v3-*-defaults.sql` -- Standalone test queries for manual Snowflake testing
+```
+Conflict/postgres/
+├── scripts/
+│   ├── main.py                          # ECS entry point, ACTION dispatching, SIGTERM handling
+│   └── actions/
+│       ├── task00_preflight.py           # Pre-run validation, pg_cron disable, InProgressFlag
+│       ├── task01_copy_to_staging.py     # PPR sync from Snowflake dims, staging populate
+│       ├── task02_00_conflict_update.py  # v3 conflict detection UPDATE pipeline
+│       ├── task99_postflight.py          # VACUUM/ANALYZE, pg_cron re-enable, email, summary
+│       ├── validate_config.py           # Standalone config validation
+│       └── test_connections.py          # Standalone connectivity test
+├── lib/
+│   ├── conflict_processor.py            # Core: v3 streaming, batch updates, stale cleanup
+│   ├── query_builder.py                 # Builds Snowflake SQL from v3 templates
+│   ├── connections.py                   # Snowflake and PostgreSQL connection managers
+│   ├── utils.py                         # Logging, formatting, memory estimation
+│   └── email_sender.py                  # AWS SES HTML email sender
+├── sql/
+│   ├── sf_task01_dim_payer_provider.sql  # Task 01: Snowflake payer-provider dimension query
+│   ├── sf_task02_v3_step1_delta_keys.sql
+│   ├── sf_task02_v3_step2_base_visits.sql
+│   ├── sf_task02_v3_step3_final_query.sql
+│   ├── pg_fetch_excluded_ssns.sql
+│   ├── pg_fetch_excluded_agencies.sql
+│   ├── pg_fetch_mph.sql
+│   └── pg_fetch_settings.sql
+├── config/
+│   ├── config.json                      # Runtime config (lookback_hours, batch_size, pipeline, email)
+│   └── settings.py                      # Config loader with JSON-safe env var substitution
+├── deploy/
+│   ├── build-and-push-ecr.ps1           # Interactive deploy script (SSO, build, push, register, run)
+│   ├── ecs-task-definition.json         # ECS Fargate task definition template
+│   ├── .env.example                     # Template for deploy/.env
+│   ├── .env                             # Secrets (gitignored)
+│   └── .generated-taskdef.json          # Resolved output (gitignored)
+├── tests/
+│   ├── test_comprehensive.py            # 81 pytest tests
+│   └── sql/                             # Standalone test queries for manual Snowflake testing
+├── docs/
+│   ├── README.md
+│   ├── ECS_DEPLOYMENT_GUIDE.md
+│   ├── TESTING_GUIDE.md
+│   └── TROUBLESHOOTING.md
+├── Dockerfile
+├── requirements.txt
+├── .gitignore
+└── .dockerignore
+```
 
 ## v3 Execution Flow
 
@@ -94,13 +124,16 @@ alwaysApply: false
 
 ## Current State (as of 2026-02-12)
 
-### Scripts12 (Lambda) -- FROZEN
-- Asymmetric join + pair-precise stale cleanup: WORKING
-- UPDATE logic with conditional flags and change detection: WORKING
-- 81 pytest tests passing
-- No further development planned here
-
-### Scripts13 (ECS) -- ACTIVE DEVELOPMENT
+### What's working:
+- v3 multi-step Snowflake query architecture (delta_keys -> base_visits -> self-join)
+- Asymmetric join with is_delta flag optimization
+- Streaming cursor + 5K-row batch processing with commit-per-batch
+- Conditional flag updates (7 flags: only N->Y, StatusFlag W/I preserved)
+- Pair-precise stale cleanup (12.5M pairs, seen-based anti-join, StatusFlag='R')
+- Change detection (_has_changes: 7 flags + 40 business columns)
+- Excluded SSNs loaded from PostgreSQL into Snowflake temp table
+- Column name mapping (ETATravleMinutes->ETATravelMinutes, SchVisitTimeSame->SchAndVisitTimeSameFlag)
+- 81 pytest tests covering all of the above
 - **ECS containerization COMPLETE**: Dockerfile, task definition, ECR deployment, interactive deploy script
 - Entry point: `scripts/main.py` with comma-separated ACTION env var and DEFAULT_ACTIONS pipeline
 - JSON-safe env var substitution in `settings.py` (handles RSA keys with newlines)
@@ -109,12 +142,14 @@ alwaysApply: false
 - **task01_copy_to_staging COMPLETE**: PPR sync via temp-table + UPDATE FROM JOIN (~3s), staging populate (~280s for 8M rows)
 - **Pipeline summary logging**: Plain-text summary always logged to CloudWatch (independent of email)
 - Successfully deployed and tested on ECS Fargate (~14 min full pipeline with task01)
-- INSERT logic for new conflicts (~102K detected but not inserted): NOT YET IMPLEMENTED
-- Conflicts table aggregation: NOT YET IMPLEMENTED
-- UpdateFlag cleanup: DEFERRED
-- AWS Secrets Manager integration: NOT YET IMPLEMENTED (using plain env vars)
 
-## Scripts13 ECS Architecture Notes
+### What's NOT yet done:
+- INSERT logic for new conflicts (~102K detected but not inserted per run)
+- Conflicts table aggregation
+- UpdateFlag cleanup (DEFERRED)
+- AWS Secrets Manager integration (currently using plain environment variables)
+
+## ECS Architecture Notes
 
 ### Container Entry Point (`scripts/main.py`)
 - `ACTION=""` (default): runs full pipeline `task00_preflight -> task01_copy_to_staging -> task02_00_conflict_update -> task99_postflight`
@@ -161,12 +196,14 @@ alwaysApply: false
 - `deploy/.env`: Secret values for template resolution (gitignored). Copy from `deploy/.env.example`.
 - `deploy/.env.example`: Template .env with placeholder values for onboarding
 - `deploy/.generated-taskdef.json`: Resolved task definition output (gitignored, written by script)
-- `deploy/ecs-task-definition.dev.json`: Manually-maintained dev reference copy (gitignored)
 - CloudWatch log group `/ecs/task02-conflict-updater` must be created manually before first run
 
-### What stays the same from Scripts12:
-- All Python code in `lib/` (conflict_processor, query_builder, connections, utils)
-- SQL templates in `sql/`
-- Snowflake and PostgreSQL connection logic
-- v3 execution flow (Steps 0-4)
-- Test suite in `tests/`
+## Conventions
+
+- Python 3.11 runtime
+- SQL templates loaded from `sql/` dirs, parameterized with `.format()`
+- Config via `config/config.json` with `${ENV_VAR}` placeholders
+
+## Migration Note
+
+This project originated in `Scripts13/tasks/` within the `postgres-migration` mono-repo (which itself evolved from `Scripts12/` Lambda implementation). The code is fully self-contained -- all internal imports use relative paths (`lib/`, `scripts/`, `sql/`, `config/`). When moving to `Conflict/postgres/` in a new repo, copy the folder contents and this `.cursor/rules/postgres-tasks.mdc` file, then remove the `Scripts13/**` glob patterns from the frontmatter.
