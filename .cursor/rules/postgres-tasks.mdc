@@ -24,7 +24,8 @@ Conflict/postgres/
 │   └── actions/
 │       ├── task00_preflight.py           # Pre-run validation, pg_cron disable, InProgressFlag, sequence sync
 │       ├── task01_copy_to_staging.py     # PPR sync from Snowflake dims, staging populate
-│       ├── task02_00_conflict_update.py  # v3 conflict detection UPDATE pipeline
+│       ├── task02_00_conflict_update.py  # v3 conflict detection UPDATE + INSERT pipeline
+│       ├── task02_01_inservice_conflict.py # InService conflict detection (update + insert)
 │       ├── task99_postflight.py          # VACUUM/ANALYZE, pg_cron re-enable, email, summary
 │       ├── validate_config.py           # Standalone config validation
 │       └── test_connections.py          # Standalone connectivity test
@@ -36,9 +37,12 @@ Conflict/postgres/
 │   └── email_sender.py                  # AWS SES HTML email sender
 ├── sql/
 │   ├── sf_task01_dim_payer_provider.sql  # Task 01: Snowflake payer-provider dimension query
-│   ├── sf_task02_v3_step1_delta_keys.sql
-│   ├── sf_task02_v3_step2_base_visits.sql
-│   ├── sf_task02_v3_step3_final_query.sql
+│   ├── sf_task02_00_step1_delta_keys.sql
+│   ├── sf_task02_00_step2_base_visits.sql
+│   ├── sf_task02_00_step3_final_query.sql
+│   ├── sf_task02_01_step1_visits.sql     # InService: eligible visits temp table
+│   ├── sf_task02_01_step2_events.sql     # InService: events with synthetic MD5 VisitID
+│   ├── sf_task02_01_step3_pairs.sql      # InService: UNION ALL both directions
 │   ├── pg_fetch_excluded_ssns.sql
 │   ├── pg_fetch_excluded_agencies.sql
 │   ├── pg_fetch_mph.sql
@@ -53,7 +57,7 @@ Conflict/postgres/
 │   ├── .env                             # Secrets (gitignored)
 │   └── .generated-taskdef.json          # Resolved output (gitignored)
 ├── tests/
-│   ├── test_comprehensive.py            # 81 pytest tests
+│   ├── test_comprehensive.py            # 141 pytest tests
 │   └── sql/                             # Standalone test queries for manual Snowflake testing
 ├── docs/
 │   ├── README.md
@@ -133,6 +137,22 @@ Conflict/postgres/
 - Step 3 (conflict detection + streaming + inserts): ~197s
 - Step 4 (stale cleanup): ~41s
 
+### InService task02_01 (with caregiver semi-join optimisation)
+| Metric | Value |
+|---|---|
+| Total pipeline time | 16m 2s (with preflight + postflight) |
+| task02_01 time | 14m 16s (857s) |
+| Snowflake Step 1 (visits temp) | 233s |
+| Snowflake Step 2 (events temp) | 9.6s |
+| Snowflake Step 3 (pairs + processing) | 600s |
+| Rows fetched from Snowflake | 165,826 |
+| Unique VisitIDs | 148,681 |
+| Rows updated | 165,826 |
+| Rows inserted | 0 (steady state, all pairs already exist) |
+| Errors | 0 |
+
+Note: Caregiver semi-join in Step 1 reduced rows by 28% vs initial run (230K → 166K) and cut task02_01 time from 21min to 14min.
+
 ## Current State (as of 2026-02-13)
 
 ### What's working:
@@ -140,12 +160,14 @@ Conflict/postgres/
 - Asymmetric join with is_delta flag optimization
 - Streaming cursor + 5K-row batch processing with commit-per-batch
 - Conditional flag updates (7 flags: only N->Y, StatusFlag W/I preserved)
-- **INSERT of new conflicts** integrated into streaming pass (~102K/run, StatusFlag='N', 202-column mapping, `enable_insert` config flag)
+- **INSERT of new conflicts** integrated into streaming pass (~102K/run, StatusFlag='N', 206-column mapping, `enable_insert` config flag, self-healing PK retry)
+- **InService conflict detection** (`task02_01_inservice_conflict`): self-contained action for visits vs InService events at different providers. 3-step Snowflake queries (visits temp → events temp → UNION ALL pairs), temporal overlap join, synthetic MD5 VisitIDs, 7 flags hardcoded 'N', `InServiceFlag='Y'`, UUID key normalisation for PG/Snowflake matching, row-by-row insert fallback for UniqueViolation safety. Caregiver semi-join optimisation in Step 1 pre-filters to only caregivers with InService events (~28% row reduction). ~166K rows processed, ~14 min per run.
+  - **Future optimisation (DEFERRED)**: Delta approach using `FACTCAREGIVERINSERVICE."Updated Date"` + `FACTVISITCALLPERFORMANCE_CR."Visit Updated Timestamp"` with asymmetric UNION (delta_visits × ALL events UNION ALL visits × delta_events). Would reduce 166K full-scan to only recently-changed pairs (~10-20K), cutting runtime to ~3-5 min. Deferred because 14 min is acceptable, InService data changes infrequently, and the complexity/risk outweighs the gain at current volumes.
 - Pair-precise stale cleanup (12.5M pairs, seen-based anti-join, StatusFlag='R')
 - Change detection (_has_changes: 7 flags + 40 business columns)
 - Excluded SSNs loaded from PostgreSQL into Snowflake temp table
 - Column name mapping (ETATravleMinutes->ETATravelMinutes, SchVisitTimeSame->SchAndVisitTimeSameFlag)
-- 105 pytest tests covering all of the above
+- 141 pytest tests covering all of the above
 - **ECS containerization COMPLETE**: Dockerfile, task definition, ECR deployment, interactive deploy script
 - Entry point: `scripts/main.py` with comma-separated ACTION env var and DEFAULT_ACTIONS pipeline
 - JSON-safe env var substitution in `settings.py` (handles RSA keys with newlines)
@@ -165,7 +187,7 @@ Conflict/postgres/
 ## ECS Architecture Notes
 
 ### Container Entry Point (`scripts/main.py`)
-- `ACTION=""` (default): runs full pipeline `task00_preflight -> task01_copy_to_staging -> task02_00_conflict_update -> task99_postflight`
+- `ACTION=""` (default): runs full pipeline `task00_preflight -> task01_copy_to_staging -> task02_00_conflict_update -> task02_01_inservice_conflict -> task99_postflight`
 - `ACTION="test_connections"`: runs single action
 - `ACTION="validate_config,test_connections"`: comma-separated sequential execution
 - SIGTERM handler for graceful ECS shutdown (30s stop timeout)
@@ -181,6 +203,7 @@ Conflict/postgres/
 - `task00_preflight`: 1) Validate config params, 2) Verify Snowflake+PG connectivity, 3) Check required tables, 4) Disable pg_cron job, 5) Set InProgressFlag=1, 6) Sync identity sequences (advance to MAX(ID) if behind), 7) Capture pre-run row counts
 - `task01_copy_to_staging`: 1) Sync payer_provider_reminders from Snowflake dims (temp-table + UPDATE FROM JOIN), 2) Truncate+populate conflictlog_staging from conflictvisitmaps+conflicts (date-filtered)
 - `task02_00_conflict_update`: v3 conflict detection pipeline (streaming cursor, batch UPDATE + INSERT, stale cleanup)
+- `task02_01_inservice_conflict`: InService conflict detection -- visits vs InService events at different providers. Temporal overlap join, synthetic MD5 VisitIDs, 7 flags hardcoded 'N', UUID key normalisation (_norm_key), row-by-row insert fallback. ~230K rows, ~10K inserts, ~20min.
 - `task99_postflight`: 1) VACUUM all tables, 2) ANALYZE all tables, 3) Set InProgressFlag=0, 4) Refresh materialized view (CONCURRENTLY), 5) Re-enable pg_cron job, 6) Capture post-run row counts, 7) Log pipeline summary, 8) Send SES email (if enabled)
 
 ### Standalone Actions (not in default pipeline, available via ACTION env var)

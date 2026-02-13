@@ -39,7 +39,7 @@ Scripts13 was copied from Scripts12 and repackaged as a **Docker container** dep
 - Excluded SSNs loaded from PostgreSQL into Snowflake temp table
 - Column name mapping (ETATravleMinutes→ETATravelMinutes, SchVisitTimeSame→SchAndVisitTimeSameFlag)
 - **Cross-state conflict filter**: Snowflake CTE excludes conflicts where no address state matches across sides (state normalization + provider fallback, matching SP_CLEANUP_CROSS_STATE_CONFLICTS)
-- 105 pytest tests covering all of the above
+- 141 pytest tests covering all of the above
 - **Docker/ECS containerization complete**: Dockerfile, ECS task definition, ECR deployment
 - **Container entry point** (`scripts/main.py`): comma-separated ACTION env var, DEFAULT_ACTIONS pipeline, SIGTERM graceful shutdown
 - **Modular action architecture**: main.py is a lean orchestrator; each action in `scripts/actions/<key>.py` with `run_<key>()` naming convention
@@ -51,7 +51,8 @@ Scripts13 was copied from Scripts12 and repackaged as a **Docker container** dep
 - **Pipeline summary logging**: Plain-text summary always logged to CloudWatch (independent of email)
 - **Email notifications**: `lib/email_sender.py` sends HTML pipeline status reports via AWS SES (matching Snowflake email format)
 - **INSERT of new conflicts** integrated into streaming pass (StatusFlag='N', 206-column mapping, `enable_insert` config flag, self-healing PK retry)
-- Successfully deployed and tested on ECS Fargate (~13 min full pipeline)
+- **InService conflict detection** (`task02_01_inservice_conflict`): visits vs InService events at different providers. 3-step Snowflake SQL (visits temp → events temp → UNION ALL pairs), temporal overlap join, synthetic MD5 VisitIDs, 7 flags hardcoded 'N', InServiceFlag='Y', UUID key normalisation (_norm_key), row-by-row insert fallback, caregiver semi-join optimisation. ~166K rows, ~14 min per run. Delta approach via FCS "Updated Date" deferred (acceptable runtime, low change frequency).
+- Successfully deployed and tested on ECS Fargate (~13 min full pipeline, ~21 min InService standalone)
 
 ### What's NOT yet done (to be implemented in Scripts13):
 - Conflicts table aggregation

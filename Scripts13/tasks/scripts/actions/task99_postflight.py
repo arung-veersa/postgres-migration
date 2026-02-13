@@ -314,7 +314,11 @@ def _log_pipeline_summary(
     environment: str,
 ) -> None:
     """
-    Log a plain-text version of the pipeline status summary.
+    Print a plain-text pipeline status summary to stdout.
+
+    Uses print() instead of logger.info() so the summary appears in
+    CloudWatch without the timestamp/module/level prefix.  This makes it
+    easy to copy-paste into a message or email.
 
     Contains the same data as the HTML email -- action results, row count
     deltas, and overall status -- so the information is always visible in
@@ -322,42 +326,42 @@ def _log_pipeline_summary(
     """
     now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
 
-    logger.info("")
-    logger.info("=" * 70)
-    logger.info("PIPELINE STATUS SUMMARY")
-    logger.info("=" * 70)
-    logger.info(f"  Environment:    {environment}")
-    logger.info(f"  Completed:      {now}")
-    logger.info(f"  Total Duration: {format_duration(total_duration)}")
-    logger.info(f"  Overall Status: {overall_status.upper()}")
+    lines = []
+    lines.append("")
+    lines.append("=" * 70)
+    lines.append("PIPELINE STATUS SUMMARY")
+    lines.append("=" * 70)
+    lines.append(f"  Environment:    {environment}")
+    lines.append(f"  Completed:      {now}")
+    lines.append(f"  Total Duration: {format_duration(total_duration)}")
+    lines.append(f"  Overall Status: {overall_status.upper()}")
 
     # --- Action Summary ---
     if pipeline_results:
-        logger.info("")
-        logger.info("  --- Action Summary ---")
-        # Compute column widths
         action_width = max(len(r.get('action', '')) for r in pipeline_results)
         action_width = max(action_width, 6)  # minimum width for header "Action"
-        header = f"  {'Action':<{action_width}}  {'Status':<10}  {'Duration':>10}"
-        logger.info(header)
-        logger.info(f"  {'-' * action_width}  {'-' * 10}  {'-' * 10}")
+
+        lines.append("")
+        lines.append("  --- Action Summary ---")
+        lines.append(f"  {'Action':<{action_width}}  {'Status':<10}  {'Duration':>10}")
+        lines.append(f"  {'-' * action_width}  {'-' * 10}  {'-' * 10}")
 
         for r in pipeline_results:
             action = r.get('action', 'unknown')
             status = r.get('status', 'unknown')
             dur = format_duration(r.get('duration_seconds', 0))
-            logger.info(f"  {action:<{action_width}}  {status:<10}  {dur:>10}")
+            lines.append(f"  {action:<{action_width}}  {status:<10}  {dur:>10}")
 
     # --- Row Count Changes ---
     all_tables = sorted(set(list(pre_counts.keys()) + list(post_counts.keys())))
     if all_tables:
-        logger.info("")
-        logger.info("  --- Row Count Changes ---")
         tbl_width = max(len(t) for t in all_tables)
         tbl_width = max(tbl_width, 5)
-        header = f"  {'Table':<{tbl_width}}  {'Before':>14}  {'After':>14}  {'Delta':>14}"
-        logger.info(header)
-        logger.info(f"  {'-' * tbl_width}  {'-' * 14}  {'-' * 14}  {'-' * 14}")
+
+        lines.append("")
+        lines.append("  --- Row Count Changes ---")
+        lines.append(f"  {'Table':<{tbl_width}}  {'Before':>14}  {'After':>14}  {'Delta':>14}")
+        lines.append(f"  {'-' * tbl_width}  {'-' * 14}  {'-' * 14}  {'-' * 14}")
 
         for table in all_tables:
             pre = pre_counts.get(table, -1)
@@ -369,9 +373,13 @@ def _log_pipeline_summary(
                 delta_str = f'+{delta:,}' if delta >= 0 else f'{delta:,}'
             else:
                 delta_str = '-'
-            logger.info(f"  {table:<{tbl_width}}  {pre_str:>14}  {post_str:>14}  {delta_str:>14}")
+            lines.append(f"  {table:<{tbl_width}}  {pre_str:>14}  {post_str:>14}  {delta_str:>14}")
 
-    logger.info("=" * 70)
+    lines.append("=" * 70)
+
+    # Print without logging prefix for clean copy-paste
+    summary_text = '\n'.join(lines)
+    print(summary_text, flush=True)
 
 
 # ---------------------------------------------------------------------------

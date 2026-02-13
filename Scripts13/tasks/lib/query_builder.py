@@ -251,6 +251,18 @@ INSERT_COLUMN_MAP: List[Tuple[str, str]] = [
     ('ConPA_PCounty', 'ConPA_PCounty'),
 ]
 
+# ---------------------------------------------------------------------------
+# InService INSERT column mapping: extends INSERT_COLUMN_MAP with 4 InService
+# date columns that are NULL for regular conflicts but populated for InService.
+# ---------------------------------------------------------------------------
+INSERVICE_INSERT_COLUMN_MAP: List[Tuple[str, str]] = INSERT_COLUMN_MAP + [
+    # --- InService dates ---
+    ('InserviceStartDate', 'InserviceStartDate'),
+    ('InserviceEndDate', 'InserviceEndDate'),
+    ('ConInserviceStartDate', 'ConInserviceStartDate'),
+    ('ConInserviceEndDate', 'ConInserviceEndDate'),
+]
+
 
 class QueryBuilder:
     """Builds parameterized SQL queries for conflict detection"""
@@ -369,7 +381,7 @@ class QueryBuilder:
         # STEP 1: Delta keys temp table
         # Always create delta_keys now - needed for both asymmetric join AND stale cleanup scoping
         logger.info("  Step 1: Creating delta_keys temp table")
-        step1_template = self.load_sql_file('sf_task02_v3_step1_delta_keys.sql')
+        step1_template = self.load_sql_file('sf_task02_00_step1_delta_keys.sql')
         queries['step1'] = step1_template.format(
             sf_database=db_names['sf_database'],
             sf_schema=db_names['sf_schema'],
@@ -385,7 +397,7 @@ class QueryBuilder:
         # Uses a reusable template with placeholders for CREATE vs INSERT,
         # is_delta value, optional delta_keys JOIN, and timestamp condition.
         logger.info("  Step 2: Creating base_visits temp table")
-        step2_template = self.load_sql_file('sf_task02_v3_step2_base_visits.sql')
+        step2_template = self.load_sql_file('sf_task02_00_step2_base_visits.sql')
         
         # Common format args shared by both Part A and Part B
         common_args = dict(
@@ -432,7 +444,7 @@ class QueryBuilder:
         
         # STEP 3: Final conflict detection query (self-join on base_visits)
         logger.info("  Step 3: Final conflict detection query on base_visits")
-        step3_template = self.load_sql_file('sf_task02_v3_step3_final_query.sql')
+        step3_template = self.load_sql_file('sf_task02_00_step3_final_query.sql')
         
         # In asymmetric mode, constrain the self-join so at least one side (V1) is a delta visit.
         # This avoids the expensive all-vs-all self-join on ~9.6M rows.
@@ -641,4 +653,107 @@ class QueryBuilder:
         )
         
         logger.info(f"Built INSERT template: {len(pg_columns)} data columns + 4 fixed")
+        return sql, sf_columns
+
+    # ------------------------------------------------------------------
+    # InService conflict queries
+    # ------------------------------------------------------------------
+
+    def build_inservice_queries(
+        self,
+        db_names: Dict[str, str],
+        excluded_agencies: List[str],
+        excluded_ssns: List[str],
+        lookback_years: int = 2,
+        lookforward_days: int = 45,
+    ) -> Dict[str, Any]:
+        """
+        Build the multi-step InService conflict detection queries.
+
+        Steps:
+          0. Create + populate excluded_ssns_temp table
+          1. Create inservice_visits temp table (eligible visits)
+          2. Create inservice_events temp table (InService events with synthetic VisitID)
+          3. Final UNION ALL query producing pairs in both directions
+
+        Returns:
+            Dict with keys 'step0_create', 'step0_inserts', 'step1', 'step2', 'step3'
+        """
+        logger.info("Building InService conflict detection queries...")
+        logger.info(f"  Database params: {db_names}")
+        logger.info(f"  Excluded agencies: {len(excluded_agencies)} items")
+        logger.info(f"  Excluded SSNs: {len(excluded_ssns)} items")
+        logger.info(f"  Date params: -{lookback_years}Y to +{lookforward_days}D")
+
+        agencies_csv = format_exclusion_list(excluded_agencies) if excluded_agencies else "''"
+
+        queries: Dict[str, Any] = {}
+
+        # STEP 0: excluded_ssns temp table (reuse existing helper)
+        queries['step0_create'] = (
+            'CREATE TEMPORARY TABLE IF NOT EXISTS excluded_ssns_temp (ssn VARCHAR)'
+        )
+        queries['step0_inserts'] = self._build_ssn_insert_batches(excluded_ssns)
+
+        common_args = dict(
+            sf_database=db_names['sf_database'],
+            sf_schema=db_names['sf_schema'],
+            lookback_years=lookback_years,
+            lookforward_days=lookforward_days,
+            excluded_agencies=agencies_csv,
+        )
+
+        # STEP 1: Visits temp table
+        logger.info("  Step 1: inservice_visits temp table")
+        step1_template = self.load_sql_file('sf_task02_01_step1_visits.sql')
+        queries['step1'] = step1_template.format(**common_args)
+
+        # STEP 2: InService events temp table
+        logger.info("  Step 2: inservice_events temp table")
+        step2_template = self.load_sql_file('sf_task02_01_step2_events.sql')
+        queries['step2'] = step2_template.format(**common_args)
+
+        # STEP 3: Final pairs query (UNION ALL)
+        logger.info("  Step 3: Final InService pairs query (UNION ALL)")
+        queries['step3'] = self.load_sql_file('sf_task02_01_step3_pairs.sql')
+
+        logger.info("✓ InService conflict detection queries built successfully")
+        return queries
+
+    def build_inservice_insert_template(
+        self, db_names: Dict[str, str]
+    ) -> Tuple[str, List[str]]:
+        """
+        Build a parameterised INSERT template for InService conflict records.
+
+        Same structure as ``build_insert_template`` but:
+          - Uses INSERVICE_INSERT_COLUMN_MAP (includes 4 InService date columns)
+          - Sets InServiceFlag = 'Y' (instead of 'N')
+
+        Returns:
+            Tuple of (sql, sf_columns) -- see ``build_insert_template`` docstring.
+        """
+        schema = db_names['pg_schema']
+
+        sf_columns = [sf for sf, _pg in INSERVICE_INSERT_COLUMN_MAP]
+        pg_columns = [pg for _sf, pg in INSERVICE_INSERT_COLUMN_MAP]
+
+        all_pg_cols = pg_columns + [
+            'StatusFlag', 'InServiceFlag', 'PTOFlag', 'CreatedDate',
+        ]
+        col_list = ', '.join(f'"{c}"' for c in all_pg_cols)
+
+        data_placeholders = ', '.join(['%s'] * len(pg_columns))
+        # InServiceFlag = 'Y' (key difference from regular insert)
+        fixed_literals = "'N', 'Y', 'N', CURRENT_TIMESTAMP"
+        values_clause = f"{data_placeholders}, {fixed_literals}"
+
+        sql = (
+            f"INSERT INTO {schema}.conflictvisitmaps ({col_list}) "
+            f"VALUES ({values_clause})"
+        )
+
+        logger.info(
+            f"Built InService INSERT template: {len(pg_columns)} data columns + 4 fixed"
+        )
         return sql, sf_columns

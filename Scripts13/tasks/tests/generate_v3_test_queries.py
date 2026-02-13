@@ -110,7 +110,7 @@ CREATE TEMPORARY TABLE IF NOT EXISTS excluded_ssns_temp (ssn VARCHAR);
     output_dir = os.path.join(os.path.dirname(__file__), 'sql')
     os.makedirs(output_dir, exist_ok=True)
     
-    sym_path = os.path.join(output_dir, 'sf_task02_v3-sym-defaults.sql')
+    sym_path = os.path.join(output_dir, 'sf_task02_00-sym-defaults.sql')
     with open(sym_path, 'w', encoding='utf-8') as f:
         f.write(sym_full_query)
     print(f"   Created: {sym_path}")
@@ -188,7 +188,7 @@ CREATE TEMPORARY TABLE IF NOT EXISTS excluded_ssns_temp (ssn VARCHAR);
 {asym_queries['step3']}
 """
     
-    asym_path = os.path.join(output_dir, 'sf_task02_v3-asym-defaults.sql')
+    asym_path = os.path.join(output_dir, 'sf_task02_00-asym-defaults.sql')
     with open(asym_path, 'w', encoding='utf-8') as f:
         f.write(asym_full_query)
     print(f"   Created: {asym_path}")
@@ -203,10 +203,10 @@ CREATE TEMPORARY TABLE IF NOT EXISTS excluded_ssns_temp (ssn VARCHAR);
     print("  4. Execute the entire script (all steps must run in same session)")
     print("  5. Review execution time and row counts")
     print("\nTo test symmetric version first (recommended):")
-    print("  - Run tests/sql/sf_task02_v3-sym-defaults.sql")
+    print("  - Run tests/sql/sf_task02_00-sym-defaults.sql")
     print("  - Expected: 30-40 seconds, similar to previous results")
     print("\nTo test asymmetric version:")
-    print("  - Run tests/sql/sf_task02_v3-asym-defaults.sql")
+    print("  - Run tests/sql/sf_task02_00-asym-defaults.sql")
     print("  - Expected: 3-5 minutes (much faster than v2's timeout)")
 
 

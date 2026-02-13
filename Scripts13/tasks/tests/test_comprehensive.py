@@ -20,7 +20,7 @@ from unittest.mock import MagicMock, patch
 # ---------------------------------------------------------------------------
 _MOCK_MODULES = [
     'snowflake', 'snowflake.connector',
-    'psycopg2', 'psycopg2.extras', 'psycopg2.pool',
+    'psycopg2', 'psycopg2.extras', 'psycopg2.pool', 'psycopg2.errors',
     'cryptography', 'cryptography.hazmat',
     'cryptography.hazmat.primitives', 'cryptography.hazmat.primitives.serialization',
     'cryptography.hazmat.backends',
@@ -41,7 +41,7 @@ from lib.utils import (
     estimate_memory_mb,
     chunk_list,
 )
-from lib.query_builder import QueryBuilder
+from lib.query_builder import QueryBuilder, INSERT_COLUMN_MAP, INSERVICE_INSERT_COLUMN_MAP
 from lib.conflict_processor import ConflictProcessor
 
 
@@ -799,19 +799,19 @@ class TestStatistics:
 
 class TestTemplateLoading:
     def test_step1_template_loads(self, query_builder):
-        sql = query_builder.load_sql_file('sf_task02_v3_step1_delta_keys.sql')
+        sql = query_builder.load_sql_file('sf_task02_00_step1_delta_keys.sql')
         assert 'delta_keys' in sql
         assert '{lookback_hours}' in sql
 
     def test_step2_template_loads(self, query_builder):
-        sql = query_builder.load_sql_file('sf_task02_v3_step2_base_visits.sql')
+        sql = query_builder.load_sql_file('sf_task02_00_step2_base_visits.sql')
         assert '{TABLE_CLAUSE}' in sql
         assert '{is_delta_value}' in sql
         assert '{DELTA_KEYS_JOIN}' in sql
         assert '{TIMESTAMP_CONDITION}' in sql
 
     def test_step3_template_loads(self, query_builder):
-        sql = query_builder.load_sql_file('sf_task02_v3_step3_final_query.sql')
+        sql = query_builder.load_sql_file('sf_task02_00_step3_final_query.sql')
         assert '{ASYMMETRIC_JOIN_CONDITION}' in sql
         assert '{mph_lookup}' in sql
         assert 'conflicts_with_flags' in sql
@@ -1030,16 +1030,304 @@ class TestBaseVisitsTemplate:
     """Tests that step2 base_visits template includes ProviderAddressState."""
 
     def test_step2_has_provider_address_state(self, query_builder):
-        sql = query_builder.load_sql_file('sf_task02_v3_step2_base_visits.sql')
+        sql = query_builder.load_sql_file('sf_task02_00_step2_base_visits.sql')
         assert '"ProviderAddressState"' in sql
 
     def test_step2_provider_address_state_from_dpr(self, query_builder):
         """ProviderAddressState should come from DPR (DIMPROVIDER)."""
-        sql = query_builder.load_sql_file('sf_task02_v3_step2_base_visits.sql')
+        sql = query_builder.load_sql_file('sf_task02_00_step2_base_visits.sql')
         assert 'DPR."Address State"' in sql
 
     def test_step2_has_agency_phone(self, query_builder):
         """AgencyPhone should come from DPR."Phone Number 1"."""
-        sql = query_builder.load_sql_file('sf_task02_v3_step2_base_visits.sql')
+        sql = query_builder.load_sql_file('sf_task02_00_step2_base_visits.sql')
         assert '"AgencyPhone"' in sql
         assert '"Phone Number 1"' in sql
+
+
+# ============================================================================
+# 15. InService Column Mapping
+# ============================================================================
+
+class TestInserviceInsertColumnMap:
+    """Tests for INSERVICE_INSERT_COLUMN_MAP and build_inservice_insert_template."""
+
+    def test_inservice_map_extends_regular(self):
+        """InService map should be a superset of regular INSERT_COLUMN_MAP."""
+        regular_set = set(INSERT_COLUMN_MAP)
+        inservice_set = set(INSERVICE_INSERT_COLUMN_MAP)
+        assert regular_set.issubset(inservice_set)
+
+    def test_inservice_map_has_4_extra_columns(self):
+        """InService map should have exactly 4 more columns than regular."""
+        diff = len(INSERVICE_INSERT_COLUMN_MAP) - len(INSERT_COLUMN_MAP)
+        assert diff == 4, f"Expected 4 extra columns, got {diff}"
+
+    def test_inservice_map_has_inservice_dates(self):
+        """InService map must include all 4 InService date columns."""
+        pg_cols = [pg for _sf, pg in INSERVICE_INSERT_COLUMN_MAP]
+        for col in ['InserviceStartDate', 'InserviceEndDate',
+                     'ConInserviceStartDate', 'ConInserviceEndDate']:
+            assert col in pg_cols, f"Missing InService column: {col}"
+
+    def test_inservice_map_no_duplicates(self):
+        """InService column map should have no duplicate PG column names."""
+        pg_cols = [pg for _sf, pg in INSERVICE_INSERT_COLUMN_MAP]
+        assert len(pg_cols) == len(set(pg_cols))
+
+    def test_build_inservice_insert_template(self, query_builder, db_names):
+        """build_inservice_insert_template should produce valid SQL with InServiceFlag='Y'."""
+        sql, sf_cols = query_builder.build_inservice_insert_template(db_names)
+        assert "'Y'" in sql, "InServiceFlag should be 'Y' in InService INSERT"
+        assert 'conflict_dev' in sql
+        assert '%s' in sql
+        assert len(sf_cols) == len(INSERVICE_INSERT_COLUMN_MAP)
+
+    def test_build_inservice_insert_template_no_on_conflict(self, query_builder, db_names):
+        """InService INSERT should NOT use ON CONFLICT (constraint definition unknown on live DB)."""
+        sql, _ = query_builder.build_inservice_insert_template(db_names)
+        assert 'ON CONFLICT' not in sql, "ON CONFLICT removed -- duplicates handled in Python"
+
+    def test_inservice_insert_template_has_more_placeholders(self, query_builder, db_names):
+        """InService INSERT should have 4 more %s placeholders than regular INSERT."""
+        regular_sql, regular_cols = query_builder.build_insert_template(db_names)
+        inservice_sql, inservice_cols = query_builder.build_inservice_insert_template(db_names)
+        regular_count = regular_sql.count('%s')
+        inservice_count = inservice_sql.count('%s')
+        assert inservice_count == regular_count + 4
+
+
+# ============================================================================
+# 16. InService SQL Templates
+# ============================================================================
+
+class TestInserviceSqlTemplates:
+    """Tests for the InService SQL template files."""
+
+    def test_step1_visits_template_loads(self, query_builder):
+        sql = query_builder.load_sql_file('sf_task02_01_step1_visits.sql')
+        assert len(sql) > 100
+
+    def test_step2_events_template_loads(self, query_builder):
+        sql = query_builder.load_sql_file('sf_task02_01_step2_events.sql')
+        assert len(sql) > 100
+
+    def test_step3_pairs_template_loads(self, query_builder):
+        sql = query_builder.load_sql_file('sf_task02_01_step3_pairs.sql')
+        assert len(sql) > 100
+
+    def test_step1_creates_inservice_visits(self, query_builder):
+        sql = query_builder.load_sql_file('sf_task02_01_step1_visits.sql')
+        assert 'inservice_visits' in sql.lower()
+
+    def test_step2_creates_inservice_events(self, query_builder):
+        sql = query_builder.load_sql_file('sf_task02_01_step2_events.sql')
+        assert 'inservice_events' in sql.lower()
+
+    def test_step1_has_fcs_exclusion(self, query_builder):
+        """Step 1 should exclude visits with same-provider InService overlap."""
+        sql = query_builder.load_sql_file('sf_task02_01_step1_visits.sql')
+        assert 'FACTCAREGIVERINSERVICE' in sql
+        assert '"Application Caregiver Inservice Id" IS NULL' in sql
+
+    def test_step1_has_is_missed_filter(self, query_builder):
+        """Step 1 should filter out missed visits."""
+        sql = query_builder.load_sql_file('sf_task02_01_step1_visits.sql')
+        assert '"Is Missed" = FALSE' in sql
+
+    def test_step1_has_caregiver_semijoin(self, query_builder):
+        """Step 1 should pre-filter to caregivers with InService events."""
+        sql = query_builder.load_sql_file('sf_task02_01_step1_visits.sql')
+        # The semi-join subquery should reference FCS2 alias
+        assert 'FCS2."Caregiver Id"' in sql
+        assert 'FACTCAREGIVERINSERVICE AS FCS2' in sql
+
+    def test_step2_has_synthetic_visit_id(self, query_builder):
+        """Step 2 should generate synthetic VisitID via MD5."""
+        sql = query_builder.load_sql_file('sf_task02_01_step2_events.sql')
+        assert 'MD5' in sql
+        assert "CONCAT('I'" in sql
+
+    def test_step2_has_inservice_dates(self, query_builder):
+        """Step 2 should include InserviceStartDate/EndDate from FCS."""
+        sql = query_builder.load_sql_file('sf_task02_01_step2_events.sql')
+        assert '"InserviceStartDate"' in sql
+        assert '"InserviceEndDate"' in sql
+        assert '"Inservice start date"' in sql
+
+    def test_step3_has_union_all(self, query_builder):
+        """Step 3 should use UNION ALL for both directions."""
+        sql = query_builder.load_sql_file('sf_task02_01_step3_pairs.sql')
+        assert 'UNION ALL' in sql
+
+    def test_step3_has_temporal_overlap_join(self, query_builder):
+        """Step 3 should join on temporal overlap (VisitStartTime <= InserviceEndDate)."""
+        sql = query_builder.load_sql_file('sf_task02_01_step3_pairs.sql')
+        assert '"VisitStartTime"' in sql
+        assert '"InserviceEndDate"' in sql
+        assert '"VisitEndTime"' in sql
+        assert '"InserviceStartDate"' in sql
+
+    def test_step3_has_different_provider_condition(self, query_builder):
+        """Step 3 should require different providers."""
+        sql = query_builder.load_sql_file('sf_task02_01_step3_pairs.sql')
+        assert '"ProviderID" !=' in sql
+
+    def test_step3_hardcoded_flags(self, query_builder):
+        """Step 3 should have all 7 flags hardcoded to 'N'."""
+        sql = query_builder.load_sql_file('sf_task02_01_step3_pairs.sql')
+        for flag in ['SameSchTimeFlag', 'SameVisitTimeFlag',
+                     'SchAndVisitTimeSameFlag', 'SchOverAnotherSchTimeFlag',
+                     'VisitTimeOverAnotherVisitTimeFlag',
+                     'SchTimeOverVisitTimeFlag', 'DistanceFlag']:
+            assert f"'{flag}'" not in sql or f'AS "{flag}"' in sql
+
+    def test_step3_null_distance_columns(self, query_builder):
+        """Step 3 should have NULL distance/travel columns."""
+        sql = query_builder.load_sql_file('sf_task02_01_step3_pairs.sql')
+        assert 'CAST(NULL AS NUMBER) AS "MinuteDiffBetweenSch"' in sql
+        assert 'CAST(NULL AS NUMBER) AS "ETATravleMinutes"' in sql
+
+    def test_step3_inservice_date_columns(self, query_builder):
+        """Step 3 should output all 4 InService date columns."""
+        sql = query_builder.load_sql_file('sf_task02_01_step3_pairs.sql')
+        assert '"InserviceStartDate"' in sql
+        assert '"InserviceEndDate"' in sql
+        assert '"ConInserviceStartDate"' in sql
+        assert '"ConInserviceEndDate"' in sql
+
+    def test_step3_joins_both_directions(self, query_builder):
+        """Step 3 should join inservice_visits with inservice_events in both directions."""
+        sql = query_builder.load_sql_file('sf_task02_01_step3_pairs.sql')
+        # Direction 1: visits V1 INNER JOIN events V2
+        assert 'inservice_visits V1' in sql
+        assert 'inservice_events V2' in sql
+        # Direction 2: events V1 INNER JOIN visits V2
+        assert 'inservice_events V1' in sql
+        assert 'inservice_visits V2' in sql
+
+
+# ============================================================================
+# 17. InService Query Builder
+# ============================================================================
+
+class TestInserviceQueryBuilder:
+    """Tests for build_inservice_queries method."""
+
+    @pytest.fixture
+    def sample_excluded_ssns(self):
+        return ['111-22-3333', '444-55-6666']
+
+    def test_build_inservice_queries_keys(self, query_builder, db_names,
+                                           sample_excluded_agencies,
+                                           sample_excluded_ssns):
+        """build_inservice_queries should return all expected step keys."""
+        queries = query_builder.build_inservice_queries(
+            db_names=db_names,
+            excluded_agencies=sample_excluded_agencies,
+            excluded_ssns=sample_excluded_ssns,
+        )
+        assert 'step0_create' in queries
+        assert 'step0_inserts' in queries
+        assert 'step1' in queries
+        assert 'step2' in queries
+        assert 'step3' in queries
+
+    def test_build_inservice_queries_step0_creates_temp(self, query_builder, db_names,
+                                                         sample_excluded_agencies,
+                                                         sample_excluded_ssns):
+        queries = query_builder.build_inservice_queries(
+            db_names=db_names,
+            excluded_agencies=sample_excluded_agencies,
+            excluded_ssns=sample_excluded_ssns,
+        )
+        assert 'excluded_ssns_temp' in queries['step0_create']
+
+    def test_build_inservice_queries_step1_has_db_name(self, query_builder, db_names,
+                                                        sample_excluded_agencies,
+                                                        sample_excluded_ssns):
+        queries = query_builder.build_inservice_queries(
+            db_names=db_names,
+            excluded_agencies=sample_excluded_agencies,
+            excluded_ssns=sample_excluded_ssns,
+        )
+        assert 'ANALYTICS' in queries['step1']
+        assert 'BI' in queries['step1']
+
+    def test_build_inservice_queries_step3_no_placeholders(self, query_builder, db_names,
+                                                            sample_excluded_agencies,
+                                                            sample_excluded_ssns):
+        """Step 3 should have no unresolved {placeholders}."""
+        queries = query_builder.build_inservice_queries(
+            db_names=db_names,
+            excluded_agencies=sample_excluded_agencies,
+            excluded_ssns=sample_excluded_ssns,
+        )
+        assert '{' not in queries['step3']
+
+
+# ============================================================================
+# 18. InService Action Registration
+# ============================================================================
+
+class TestInserviceActionRegistration:
+    """Tests that task02_01 is properly registered in the pipeline."""
+
+    def test_action_in_default_pipeline(self):
+        """task02_01_inservice_conflict should be in DEFAULT_ACTIONS."""
+        from scripts.main import DEFAULT_ACTIONS
+        assert 'task02_01_inservice_conflict' in DEFAULT_ACTIONS
+
+    def test_action_after_task02_00(self):
+        """task02_01 should come after task02_00 in the default pipeline."""
+        from scripts.main import DEFAULT_ACTIONS
+        idx_00 = DEFAULT_ACTIONS.index('task02_00_conflict_update')
+        idx_01 = DEFAULT_ACTIONS.index('task02_01_inservice_conflict')
+        assert idx_01 > idx_00
+
+    def test_action_before_postflight(self):
+        """task02_01 should come before task99_postflight."""
+        from scripts.main import DEFAULT_ACTIONS
+        idx_01 = DEFAULT_ACTIONS.index('task02_01_inservice_conflict')
+        idx_99 = DEFAULT_ACTIONS.index('task99_postflight')
+        assert idx_01 < idx_99
+
+    def test_action_in_registry(self):
+        """task02_01_inservice_conflict should be in ACTION_REGISTRY."""
+        from scripts.main import ACTION_REGISTRY
+        assert 'task02_01_inservice_conflict' in ACTION_REGISTRY
+
+
+# ============================================================================
+# 19. InService _norm_key UUID normalisation
+# ============================================================================
+
+class TestNormKey:
+    """Tests for _norm_key UUID normalisation helper."""
+
+    def test_strips_dashes(self):
+        from scripts.actions.task02_01_inservice_conflict import _norm_key
+        key = _norm_key('d670686d-d28b-4fca-b2cc-99ec4249c575', 'abc')
+        assert '-' not in key[0]
+
+    def test_lowercases(self):
+        from scripts.actions.task02_01_inservice_conflict import _norm_key
+        key = _norm_key('D670686D-D28B-4FCA-B2CC-99EC4249C575', 'ABC')
+        assert key == ('d670686dd28b4fcab2cc99ec4249c575', 'abc')
+
+    def test_md5_no_dashes_matches_uuid(self):
+        """MD5 hex without dashes should match UUID with dashes after normalisation."""
+        from scripts.actions.task02_01_inservice_conflict import _norm_key
+        md5_key = _norm_key('32329cfa34b3f072ca9a9800864ecb72', 'visit1')
+        uuid_key = _norm_key('32329cfa-34b3-f072-ca9a-9800864ecb72', 'visit1')
+        assert md5_key == uuid_key
+
+    def test_none_handling(self):
+        from scripts.actions.task02_01_inservice_conflict import _norm_key
+        key = _norm_key(None, None)
+        assert key == ('', '')
+
+    def test_empty_string(self):
+        from scripts.actions.task02_01_inservice_conflict import _norm_key
+        key = _norm_key('', '')
+        assert key == ('', '')

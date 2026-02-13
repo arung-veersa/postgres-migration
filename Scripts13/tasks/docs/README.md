@@ -77,9 +77,9 @@ Scripts13/tasks/
 │       └── test_connections.py             # Standalone connectivity test
 ├── sql/                                     # Snowflake SQL templates
 │   ├── sf_task01_dim_payer_provider.sql     # Task 01: Payer-provider dimension query
-│   ├── sf_task02_v3_step1_delta_keys.sql    # Step 1: Delta keys extraction
-│   ├── sf_task02_v3_step2_base_visits.sql   # Step 2: Base visits materialization
-│   ├── sf_task02_v3_step3_final_query.sql   # Step 3: Conflict detection self-join
+│   ├── sf_task02_00_step1_delta_keys.sql    # Step 1: Delta keys extraction
+│   ├── sf_task02_00_step2_base_visits.sql   # Step 2: Base visits materialization
+│   ├── sf_task02_00_step3_final_query.sql   # Step 3: Conflict detection self-join
 │   └── pg_fetch_*.sql                       # PostgreSQL reference data queries
 ├── deploy/
 │   ├── build-and-push-ecr.ps1               # Interactive build/push/run PowerShell script
@@ -219,10 +219,10 @@ STEP 4: Pair-precise stale cleanup
 
 #### Code References
 
-- **Templates**: `sql/sf_task02_v3_step1_delta_keys.sql`, `sf_task02_v3_step2_base_visits.sql`, `sf_task02_v3_step3_final_query.sql`
+- **Templates**: `sql/sf_task02_00_step1_delta_keys.sql`, `sf_task02_00_step2_base_visits.sql`, `sf_task02_00_step3_final_query.sql`
 - **Builder**: `lib/query_builder.py::build_conflict_detection_query_v3()`
 - **Processor**: `lib/conflict_processor.py::stream_and_process_conflicts_v3()`
-- **Test Queries**: `tests/sql/sf_task02_v3-sym-defaults.sql`, `tests/sql/sf_task02_v3-asym-defaults.sql`
+- **Test Queries**: `tests/sql/sf_task02_00-sym-defaults.sql`, `tests/sql/sf_task02_00-asym-defaults.sql`
 
 ---
 

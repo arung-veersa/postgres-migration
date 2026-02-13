@@ -37,6 +37,7 @@ from lib.utils import get_logger, format_duration
 from scripts.actions.task00_preflight import run_task00_preflight
 from scripts.actions.task01_copy_to_staging import run_task01_copy_to_staging
 from scripts.actions.task02_00_conflict_update import run_task02_00_conflict_update
+from scripts.actions.task02_01_inservice_conflict import run_task02_01_inservice_conflict
 from scripts.actions.task99_postflight import run_task99_postflight
 from scripts.actions.validate_config import run_validate_config
 from scripts.actions.test_connections import run_test_connections
@@ -79,6 +80,11 @@ def _run_task02_00_conflict_update_wrapper(settings: Settings) -> dict:
     return run_task02_00_conflict_update(settings, shutdown_check=lambda: _shutdown_requested)
 
 
+def _run_task02_01_inservice_conflict_wrapper(settings: Settings) -> dict:
+    """Wrapper that passes shutdown check to InService conflict processing."""
+    return run_task02_01_inservice_conflict(settings, shutdown_check=lambda: _shutdown_requested)
+
+
 # Default pipeline: runs all tasks sequentially when ACTION is not set.
 # Add new tasks to this list as they are developed.
 # Note: validate_config and test_connections are included in preflight,
@@ -88,6 +94,7 @@ DEFAULT_ACTIONS = [
     'task00_preflight',
     'task01_copy_to_staging',
     'task02_00_conflict_update',
+    'task02_01_inservice_conflict',
     'task99_postflight',
 ]
 
@@ -98,11 +105,12 @@ ACTION_REGISTRY: Dict[str, Callable[[Settings], dict]] = {
     'task00_preflight': run_task00_preflight,
     'task01_copy_to_staging': run_task01_copy_to_staging,
     'task02_00_conflict_update': _run_task02_00_conflict_update_wrapper,
+    'task02_01_inservice_conflict': _run_task02_01_inservice_conflict_wrapper,
     'task99_postflight': _run_task99_postflight_wrapper,
     'validate_config': run_validate_config,
     'test_connections': run_test_connections,
     # Future actions:
-    # 'task02_01_conflict_insert': run_task02_01_conflict_insert,
+    # 'task02_02_status_management': run_task02_02_status_management,
 }
 
 
@@ -220,15 +228,18 @@ def main():
         all_ok = all(r.get('status') in ('success', 'completed') for r in results)
         overall_status = 'completed' if (all_ok and len(results) == len(actions)) else 'failed'
 
-        logger.info("")
-        logger.info("=" * 70)
-        logger.info("EXECUTION SUMMARY")
-        logger.info("=" * 70)
+        # Print execution summary without logging prefix for clean copy-paste
+        summary_lines = []
+        summary_lines.append("")
+        summary_lines.append("=" * 70)
+        summary_lines.append("EXECUTION SUMMARY")
+        summary_lines.append("=" * 70)
         for r in results:
-            logger.info(f"  {r['action']}: {r['status']} ({r['duration_seconds']}s)")
-        logger.info(f"Overall: {overall_status}")
-        logger.info(f"Total duration: {format_duration(total_duration)}")
-        logger.info("=" * 70)
+            summary_lines.append(f"  {r['action']}: {r['status']} ({r['duration_seconds']}s)")
+        summary_lines.append(f"Overall: {overall_status}")
+        summary_lines.append(f"Total duration: {format_duration(total_duration)}")
+        summary_lines.append("=" * 70)
+        print('\n'.join(summary_lines), flush=True)
 
         sys.exit(0 if overall_status == 'completed' else 1)
 
