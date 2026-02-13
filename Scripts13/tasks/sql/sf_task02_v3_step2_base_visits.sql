@@ -40,6 +40,7 @@ SELECT
   CAST(NULL AS STRING) AS "AgencyContact",
   DPR."Phone Number 1" AS "AgencyPhone",
   DPR."Federal Tax Number" AS "FederalTaxNumber",
+  UPPER(TRIM(DPR."Address State")) AS "ProviderAddressState",
   CR1."Visit Id" AS "VisitID",
   CR1."Application Visit Id" AS "AppVisitID",
   DATE(CR1."Visit Date") AS "VisitDate",

@@ -70,6 +70,9 @@ def run_task02_00_conflict_update(
     enable_stale_cleanup = _get_env_bool(
         'ENABLE_STALE_CLEANUP', task_params.get('enable_stale_cleanup', True)
     )
+    enable_insert = _get_env_bool(
+        'ENABLE_INSERT', task_params.get('enable_insert', True)
+    )
 
     logger.info("Configuration settings:")
     logger.info(f"  Lookback: {lookback_years} years, +{lookforward_days} days")
@@ -78,6 +81,7 @@ def run_task02_00_conflict_update(
     logger.info(f"  Skip unchanged records: {'YES' if skip_unchanged_records else 'NO'}")
     logger.info(f"  Asymmetric join: {'ENABLED' if enable_asymmetric_join else 'DISABLED'}")
     logger.info(f"  Stale cleanup: {'ENABLED' if enable_stale_cleanup else 'DISABLED'}")
+    logger.info(f"  Insert new conflicts: {'ENABLED' if enable_insert else 'DISABLED'}")
 
     # Initialize connections
     conn_factory = ConnectionFactory(sf_config, pg_config)
@@ -93,6 +97,7 @@ def run_task02_00_conflict_update(
             skip_unchanged_records=skip_unchanged_records,
             enable_asymmetric_join=enable_asymmetric_join,
             enable_stale_cleanup=enable_stale_cleanup,
+            enable_insert=enable_insert,
         )
 
         # Step 1: Fetch reference data from Postgres
@@ -132,6 +137,7 @@ def run_task02_00_conflict_update(
                 'skip_unchanged_records': skip_unchanged_records,
                 'enable_asymmetric_join': enable_asymmetric_join,
                 'enable_stale_cleanup': enable_stale_cleanup,
+                'enable_insert': enable_insert,
             },
         }
 

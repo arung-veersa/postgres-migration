@@ -4,10 +4,252 @@ Loads SQL templates and injects parameters dynamically
 """
 
 import os
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple
 from .utils import get_logger, format_exclusion_list
 
 logger = get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# INSERT column mapping: (snowflake_column, pg_column)
+#
+# Maps Snowflake Step 3 output column names (as received in the Python row
+# dict) to PostgreSQL conflictvisitmaps column names.  Most are 1:1; the
+# only name translation is ETATravleMinutes -> ETATravelMinutes (the Step 3
+# SQL already aliases SchVisitTimeSame -> SchAndVisitTimeSameFlag).
+#
+# Columns NOT in this list (e.g. GroupID, ShVTSTTime, InserviceStartDate)
+# are omitted from the INSERT and receive their PostgreSQL default (NULL).
+# ---------------------------------------------------------------------------
+INSERT_COLUMN_MAP: List[Tuple[str, str]] = [
+    # --- identifiers ---
+    ('CONFLICTID', 'CONFLICTID'),
+    ('SSN', 'SSN'),
+    # --- visit 1 provider ---
+    ('ProviderID', 'ProviderID'),
+    ('AppProviderID', 'AppProviderID'),
+    ('ProviderName', 'ProviderName'),
+    ('VisitID', 'VisitID'),
+    ('AppVisitID', 'AppVisitID'),
+    # --- visit 2 (conflict) provider ---
+    ('ConProviderID', 'ConProviderID'),
+    ('ConAppProviderID', 'ConAppProviderID'),
+    ('ConProviderName', 'ConProviderName'),
+    ('ConVisitID', 'ConVisitID'),
+    ('ConAppVisitID', 'ConAppVisitID'),
+    # --- dates / times ---
+    ('VisitDate', 'VisitDate'),
+    ('SchStartTime', 'SchStartTime'),
+    ('SchEndTime', 'SchEndTime'),
+    ('ConSchStartTime', 'ConSchStartTime'),
+    ('ConSchEndTime', 'ConSchEndTime'),
+    ('VisitStartTime', 'VisitStartTime'),
+    ('VisitEndTime', 'VisitEndTime'),
+    ('ConVisitStartTime', 'ConVisitStartTime'),
+    ('ConVisitEndTime', 'ConVisitEndTime'),
+    ('EVVStartTime', 'EVVStartTime'),
+    ('EVVEndTime', 'EVVEndTime'),
+    ('ConEVVStartTime', 'ConEVVStartTime'),
+    ('ConEVVEndTime', 'ConEVVEndTime'),
+    # --- caregiver ---
+    ('CaregiverID', 'CaregiverID'),
+    ('AppCaregiverID', 'AppCaregiverID'),
+    ('AideCode', 'AideCode'),
+    ('AideName', 'AideName'),
+    ('AideFName', 'AideFName'),
+    ('AideLName', 'AideLName'),
+    ('AideSSN', 'AideSSN'),
+    ('AideStatus', 'AideStatus'),
+    ('ConCaregiverID', 'ConCaregiverID'),
+    ('ConAppCaregiverID', 'ConAppCaregiverID'),
+    ('ConAideCode', 'ConAideCode'),
+    ('ConAideName', 'ConAideName'),
+    ('ConAideFName', 'ConAideFName'),
+    ('ConAideLName', 'ConAideLName'),
+    ('ConAideSSN', 'ConAideSSN'),
+    ('ConAideStatus', 'ConAideStatus'),
+    # --- office ---
+    ('OfficeID', 'OfficeID'),
+    ('AppOfficeID', 'AppOfficeID'),
+    ('Office', 'Office'),
+    ('ConOfficeID', 'ConOfficeID'),
+    ('ConAppOfficeID', 'ConAppOfficeID'),
+    ('ConOffice', 'ConOffice'),
+    # --- patient ---
+    ('PatientID', 'PatientID'),
+    ('AppPatientID', 'AppPatientID'),
+    ('PAdmissionID', 'PAdmissionID'),
+    ('PName', 'PName'),
+    ('PFName', 'PFName'),
+    ('PLName', 'PLName'),
+    ('PMedicaidNumber', 'PMedicaidNumber'),
+    ('PStatus', 'PStatus'),
+    ('PAddressID', 'PAddressID'),
+    ('PAppAddressID', 'PAppAddressID'),
+    ('PAddressL1', 'PAddressL1'),
+    ('PAddressL2', 'PAddressL2'),
+    ('PCity', 'PCity'),
+    ('PAddressState', 'PAddressState'),
+    ('PZipCode', 'PZipCode'),
+    ('PCounty', 'PCounty'),
+    ('PLongitude', 'PLongitude'),
+    ('PLatitude', 'PLatitude'),
+    # --- conflict patient ---
+    ('ConPatientID', 'ConPatientID'),
+    ('ConAppPatientID', 'ConAppPatientID'),
+    ('ConPAdmissionID', 'ConPAdmissionID'),
+    ('ConPName', 'ConPName'),
+    ('ConPFName', 'ConPFName'),
+    ('ConPLName', 'ConPLName'),
+    ('ConPMedicaidNumber', 'ConPMedicaidNumber'),
+    ('ConPStatus', 'ConPStatus'),
+    ('ConPAddressID', 'ConPAddressID'),
+    ('ConPAppAddressID', 'ConPAppAddressID'),
+    ('ConPAddressL1', 'ConPAddressL1'),
+    ('ConPAddressL2', 'ConPAddressL2'),
+    ('ConPCity', 'ConPCity'),
+    ('ConPAddressState', 'ConPAddressState'),
+    ('ConPZipCode', 'ConPZipCode'),
+    ('ConPCounty', 'ConPCounty'),
+    ('ConPLongitude', 'ConPLongitude'),
+    ('ConPLatitude', 'ConPLatitude'),
+    # --- payer ---
+    ('PayerID', 'PayerID'),
+    ('AppPayerID', 'AppPayerID'),
+    ('Contract', 'Contract'),
+    ('PayerState', 'PayerState'),
+    ('ConPayerID', 'ConPayerID'),
+    ('ConAppPayerID', 'ConAppPayerID'),
+    ('ConContract', 'ConContract'),
+    ('ConPayerState', 'ConPayerState'),
+    # --- billing ---
+    ('BilledDate', 'BilledDate'),
+    ('ConBilledDate', 'ConBilledDate'),
+    ('BilledHours', 'BilledHours'),
+    ('ConBilledHours', 'ConBilledHours'),
+    ('Billed', 'Billed'),
+    ('ConBilled', 'ConBilled'),
+    ('BilledRate', 'BilledRate'),
+    ('TotalBilledAmount', 'TotalBilledAmount'),
+    ('BillRateNonBilled', 'BillRateNonBilled'),
+    ('BillRateBoth', 'BillRateBoth'),
+    ('ConBilledRate', 'ConBilledRate'),
+    ('ConTotalBilledAmount', 'ConTotalBilledAmount'),
+    ('ConBillRateNonBilled', 'ConBillRateNonBilled'),
+    ('ConBillRateBoth', 'ConBillRateBoth'),
+    # --- distance / travel ---
+    ('MinuteDiffBetweenSch', 'MinuteDiffBetweenSch'),
+    ('DistanceMilesFromLatLng', 'DistanceMilesFromLatLng'),
+    ('AverageMilesPerHour', 'AverageMilesPerHour'),
+    ('ETATravleMinutes', 'ETATravelMinutes'),  # Snowflake typo -> PG corrected
+    # --- service code ---
+    ('ServiceCodeID', 'ServiceCodeID'),
+    ('AppServiceCodeID', 'AppServiceCodeID'),
+    ('RateType', 'RateType'),
+    ('ServiceCode', 'ServiceCode'),
+    ('ConServiceCodeID', 'ConServiceCodeID'),
+    ('ConAppServiceCodeID', 'ConAppServiceCodeID'),
+    ('ConRateType', 'ConRateType'),
+    ('ConServiceCode', 'ConServiceCode'),
+    # --- conflict flags ---
+    ('SameSchTimeFlag', 'SameSchTimeFlag'),
+    ('SameVisitTimeFlag', 'SameVisitTimeFlag'),
+    ('SchAndVisitTimeSameFlag', 'SchAndVisitTimeSameFlag'),
+    ('SchOverAnotherSchTimeFlag', 'SchOverAnotherSchTimeFlag'),
+    ('VisitTimeOverAnotherVisitTimeFlag', 'VisitTimeOverAnotherVisitTimeFlag'),
+    ('SchTimeOverVisitTimeFlag', 'SchTimeOverVisitTimeFlag'),
+    ('DistanceFlag', 'DistanceFlag'),
+    # --- missed / EVV ---
+    ('IsMissed', 'IsMissed'),
+    ('MissedVisitReason', 'MissedVisitReason'),
+    ('EVVType', 'EVVType'),
+    ('ConIsMissed', 'ConIsMissed'),
+    ('ConMissedVisitReason', 'ConMissedVisitReason'),
+    ('ConEVVType', 'ConEVVType'),
+    # --- agency contact ---
+    ('AgencyContact', 'AgencyContact'),
+    ('ConAgencyContact', 'ConAgencyContact'),
+    ('AgencyPhone', 'AgencyPhone'),
+    ('ConAgencyPhone', 'ConAgencyPhone'),
+    # --- last updated ---
+    ('LastUpdatedBy', 'LastUpdatedBy'),
+    ('ConLastUpdatedBy', 'ConLastUpdatedBy'),
+    ('LastUpdatedDate', 'LastUpdatedDate'),
+    ('ConLastUpdatedDate', 'ConLastUpdatedDate'),
+    # --- contract type ---
+    ('ContractType', 'ContractType'),
+    ('ConContractType', 'ConContractType'),
+    # --- federal tax ---
+    ('FederalTaxNumber', 'FederalTaxNumber'),
+    ('ConFederalTaxNumber', 'ConFederalTaxNumber'),
+    # --- provider patient ---
+    ('P_PatientID', 'P_PatientID'),
+    ('P_AppPatientID', 'P_AppPatientID'),
+    ('P_PAdmissionID', 'P_PAdmissionID'),
+    ('P_PName', 'P_PName'),
+    ('P_PFName', 'P_PFName'),
+    ('P_PLName', 'P_PLName'),
+    ('P_PMedicaidNumber', 'P_PMedicaidNumber'),
+    ('P_PStatus', 'P_PStatus'),
+    ('P_PAddressID', 'P_PAddressID'),
+    ('P_PAppAddressID', 'P_PAppAddressID'),
+    ('P_PAddressL1', 'P_PAddressL1'),
+    ('P_PAddressL2', 'P_PAddressL2'),
+    ('P_PCity', 'P_PCity'),
+    ('P_PAddressState', 'P_PAddressState'),
+    ('P_PZipCode', 'P_PZipCode'),
+    ('P_PCounty', 'P_PCounty'),
+    # --- conflict provider patient ---
+    ('ConP_PatientID', 'ConP_PatientID'),
+    ('ConP_AppPatientID', 'ConP_AppPatientID'),
+    ('ConP_PAdmissionID', 'ConP_PAdmissionID'),
+    ('ConP_PName', 'ConP_PName'),
+    ('ConP_PFName', 'ConP_PFName'),
+    ('ConP_PLName', 'ConP_PLName'),
+    ('ConP_PMedicaidNumber', 'ConP_PMedicaidNumber'),
+    ('ConP_PStatus', 'ConP_PStatus'),
+    ('ConP_PAddressID', 'ConP_PAddressID'),
+    ('ConP_PAppAddressID', 'ConP_PAppAddressID'),
+    ('ConP_PAddressL1', 'ConP_PAddressL1'),
+    ('ConP_PAddressL2', 'ConP_PAddressL2'),
+    ('ConP_PCity', 'ConP_PCity'),
+    ('ConP_PAddressState', 'ConP_PAddressState'),
+    ('ConP_PZipCode', 'ConP_PZipCode'),
+    ('ConP_PCounty', 'ConP_PCounty'),
+    # --- payer patient ---
+    ('PA_PatientID', 'PA_PatientID'),
+    ('PA_AppPatientID', 'PA_AppPatientID'),
+    ('PA_PAdmissionID', 'PA_PAdmissionID'),
+    ('PA_PName', 'PA_PName'),
+    ('PA_PFName', 'PA_PFName'),
+    ('PA_PLName', 'PA_PLName'),
+    ('PA_PMedicaidNumber', 'PA_PMedicaidNumber'),
+    ('PA_PStatus', 'PA_PStatus'),
+    ('PA_PAddressID', 'PA_PAddressID'),
+    ('PA_PAppAddressID', 'PA_PAppAddressID'),
+    ('PA_PAddressL1', 'PA_PAddressL1'),
+    ('PA_PAddressL2', 'PA_PAddressL2'),
+    ('PA_PCity', 'PA_PCity'),
+    ('PA_PAddressState', 'PA_PAddressState'),
+    ('PA_PZipCode', 'PA_PZipCode'),
+    ('PA_PCounty', 'PA_PCounty'),
+    # --- conflict payer patient ---
+    ('ConPA_PatientID', 'ConPA_PatientID'),
+    ('ConPA_AppPatientID', 'ConPA_AppPatientID'),
+    ('ConPA_PAdmissionID', 'ConPA_PAdmissionID'),
+    ('ConPA_PName', 'ConPA_PName'),
+    ('ConPA_PFName', 'ConPA_PFName'),
+    ('ConPA_PLName', 'ConPA_PLName'),
+    ('ConPA_PMedicaidNumber', 'ConPA_PMedicaidNumber'),
+    ('ConPA_PStatus', 'ConPA_PStatus'),
+    ('ConPA_PAddressID', 'ConPA_PAddressID'),
+    ('ConPA_PAppAddressID', 'ConPA_PAppAddressID'),
+    ('ConPA_PAddressL1', 'ConPA_PAddressL1'),
+    ('ConPA_PAddressL2', 'ConPA_PAddressL2'),
+    ('ConPA_PCity', 'ConPA_PCity'),
+    ('ConPA_PAddressState', 'ConPA_PAddressState'),
+    ('ConPA_PZipCode', 'ConPA_PZipCode'),
+    ('ConPA_PCounty', 'ConPA_PCounty'),
+]
 
 
 class QueryBuilder:
@@ -360,3 +602,43 @@ class QueryBuilder:
         params.extend([visit_id, con_visit_id, visit_id, con_visit_id])
         
         return (sql, tuple(params))
+    
+    def build_insert_template(self, db_names: Dict[str, str]) -> Tuple[str, List[str]]:
+        """
+        Build a parameterised INSERT template for new conflict records.
+        
+        The template is executed via psycopg2 ``execute_batch`` with a list of
+        param tuples (one per row).  Fixed-value columns (StatusFlag, InServiceFlag,
+        PTOFlag, CreatedDate) are embedded as SQL literals so they don't need to
+        appear in the param tuple.
+        
+        Returns:
+            Tuple of:
+              - sql: INSERT statement with %s placeholders for data columns
+              - sf_columns: ordered list of Snowflake dict-key names whose values
+                must be extracted (in order) to build each param tuple
+        """
+        schema = db_names['pg_schema']
+        
+        # Snowflake column keys (for param extraction) and PG column names
+        sf_columns = [sf for sf, _pg in INSERT_COLUMN_MAP]
+        pg_columns = [pg for _sf, pg in INSERT_COLUMN_MAP]
+        
+        # Build the column list: data columns + fixed-value columns
+        all_pg_cols = pg_columns + [
+            'StatusFlag', 'InServiceFlag', 'PTOFlag', 'CreatedDate',
+        ]
+        col_list = ', '.join(f'"{c}"' for c in all_pg_cols)
+        
+        # Build the VALUES clause: %s for each data column, literals for fixed
+        data_placeholders = ', '.join(['%s'] * len(pg_columns))
+        fixed_literals = "'N', 'N', 'N', CURRENT_TIMESTAMP"
+        values_clause = f"{data_placeholders}, {fixed_literals}"
+        
+        sql = (
+            f"INSERT INTO {schema}.conflictvisitmaps ({col_list}) "
+            f"VALUES ({values_clause})"
+        )
+        
+        logger.info(f"Built INSERT template: {len(pg_columns)} data columns + 4 fixed")
+        return sql, sf_columns

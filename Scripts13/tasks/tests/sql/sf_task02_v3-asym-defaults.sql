@@ -12,27 +12,31 @@
 --       All steps below must be executed sequentially.
 -- ============================================================================
 
--- STEP 0: Create excluded SSNs temp table
 -- ============================================================================
--- Populate this from the Postgres excluded_ssn table.
--- Run: SELECT "SSN" FROM conflict_dev.excluded_ssn WHERE "SSN" IS NOT NULL
--- Then paste the values below.
+-- STEP 0: Create excluded_ssns temp table (empty for test queries)
 -- ============================================================================
 CREATE TEMPORARY TABLE IF NOT EXISTS excluded_ssns_temp (ssn VARCHAR);
--- INSERT INTO excluded_ssns_temp (ssn) VALUES ('ssn1'),('ssn2'),('ssn3');
 
-
+-- ============================================================================
 -- STEP 1: Create delta_keys temp table
+-- ============================================================================
+-- PURPOSE: Extract unique (VisitDate, SSN) combinations from recently updated visits
+--          1. Used in Step 2 to expand base_visits scope (asymmetric mode)
+--          2. Used in Step 2d to scope stale cleanup marking in Postgres
 -- ============================================================================
 -- Task 02 v3: Step 1 - Create Delta Keys Temp Table
 -- ============================================================================
 -- 
 -- PURPOSE: Extract unique (VisitDate, SSN) combinations from recently updated visits
---          1. Used in Step 2 to expand base_visits scope (asymmetric mode)
---          2. Used in Step 2b to scope stale cleanup marking in Postgres
+--          to identify which caregivers and dates need comprehensive conflict checking
 --
--- PERFORMANCE: Fast (~10-20 seconds) - processes only 36-hour window
--- OUTPUT: Temp table with ~50K-100K rows (one per unique date+SSN combo)
+-- PERFORMANCE: Fast (~10-20 seconds) - processes only the lookback_hours window
+-- OUTPUT: Temp table with thousands of rows (one per unique date+SSN combo)
+--
+-- USED BY:
+--   - Step 2 Part B (asymmetric): Expand search scope via INNER JOIN delta_keys
+--   - Step 2d (stale cleanup): Stream exact (date, ssn) pairs to Postgres for scoping
+-- Always created in both symmetric and asymmetric modes.
 -- ============================================================================
 
 CREATE TEMPORARY TABLE IF NOT EXISTS delta_keys AS
@@ -49,22 +53,16 @@ WHERE
   CR1."Visit Updated Timestamp" >= DATEADD(HOUR, -36, GETDATE())
   AND DATE(CR1."Visit Date") BETWEEN DATEADD(YEAR, -2, GETDATE()) 
                                  AND DATEADD(DAY, 45, GETDATE())
-  AND CR1."Provider Id" NOT IN ('d65b83d5-eb23-4a20-9e64-288ddcd7e0f1','e1391287-3089-4db6-9603-0357ce908b67','aaa64975-c24a-421b-8239-f148001873e0')
+  AND CR1."Provider Id" NOT IN ('10039','10040','10041','10083','10107','10123','10126','10137','10138','10140','10148','10158')
   AND TRIM(CAR."SSN") NOT IN (SELECT ssn FROM excluded_ssns_temp);
-
--- Verify delta_keys count:
--- SELECT COUNT(*) FROM delta_keys;
 
 
 -- ============================================================================
 -- STEP 2d: Collect actual (visit_date, ssn) pairs for stale cleanup scoping
 -- ============================================================================
--- Lambda streams these exact pairs to PostgreSQL _tmp_delta_pairs via COPY.
--- This gives pair-precise stale scoping (avoids the cross-product problem
--- of separate DISTINCT SSN + DISTINCT date lists).
--- SELECT visit_date, ssn FROM delta_keys;
--- Expected: ~12M pairs (~507K distinct SSNs, ~597 distinct dates)
-
+-- In production, these pairs are streamed to Postgres via chunked COPY.
+-- For standalone Snowflake testing, run this to inspect the scope:
+-- SELECT visit_date, ssn FROM delta_keys
 
 -- ============================================================================
 -- STEP 2 (Part A): Create base_visits with DELTA rows only (~70K, fast)
@@ -72,13 +70,33 @@ WHERE
 -- Uses partition pruning on Visit Updated Timestamp >= 36 hours
 -- All rows get is_delta = 1
 -- Performance: ~30-40 seconds
+
+-- ============================================================================
+-- Task 02 v3: Step 2 - Create/Populate Base Visits Temp Table
+-- ============================================================================
+--
+-- PURPOSE: Materialize filtered visit records with all dimension joins
+--
+-- This template is formatted by Python .format() with these placeholders:
+--   TABLE_CLAUSE, is_delta_value, DELTA_KEYS_JOIN, TIMESTAMP_CONDITION
+--
+-- SYMMETRIC MODE: Formatted ONCE (CREATE, is_delta=1, no join, timestamp >=)
+--   Result: ~70K rows, ~30-40 seconds
+--
+-- ASYMMETRIC MODE: Formatted TWICE:
+--   Part A (CREATE, is_delta=1, no join, timestamp >=): delta rows only
+--   Part B (INSERT, is_delta=0, INNER JOIN delta_keys, timestamp <): related rows
+--   Result: ~70K + ~9.5M rows
+--
+-- The two-step approach avoids the expensive OR + IN subquery pattern that
+-- prevented Snowflake from using micro-partition pruning.
 -- ============================================================================
 
 CREATE TEMPORARY TABLE IF NOT EXISTS base_visits AS
 SELECT 
   DISTINCT 
   CAST(NULL AS STRING) AS "CONFLICTID",
-  1 AS "is_delta",  -- All rows are delta visits (recently updated)
+  1 AS "is_delta",
   CR1."Bill Rate Non-Billed" AS "BillRateNonBilled",
   CASE WHEN CR1."Billed" = 'yes' THEN CR1."Billed Rate" ELSE CR1."Bill Rate Non-Billed" END AS "BillRateBoth",
   TRIM(CAR."SSN") AS "SSN",
@@ -95,6 +113,7 @@ SELECT
   CAST(NULL AS STRING) AS "AgencyContact",
   DPR."Phone Number 1" AS "AgencyPhone",
   DPR."Federal Tax Number" AS "FederalTaxNumber",
+  UPPER(TRIM(DPR."Address State")) AS "ProviderAddressState",
   CR1."Visit Id" AS "VisitID",
   CR1."Application Visit Id" AS "AppVisitID",
   DATE(CR1."Visit Date") AS "VisitDate",
@@ -200,6 +219,7 @@ FROM
     ON CAR."Caregiver Id" = CR1."Caregiver Id"
     AND TRIM(CAR."SSN") IS NOT NULL 
     AND TRIM(CAR."SSN") != ''
+  
   LEFT JOIN ANALYTICS.BI.DIMOFFICE AS DOF 
     ON DOF."Office Id" = CR1."Office Id" AND DOF."Is Active" = TRUE
   LEFT JOIN ANALYTICS.BI.DIMPATIENT AS DPA_P 
@@ -236,7 +256,7 @@ FROM
 WHERE 
   DATE(CR1."Visit Date") BETWEEN DATEADD(YEAR, -2, GETDATE()) 
                              AND DATEADD(DAY, 45, GETDATE())
-  AND CR1."Provider Id" NOT IN ('d65b83d5-eb23-4a20-9e64-288ddcd7e0f1','e1391287-3089-4db6-9603-0357ce908b67','aaa64975-c24a-421b-8239-f148001873e0')
+  AND CR1."Provider Id" NOT IN ('10039','10040','10041','10083','10107','10123','10126','10137','10138','10140','10148','10158')
   AND TRIM(CAR."SSN") NOT IN (SELECT ssn FROM excluded_ssns_temp)
   AND CR1."Visit Updated Timestamp" >= DATEADD(HOUR, -36, GETDATE());
 
@@ -248,13 +268,33 @@ WHERE
 -- Excludes delta rows (timestamp < 36h) to avoid duplicates with Part A
 -- All rows get is_delta = 0 (used in Step 3 join condition)
 -- Performance: estimated 2-5 minutes
+
+-- ============================================================================
+-- Task 02 v3: Step 2 - Create/Populate Base Visits Temp Table
+-- ============================================================================
+--
+-- PURPOSE: Materialize filtered visit records with all dimension joins
+--
+-- This template is formatted by Python .format() with these placeholders:
+--   TABLE_CLAUSE, is_delta_value, DELTA_KEYS_JOIN, TIMESTAMP_CONDITION
+--
+-- SYMMETRIC MODE: Formatted ONCE (CREATE, is_delta=1, no join, timestamp >=)
+--   Result: ~70K rows, ~30-40 seconds
+--
+-- ASYMMETRIC MODE: Formatted TWICE:
+--   Part A (CREATE, is_delta=1, no join, timestamp >=): delta rows only
+--   Part B (INSERT, is_delta=0, INNER JOIN delta_keys, timestamp <): related rows
+--   Result: ~70K + ~9.5M rows
+--
+-- The two-step approach avoids the expensive OR + IN subquery pattern that
+-- prevented Snowflake from using micro-partition pruning.
 -- ============================================================================
 
 INSERT INTO base_visits
 SELECT 
   DISTINCT 
   CAST(NULL AS STRING) AS "CONFLICTID",
-  0 AS "is_delta",  -- Non-delta: related visits pulled in via delta_keys
+  0 AS "is_delta",
   CR1."Bill Rate Non-Billed" AS "BillRateNonBilled",
   CASE WHEN CR1."Billed" = 'yes' THEN CR1."Billed Rate" ELSE CR1."Bill Rate Non-Billed" END AS "BillRateBoth",
   TRIM(CAR."SSN") AS "SSN",
@@ -271,6 +311,7 @@ SELECT
   CAST(NULL AS STRING) AS "AgencyContact",
   DPR."Phone Number 1" AS "AgencyPhone",
   DPR."Federal Tax Number" AS "FederalTaxNumber",
+  UPPER(TRIM(DPR."Address State")) AS "ProviderAddressState",
   CR1."Visit Id" AS "VisitID",
   CR1."Application Visit Id" AS "AppVisitID",
   DATE(CR1."Visit Date") AS "VisitDate",
@@ -309,6 +350,7 @@ SELECT
   CAST(NULL AS STRING) AS "PAddressState",
   CAST(NULL AS STRING) AS "PZipCode",
   CAST(NULL AS STRING) AS "PCounty",
+  -- Coordinate priority: Call Out > Call In > Provider Address
   CASE 
     WHEN CR1."Call Out GPS Coordinates" IS NOT NULL AND CR1."Call Out GPS Coordinates" != ',' 
     THEN REPLACE(SPLIT(CR1."Call Out GPS Coordinates", ',')[1], '"', CAST(NULL AS NUMBER))
@@ -414,12 +456,12 @@ FROM
 WHERE 
   DATE(CR1."Visit Date") BETWEEN DATEADD(YEAR, -2, GETDATE()) 
                              AND DATEADD(DAY, 45, GETDATE())
-  AND CR1."Provider Id" NOT IN ('d65b83d5-eb23-4a20-9e64-288ddcd7e0f1','e1391287-3089-4db6-9603-0357ce908b67','aaa64975-c24a-421b-8239-f148001873e0')
+  AND CR1."Provider Id" NOT IN ('10039','10040','10041','10083','10107','10123','10126','10137','10138','10140','10148','10158')
   AND TRIM(CAR."SSN") NOT IN (SELECT ssn FROM excluded_ssns_temp)
   AND CR1."Visit Updated Timestamp" < DATEADD(HOUR, -36, GETDATE());
 
 
--- STEP 3: Final conflict detection query
+-- ============================================================================
 -- ============================================================================
 -- Task 02 v3: Step 3 - Final Conflict Detection Query (Self-Join on base_visits)
 -- ============================================================================
@@ -427,13 +469,17 @@ WHERE
 -- PURPOSE: Self-join the base_visits temp table to find conflict pairs,
 --          apply 7 conflict detection rules, and return conflicts
 --
--- In ASYMMETRIC mode, base_visits contains ~9.6M rows but the join condition
--- AND V1."is_delta" = 1 ensures at least one side of each pair is a delta visit,
--- reducing the self-join from 9.6M x 9.6M to ~70K x 9.6M effectively.
+-- In SYMMETRIC mode, the join condition is unconstrained (all-vs-all within ~70K rows).
+-- In ASYMMETRIC mode, base_visits is ~9.6M rows but an AND V1."is_delta" = 1
+-- ensures at least one side of each pair is a delta visit (is_delta=1), avoiding
+-- the expensive all-vs-all self-join on the full 9.6M rows.
+--
+-- SYMMETRIC MODE: base_visits contains ~70K rows (lookback_hours delta only)
+-- ASYMMETRIC MODE: base_visits contains ~9.6M rows (delta + related records)
 --
 -- PERFORMANCE: 
---   - Symmetric: ~30-40 seconds (all rows are delta, no extra condition needed)
---   - Asymmetric with is_delta: estimated 1-3 minutes (much faster than all-vs-all)
+--   - Symmetric: ~30-40 seconds
+--   - Asymmetric: ~3-5 minutes (estimated)
 -- ============================================================================
 
 WITH
@@ -479,6 +525,8 @@ conflict_pairs AS (
     V1."PA_PatientID", V1."PA_AppPatientID", V1."PA_PAdmissionID", V1."PA_PName", V1."PA_PFName", V1."PA_PLName", V1."PA_PMedicaidNumber", V1."PA_PStatus",
     V1."PA_PAddressID", V1."PA_PAppAddressID", V1."PA_PAddressL1", V1."PA_PAddressL2", V1."PA_PCity", V1."PA_PAddressState", V1."PA_PZipCode", V1."PA_PCounty",
     V1."ContractType", V1."BillRateNonBilled", V1."BillRateBoth", V1."FederalTaxNumber",
+    V1."AgencyContact", V1."AgencyPhone",
+    V1."ProviderAddressState",
     V1."LastUpdatedDate", V1."LastUpdatedBy",
     V2."ProviderID" AS "ConProviderID", V2."AppProviderID" AS "ConAppProviderID", V2."ProviderName" AS "ConProviderName",
     V2."VisitID" AS "ConVisitID", V2."AppVisitID" AS "ConAppVisitID",
@@ -514,6 +562,8 @@ conflict_pairs AS (
     V2."PA_PAddressState" AS "ConPA_PAddressState", V2."PA_PZipCode" AS "ConPA_PZipCode", V2."PA_PCounty" AS "ConPA_PCounty",
     V2."ContractType" AS "ConContractType", V2."BillRateNonBilled" AS "ConBillRateNonBilled", V2."BillRateBoth" AS "ConBillRateBoth",
     V2."FederalTaxNumber" AS "ConFederalTaxNumber",
+    V2."AgencyContact" AS "ConAgencyContact", V2."AgencyPhone" AS "ConAgencyPhone",
+    V2."ProviderAddressState" AS "ConProviderAddressState",
     V2."LastUpdatedDate" AS "ConLastUpdatedDate", V2."LastUpdatedBy" AS "ConLastUpdatedBy"
   FROM base_visits V1
   INNER JOIN base_visits V2
@@ -521,7 +571,7 @@ conflict_pairs AS (
     AND V1."SSN" = V2."SSN"
     AND V1."ProviderID" != V2."ProviderID"
     AND V1."VisitID" != V2."VisitID"
-    AND V1."is_delta" = 1  -- ASYMMETRIC: only delta visits on V1 side
+    AND V1."is_delta" = 1
 ),
 
 -- CTE 3: Calculate geospatial metrics ONCE (optimization: was calculated 5+ times before)
@@ -638,9 +688,69 @@ final_conflicts AS (
     OR "VisitTimeOverAnotherVisitTimeFlag" = 'Y'
     OR "SchTimeOverVisitTimeFlag" = 'Y'
     OR "DistanceFlag" = 'Y'
+),
+
+-- CTE 7: State name normalization lookup (full name -> abbreviation)
+-- Matches the StateMapping CTE in SP_CLEANUP_CROSS_STATE_CONFLICTS
+state_map AS (
+  SELECT 'MISSISSIPPI' AS full_name, 'MS' AS abbr
+  UNION ALL SELECT 'NEW YORK', 'NY'
+  UNION ALL SELECT 'PENNSYLVANIA', 'PA'
+  UNION ALL SELECT 'LONG ISLAND', 'LI'
+),
+
+-- CTE 8: Pre-compute normalized address states for cross-state detection
+-- Fallback: If BOTH patient addresses on a side are NULL, use Provider "Address State"
+-- Logic matches SP_CLEANUP_CROSS_STATE_CONFLICTS exactly.
+cross_state_prep AS (
+  SELECT fc.*,
+    -- Left side (V1): normalized P and PA states, with provider address fallback
+    CASE WHEN NULLIF(UPPER(TRIM(fc."P_PAddressState")), '') IS NULL
+              AND NULLIF(UPPER(TRIM(fc."PA_PAddressState")), '') IS NULL
+         THEN NULLIF(fc."ProviderAddressState", '')
+         ELSE COALESCE(sm1.abbr, NULLIF(UPPER(TRIM(fc."P_PAddressState")), ''))
+    END AS "_P_Final",
+    CASE WHEN NULLIF(UPPER(TRIM(fc."P_PAddressState")), '') IS NULL
+              AND NULLIF(UPPER(TRIM(fc."PA_PAddressState")), '') IS NULL
+         THEN NULLIF(fc."ProviderAddressState", '')
+         ELSE COALESCE(sm2.abbr, NULLIF(UPPER(TRIM(fc."PA_PAddressState")), ''))
+    END AS "_PA_Final",
+    -- Right side (V2): normalized ConP and ConPA states, with con-provider address fallback
+    CASE WHEN NULLIF(UPPER(TRIM(fc."ConP_PAddressState")), '') IS NULL
+              AND NULLIF(UPPER(TRIM(fc."ConPA_PAddressState")), '') IS NULL
+         THEN NULLIF(fc."ConProviderAddressState", '')
+         ELSE COALESCE(sm3.abbr, NULLIF(UPPER(TRIM(fc."ConP_PAddressState")), ''))
+    END AS "_ConP_Final",
+    CASE WHEN NULLIF(UPPER(TRIM(fc."ConP_PAddressState")), '') IS NULL
+              AND NULLIF(UPPER(TRIM(fc."ConPA_PAddressState")), '') IS NULL
+         THEN NULLIF(fc."ConProviderAddressState", '')
+         ELSE COALESCE(sm4.abbr, NULLIF(UPPER(TRIM(fc."ConPA_PAddressState")), ''))
+    END AS "_ConPA_Final"
+  FROM final_conflicts fc
+  LEFT JOIN state_map sm1 ON UPPER(TRIM(fc."P_PAddressState")) = sm1.full_name
+  LEFT JOIN state_map sm2 ON UPPER(TRIM(fc."PA_PAddressState")) = sm2.full_name
+  LEFT JOIN state_map sm3 ON UPPER(TRIM(fc."ConP_PAddressState")) = sm3.full_name
+  LEFT JOIN state_map sm4 ON UPPER(TRIM(fc."ConPA_PAddressState")) = sm4.full_name
+),
+
+-- CTE 9: Exclude cross-state conflicts (no left-side state matches any right-side state)
+-- ANY-to-ANY: 2x2 matrix of (P_Final, PA_Final) vs (ConP_Final, ConPA_Final)
+-- If all addresses NULL on either side, keep (cannot determine)
+same_state_conflicts AS (
+  SELECT *
+  FROM cross_state_prep
+  WHERE
+    -- NULL safety: if all resolved states are NULL on either side, keep
+    COALESCE("_P_Final", "_PA_Final") IS NULL
+    OR COALESCE("_ConP_Final", "_ConPA_Final") IS NULL
+    -- ANY-to-ANY match (4 combinations)
+    OR "_P_Final"  = "_ConP_Final"
+    OR "_P_Final"  = "_ConPA_Final"
+    OR "_PA_Final" = "_ConP_Final"
+    OR "_PA_Final" = "_ConPA_Final"
 )
 
--- Final SELECT: Return all columns needed for UPDATE
+-- Final SELECT: Return all columns needed for UPDATE + INSERT
 SELECT 
   "CONFLICTID", "SSN",
   "ProviderID", "AppProviderID", "ProviderName", "VisitID", "AppVisitID",
@@ -672,6 +782,7 @@ SELECT
   "PFName", "PLName", "ConPFName", "ConPLName",
   "PMedicaidNumber", "ConPMedicaidNumber",
   "PayerState", "ConPayerState",
+  "AgencyContact", "ConAgencyContact", "AgencyPhone", "ConAgencyPhone",
   "LastUpdatedBy", "ConLastUpdatedBy", "LastUpdatedDate", "ConLastUpdatedDate",
   "BilledRate", "TotalBilledAmount", "ConBilledRate", "ConTotalBilledAmount",
   "IsMissed", "MissedVisitReason", "EVVType",
@@ -691,5 +802,5 @@ SELECT
   "P_PStatus", "ConP_PStatus", "PA_PStatus", "ConPA_PStatus",
   "BillRateNonBilled", "ConBillRateNonBilled", "BillRateBoth", "ConBillRateBoth",
   "FederalTaxNumber", "ConFederalTaxNumber"
-FROM final_conflicts;
+FROM same_state_conflicts;
 

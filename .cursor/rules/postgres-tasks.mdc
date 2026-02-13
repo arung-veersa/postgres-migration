@@ -22,7 +22,7 @@ Conflict/postgres/
 ├── scripts/
 │   ├── main.py                          # ECS entry point, ACTION dispatching, SIGTERM handling
 │   └── actions/
-│       ├── task00_preflight.py           # Pre-run validation, pg_cron disable, InProgressFlag
+│       ├── task00_preflight.py           # Pre-run validation, pg_cron disable, InProgressFlag, sequence sync
 │       ├── task01_copy_to_staging.py     # PPR sync from Snowflake dims, staging populate
 │       ├── task02_00_conflict_update.py  # v3 conflict detection UPDATE pipeline
 │       ├── task99_postflight.py          # VACUUM/ANALYZE, pg_cron re-enable, email, summary
@@ -73,7 +73,7 @@ Conflict/postgres/
 3. **Step 2 Part A**: Create `base_visits` with delta rows only (`is_delta=1`)
 4. **Step 2 Part B** (asymmetric): INSERT related non-delta rows via `INNER JOIN delta_keys` (`is_delta=0`)
 5. **Step 2d**: Stream `(visit_date, ssn)` pairs from `delta_keys` to PostgreSQL `_tmp_delta_pairs` via chunked COPY
-6. **Step 3**: Self-join `base_visits` with `V1.is_delta=1` constraint (asymmetric), stream conflicts
+6. **Step 3**: Self-join `base_visits` with `V1.is_delta=1` constraint (asymmetric), apply cross-state filter (CTEs 7-9), stream conflicts
 7. **Step 4**: Pair-precise stale cleanup -- Phase 1: identify stale via anti-join on `_tmp_delta_pairs`; Phase 2: batched UPDATE (100K chunks), `StatusFlag='R'`
 
 ## Critical Design Decisions
@@ -98,42 +98,54 @@ Conflict/postgres/
 - v1/v2 SQL template and default files deleted (no longer referenced by any code)
 - `delta_keys` (step1) is always created in both modes (needed for stale cleanup scoping, not just asymmetric join)
 
-## Latest Performance Run (2026-02-10, asymmetric + stale cleanup)
+## Latest Performance Runs (2026-02-13, asymmetric + stale + insert + cross-state filter)
 
+### 36h lookback (baseline validation with cross-state filter)
 | Metric | Value |
 |---|---|
-| Total time | 8m 29s (509s) |
-| Rows fetched from Snowflake | 153,901 |
-| Matched in Postgres | 51,612 (33.5%) |
-| New conflicts (not in PG) | 102,289 (66.5%) |
-| Changes detected | 6,134 (5,202 flag + 932 business) |
-| Rows actually updated | 216 |
-| Rows skipped (no changes) | 45,478 (88.1%) |
-| Stale conflicts resolved | 9,294 → StatusFlag='R' |
-| Delta pairs (stale scope) | 12,517,521 (640K SSNs × 596 dates) |
-| Peak memory | 455 MB of 5,120 MB allocated |
+| Total pipeline time | 12m 28s |
+| task02 time | 6m 59s (419s) |
+| Rows fetched from Snowflake | 99,883 |
+| Matched in Postgres | 99,883 (100%) |
+| New conflicts | 0 (all previously inserted) |
+| Updates needed | 0 (no data changes) |
+| Stale conflicts resolved | 49 → StatusFlag='R' (cross-state pairs) |
+| Delta pairs (stale scope) | 8,832,316 (644K SSNs × 596 dates) |
+
+### 60h lookback (stress test)
+| Metric | Value |
+|---|---|
+| Total pipeline time | 12m 42s |
+| task02 time | 8m 17s (498s) |
+| Rows fetched from Snowflake | 152,073 |
+| Matched in Postgres | 114,577 (75%) |
+| New conflicts inserted | 37,496 |
+| Rows updated | 79 |
+| Stale conflicts resolved | 0 |
+| Delta pairs (stale scope) | 12,745,668 (646K SSNs × 596 dates) |
 | Errors | 0 |
 
-### Time breakdown:
-- Step 0 (excluded SSNs): ~6s
-- Step 1 (delta_keys): ~5s
-- Step 2 (base_visits A+B): ~148s
+### Time breakdown (60h run):
+- Step 0 (excluded SSNs): ~7s
+- Step 1 (delta_keys): ~9s
+- Step 2 (base_visits A+B): ~145s
 - Step 2d (delta pairs → PG): ~92s
-- Step 3 (conflict detection + streaming batches): ~140s
-- Step 4 (stale cleanup): ~117s (84s identify + 32s update)
+- Step 3 (conflict detection + streaming + inserts): ~197s
+- Step 4 (stale cleanup): ~41s
 
-## Current State (as of 2026-02-12)
+## Current State (as of 2026-02-13)
 
 ### What's working:
 - v3 multi-step Snowflake query architecture (delta_keys -> base_visits -> self-join)
 - Asymmetric join with is_delta flag optimization
 - Streaming cursor + 5K-row batch processing with commit-per-batch
 - Conditional flag updates (7 flags: only N->Y, StatusFlag W/I preserved)
+- **INSERT of new conflicts** integrated into streaming pass (~102K/run, StatusFlag='N', 202-column mapping, `enable_insert` config flag)
 - Pair-precise stale cleanup (12.5M pairs, seen-based anti-join, StatusFlag='R')
 - Change detection (_has_changes: 7 flags + 40 business columns)
 - Excluded SSNs loaded from PostgreSQL into Snowflake temp table
 - Column name mapping (ETATravleMinutes->ETATravelMinutes, SchVisitTimeSame->SchAndVisitTimeSameFlag)
-- 81 pytest tests covering all of the above
+- 105 pytest tests covering all of the above
 - **ECS containerization COMPLETE**: Dockerfile, task definition, ECR deployment, interactive deploy script
 - Entry point: `scripts/main.py` with comma-separated ACTION env var and DEFAULT_ACTIONS pipeline
 - JSON-safe env var substitution in `settings.py` (handles RSA keys with newlines)
@@ -141,10 +153,11 @@ Conflict/postgres/
 - **Modular action architecture**: main.py is a lean orchestrator; each action in `scripts/actions/<key>.py`
 - **task01_copy_to_staging COMPLETE**: PPR sync via temp-table + UPDATE FROM JOIN (~3s), staging populate (~280s for 8M rows)
 - **Pipeline summary logging**: Plain-text summary always logged to CloudWatch (independent of email)
+- **Cross-state conflict filter** in Step 3 SQL (CTEs 7-9: `state_map` + `cross_state_prep` + `same_state_conflicts`): excludes conflicts where no address state on V1 side matches any on V2 side. State normalization via `state_map` CTE with LEFT JOIN lookups (single definition, no repetition), provider address fallback when both patient addresses NULL, matching `SP_CLEANUP_CROSS_STATE_CONFLICTS` logic exactly. Prevents both INSERT and UPDATE of cross-state pairs; stale cleanup auto-resolves existing ones.
+- **Identity sequence sync** in preflight step 6: auto-advances identity sequences to MAX(ID) if behind, with self-healing retry in `_execute_inserts_with_commit`
 - Successfully deployed and tested on ECS Fargate (~14 min full pipeline with task01)
 
 ### What's NOT yet done:
-- INSERT logic for new conflicts (~102K detected but not inserted per run)
 - Conflicts table aggregation
 - UpdateFlag cleanup (DEFERRED)
 - AWS Secrets Manager integration (currently using plain environment variables)
@@ -165,9 +178,9 @@ Conflict/postgres/
 - Import: `from scripts.actions.<key> import run_<key>`
 
 ### Pipeline Actions (DEFAULT_ACTIONS)
-- `task00_preflight`: 1) Validate config params, 2) Verify Snowflake+PG connectivity, 3) Check required tables, 4) Disable pg_cron job, 5) Set InProgressFlag=1, 6) Capture pre-run row counts
+- `task00_preflight`: 1) Validate config params, 2) Verify Snowflake+PG connectivity, 3) Check required tables, 4) Disable pg_cron job, 5) Set InProgressFlag=1, 6) Sync identity sequences (advance to MAX(ID) if behind), 7) Capture pre-run row counts
 - `task01_copy_to_staging`: 1) Sync payer_provider_reminders from Snowflake dims (temp-table + UPDATE FROM JOIN), 2) Truncate+populate conflictlog_staging from conflictvisitmaps+conflicts (date-filtered)
-- `task02_00_conflict_update`: v3 conflict detection UPDATE pipeline (streaming cursor, batch processing, stale cleanup)
+- `task02_00_conflict_update`: v3 conflict detection pipeline (streaming cursor, batch UPDATE + INSERT, stale cleanup)
 - `task99_postflight`: 1) VACUUM all tables, 2) ANALYZE all tables, 3) Set InProgressFlag=0, 4) Refresh materialized view (CONCURRENTLY), 5) Re-enable pg_cron job, 6) Capture post-run row counts, 7) Log pipeline summary, 8) Send SES email (if enabled)
 
 ### Standalone Actions (not in default pipeline, available via ACTION env var)

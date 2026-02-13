@@ -23,7 +23,8 @@ class ConflictProcessor:
         batch_size: int = 5000,
         skip_unchanged_records: bool = True,
         enable_asymmetric_join: bool = True,
-        enable_stale_cleanup: bool = True
+        enable_stale_cleanup: bool = True,
+        enable_insert: bool = True
     ):
         self.sf_manager = sf_manager
         self.pg_manager = pg_manager
@@ -33,16 +34,22 @@ class ConflictProcessor:
         self.skip_unchanged_records = skip_unchanged_records
         self.enable_asymmetric_join = enable_asymmetric_join
         self.enable_stale_cleanup = enable_stale_cleanup
+        self.enable_insert = enable_insert
         self.logger = logger
         
         # Persistent Postgres connection for batch processing
         self.pg_connection = None
+        
+        # INSERT template (built once, reused for all batches)
+        self._insert_sql: Optional[str] = None
+        self._insert_sf_columns: Optional[List[str]] = None
         
         # Statistics
         self.stats = {
             'rows_fetched': 0,
             'rows_processed': 0,
             'rows_updated': 0,
+            'rows_inserted': 0,
             'rows_skipped_no_changes': 0,
             'batches_processed': 0,
             'errors': 0,
@@ -53,6 +60,9 @@ class ConflictProcessor:
             'changes_by_flag': 0,
             'changes_by_business_data': 0,
             'skip_unchanged_records': skip_unchanged_records,
+            # INSERT stats
+            'insert_enabled': enable_insert,
+            'insert_batches': 0,
             # Asymmetric join stats
             'asymmetric_join_enabled': enable_asymmetric_join,
             'stale_cleanup_enabled': enable_stale_cleanup,
@@ -143,6 +153,12 @@ class ConflictProcessor:
         logger.info(f"  Batch size: {self.batch_size}")
         logger.info(f"  Asymmetric join: {'ENABLED' if self.enable_asymmetric_join else 'DISABLED'}")
         logger.info(f"  Stale cleanup: {'ENABLED' if self.enable_stale_cleanup else 'DISABLED'}")
+        logger.info(f"  Insert new conflicts: {'ENABLED' if self.enable_insert else 'DISABLED'}")
+        
+        # Build INSERT template once (reused for every batch)
+        if self.enable_insert:
+            self._insert_sql, self._insert_sf_columns = \
+                self.query_builder.build_insert_template(self.db_names)
         
         batch = []
         batch_number = 0
@@ -380,7 +396,7 @@ class ConflictProcessor:
             
             logger.info(f"  Matched: {matched_count}, New: {new_count}")
             
-            # Match and prepare updates (with change detection)
+            # --- UPDATES: Match and prepare updates (with change detection) ---
             updates = self._prepare_updates(batch, existing_records)
             
             if updates:
@@ -404,6 +420,29 @@ class ConflictProcessor:
                 logger.info(f"  ✓ Batch {batch_number}: {rows_updated} rows updated (COMMITTED)")
             else:
                 logger.info(f"  ✓ Batch {batch_number}: No updates needed")
+            
+            # --- INSERTS: Insert new conflict rows ---
+            if self.enable_insert and new_count > 0:
+                # Collect new rows (those not matched in PG)
+                new_rows = []
+                for conflict_row in batch:
+                    visit_id = str(conflict_row.get('VisitID'))
+                    con_visit_id = str(conflict_row.get('ConVisitID')) if conflict_row.get('ConVisitID') else None
+                    key = (visit_id, con_visit_id)
+                    if key not in existing_records:
+                        new_rows.append(conflict_row)
+                
+                if new_rows:
+                    # Get or create persistent connection
+                    if self.pg_connection is None:
+                        self.pg_connection = self.pg_manager.get_connection(
+                            database=self.db_names['pg_database']
+                        )
+                    
+                    rows_inserted = self._execute_inserts_with_commit(new_rows)
+                    self.stats['rows_inserted'] += rows_inserted
+                    self.stats['insert_batches'] += 1
+                    logger.info(f"  ✓ Batch {batch_number}: {rows_inserted} rows inserted (COMMITTED)")
             
             self.stats['rows_processed'] += len(batch)
             self.stats['batches_processed'] += 1
@@ -627,7 +666,7 @@ class ConflictProcessor:
         
         Args:
             new_row: Dictionary of column values from Snowflake
-            existing_row: Dictionary of existing column values from Postgres (48 columns)
+            existing_row: Dictionary of existing column values from Postgres (40 columns)
         
         Returns:
             True if changes detected OR optimization disabled, False otherwise
@@ -745,6 +784,94 @@ class ConflictProcessor:
             raise
         finally:
             cursor.close()
+    
+    def _execute_inserts_with_commit(self, new_rows: List[Dict[str, Any]]) -> int:
+        """
+        INSERT new conflict rows using persistent connection with explicit commit.
+        
+        Uses the pre-built INSERT template (self._insert_sql) and extracts values
+        from each Snowflake row dict in the column order defined by
+        self._insert_sf_columns.  Executed via psycopg2 ``execute_batch`` for
+        efficient batching.
+        
+        Args:
+            new_rows: List of Snowflake conflict row dicts to insert
+        
+        Returns:
+            Number of rows inserted
+        """
+        if not new_rows or not self._insert_sql:
+            return 0
+        
+        from psycopg2.extras import execute_batch
+        import psycopg2.errors
+        
+        # Build param tuples from row dicts (done once, reusable on retry)
+        params_list = []
+        for row in new_rows:
+            params = tuple(row.get(col) for col in self._insert_sf_columns)
+            params_list.append(params)
+        
+        schema = self.db_names['pg_schema']
+        max_attempts = 2  # original + 1 retry after sequence fix
+        
+        for attempt in range(1, max_attempts + 1):
+            cursor = self.pg_connection.cursor()
+            try:
+                execute_batch(cursor, self._insert_sql, params_list, page_size=1000)
+                # NOTE: cursor.rowcount after execute_batch only reflects the
+                # last statement in the semicolon-joined batch, so it always
+                # returns 1.  Use len(params_list) instead -- if execute_batch
+                # raises no exception, all rows were inserted successfully.
+                inserted = len(params_list)
+                
+                # CRITICAL: Explicit commit to save progress
+                self.pg_connection.commit()
+                cursor.close()
+                return inserted
+            
+            except psycopg2.errors.UniqueViolation as e:
+                self.pg_connection.rollback()
+                cursor.close()
+                
+                if attempt < max_attempts and 'conflictvisitmaps_pkey' in str(e):
+                    # Identity sequence is behind MAX(ID) -- auto-fix and retry
+                    self.logger.warning(
+                        f"Identity sequence collision detected (attempt {attempt}). "
+                        f"Advancing sequence to MAX(ID) and retrying..."
+                    )
+                    fix_cursor = self.pg_connection.cursor()
+                    try:
+                        fix_cursor.execute(
+                            "SELECT pg_get_serial_sequence(%s, 'ID')",
+                            (f'{schema}.conflictvisitmaps',),
+                        )
+                        seq_name = fix_cursor.fetchone()[0]
+                        fix_cursor.execute(
+                            f'SELECT setval(%s, (SELECT MAX("ID") FROM {schema}.conflictvisitmaps))',
+                            (seq_name,),
+                        )
+                        new_val = fix_cursor.fetchone()[0]
+                        self.pg_connection.commit()
+                        self.logger.warning(
+                            f"  Sequence {seq_name} advanced to {new_val:,}. Retrying insert..."
+                        )
+                    except Exception as fix_err:
+                        self.pg_connection.rollback()
+                        self.logger.error(f"  Failed to fix sequence: {fix_err}")
+                        raise e from fix_err
+                    finally:
+                        fix_cursor.close()
+                    continue  # retry the insert with a fresh cursor
+                
+                self.logger.error(f"Batch insert failed: {e}")
+                raise
+            
+            except Exception as e:
+                self.pg_connection.rollback()
+                cursor.close()
+                self.logger.error(f"Batch insert failed: {e}")
+                raise
     
     def _resolve_stale_conflicts_seen_based(self, seen_conflict_keys: set):
         """
@@ -914,12 +1041,15 @@ class ConflictProcessor:
             'rows_fetched': self.stats['rows_fetched'],
             'rows_processed': self.stats['rows_processed'],
             'rows_updated': self.stats['rows_updated'],
+            'rows_inserted': self.stats['rows_inserted'],
             'rows_skipped_no_changes': self.stats['rows_skipped_no_changes'],
             'batches_processed': self.stats['batches_processed'],
             'errors': self.stats['errors'],
             'unique_visits': len(self.stats['unique_visits']),
             'matched_in_postgres': self.stats['matched_in_postgres'],
             'new_conflicts': self.stats['new_conflicts'],
+            'insert_enabled': self.stats['insert_enabled'],
+            'insert_batches': self.stats['insert_batches'],
             'stale_conflicts_reset': self.stats['stale_conflicts_reset'],
             'delta_ssns_count': self.stats['delta_ssns_count'],
             'delta_dates_count': self.stats.get('delta_dates_count', 0),
@@ -998,7 +1128,7 @@ class ConflictProcessor:
         logger.info("Configuration:")
         logger.info(f"  Skip unchanged records: {'YES' if self.skip_unchanged_records else 'NO'}")
         if self.skip_unchanged_records:
-            logger.info(f"  Columns compared: 48 (7 flags + 41 business)")
+            logger.info(f"  Columns compared: 40 (7 flags + 33 business)")
         logger.info(f"  Asymmetric join: {'ENABLED' if self.enable_asymmetric_join else 'DISABLED'}")
         if self.enable_asymmetric_join:
             logger.info(f"  (Delta vs All visits - catches conflicts with unchanged records)")
@@ -1042,7 +1172,7 @@ class ConflictProcessor:
         else:
             # Unique visits count (legacy mode)
             unique_visit_count = self.stats['unique_visits'] if isinstance(self.stats['unique_visits'], int) else len(self.stats['unique_visits'])
-            logger.info(f"  Unique visits in last 36 hours: {unique_visit_count:,}")
+            logger.info(f"  Unique visits in lookback window: {unique_visit_count:,}")
         
         # Match statistics
         matched = self.stats['matched_in_postgres']
@@ -1099,6 +1229,18 @@ class ConflictProcessor:
         
         logger.info(f"  Batches processed: {self.stats['batches_processed']:,}")
         logger.info(f"  Errors encountered: {self.stats['errors']}")
+        
+        # Insert results
+        logger.info("")
+        logger.info("Insert Results:")
+        if self.enable_insert:
+            logger.info(f"  New conflicts inserted: {self.stats['rows_inserted']:,}")
+            if new_conflicts > 0:
+                insert_pct = (self.stats['rows_inserted'] / new_conflicts) * 100
+                logger.info(f"  Insert rate (inserted/new): {insert_pct:.1f}%")
+            logger.info(f"  Insert batches: {self.stats['insert_batches']:,}")
+        else:
+            logger.info(f"  INSERT DISABLED -- {new_conflicts:,} new conflicts skipped")
         
         # Throughput
         if self.stats['rows_fetched'] > 0:

@@ -49,6 +49,8 @@ conflict_pairs AS (
     V1."PA_PatientID", V1."PA_AppPatientID", V1."PA_PAdmissionID", V1."PA_PName", V1."PA_PFName", V1."PA_PLName", V1."PA_PMedicaidNumber", V1."PA_PStatus",
     V1."PA_PAddressID", V1."PA_PAppAddressID", V1."PA_PAddressL1", V1."PA_PAddressL2", V1."PA_PCity", V1."PA_PAddressState", V1."PA_PZipCode", V1."PA_PCounty",
     V1."ContractType", V1."BillRateNonBilled", V1."BillRateBoth", V1."FederalTaxNumber",
+    V1."AgencyContact", V1."AgencyPhone",
+    V1."ProviderAddressState",
     V1."LastUpdatedDate", V1."LastUpdatedBy",
     V2."ProviderID" AS "ConProviderID", V2."AppProviderID" AS "ConAppProviderID", V2."ProviderName" AS "ConProviderName",
     V2."VisitID" AS "ConVisitID", V2."AppVisitID" AS "ConAppVisitID",
@@ -84,6 +86,8 @@ conflict_pairs AS (
     V2."PA_PAddressState" AS "ConPA_PAddressState", V2."PA_PZipCode" AS "ConPA_PZipCode", V2."PA_PCounty" AS "ConPA_PCounty",
     V2."ContractType" AS "ConContractType", V2."BillRateNonBilled" AS "ConBillRateNonBilled", V2."BillRateBoth" AS "ConBillRateBoth",
     V2."FederalTaxNumber" AS "ConFederalTaxNumber",
+    V2."AgencyContact" AS "ConAgencyContact", V2."AgencyPhone" AS "ConAgencyPhone",
+    V2."ProviderAddressState" AS "ConProviderAddressState",
     V2."LastUpdatedDate" AS "ConLastUpdatedDate", V2."LastUpdatedBy" AS "ConLastUpdatedBy"
   FROM base_visits V1
   INNER JOIN base_visits V2
@@ -208,9 +212,69 @@ final_conflicts AS (
     OR "VisitTimeOverAnotherVisitTimeFlag" = 'Y'
     OR "SchTimeOverVisitTimeFlag" = 'Y'
     OR "DistanceFlag" = 'Y'
+),
+
+-- CTE 7: State name normalization lookup (full name -> abbreviation)
+-- Matches the StateMapping CTE in SP_CLEANUP_CROSS_STATE_CONFLICTS
+state_map AS (
+  SELECT 'MISSISSIPPI' AS full_name, 'MS' AS abbr
+  UNION ALL SELECT 'NEW YORK', 'NY'
+  UNION ALL SELECT 'PENNSYLVANIA', 'PA'
+  UNION ALL SELECT 'LONG ISLAND', 'LI'
+),
+
+-- CTE 8: Pre-compute normalized address states for cross-state detection
+-- Fallback: If BOTH patient addresses on a side are NULL, use Provider "Address State"
+-- Logic matches SP_CLEANUP_CROSS_STATE_CONFLICTS exactly.
+cross_state_prep AS (
+  SELECT fc.*,
+    -- Left side (V1): normalized P and PA states, with provider address fallback
+    CASE WHEN NULLIF(UPPER(TRIM(fc."P_PAddressState")), '') IS NULL
+              AND NULLIF(UPPER(TRIM(fc."PA_PAddressState")), '') IS NULL
+         THEN NULLIF(fc."ProviderAddressState", '')
+         ELSE COALESCE(sm1.abbr, NULLIF(UPPER(TRIM(fc."P_PAddressState")), ''))
+    END AS "_P_Final",
+    CASE WHEN NULLIF(UPPER(TRIM(fc."P_PAddressState")), '') IS NULL
+              AND NULLIF(UPPER(TRIM(fc."PA_PAddressState")), '') IS NULL
+         THEN NULLIF(fc."ProviderAddressState", '')
+         ELSE COALESCE(sm2.abbr, NULLIF(UPPER(TRIM(fc."PA_PAddressState")), ''))
+    END AS "_PA_Final",
+    -- Right side (V2): normalized ConP and ConPA states, with con-provider address fallback
+    CASE WHEN NULLIF(UPPER(TRIM(fc."ConP_PAddressState")), '') IS NULL
+              AND NULLIF(UPPER(TRIM(fc."ConPA_PAddressState")), '') IS NULL
+         THEN NULLIF(fc."ConProviderAddressState", '')
+         ELSE COALESCE(sm3.abbr, NULLIF(UPPER(TRIM(fc."ConP_PAddressState")), ''))
+    END AS "_ConP_Final",
+    CASE WHEN NULLIF(UPPER(TRIM(fc."ConP_PAddressState")), '') IS NULL
+              AND NULLIF(UPPER(TRIM(fc."ConPA_PAddressState")), '') IS NULL
+         THEN NULLIF(fc."ConProviderAddressState", '')
+         ELSE COALESCE(sm4.abbr, NULLIF(UPPER(TRIM(fc."ConPA_PAddressState")), ''))
+    END AS "_ConPA_Final"
+  FROM final_conflicts fc
+  LEFT JOIN state_map sm1 ON UPPER(TRIM(fc."P_PAddressState")) = sm1.full_name
+  LEFT JOIN state_map sm2 ON UPPER(TRIM(fc."PA_PAddressState")) = sm2.full_name
+  LEFT JOIN state_map sm3 ON UPPER(TRIM(fc."ConP_PAddressState")) = sm3.full_name
+  LEFT JOIN state_map sm4 ON UPPER(TRIM(fc."ConPA_PAddressState")) = sm4.full_name
+),
+
+-- CTE 9: Exclude cross-state conflicts (no left-side state matches any right-side state)
+-- ANY-to-ANY: 2x2 matrix of (P_Final, PA_Final) vs (ConP_Final, ConPA_Final)
+-- If all addresses NULL on either side, keep (cannot determine)
+same_state_conflicts AS (
+  SELECT *
+  FROM cross_state_prep
+  WHERE
+    -- NULL safety: if all resolved states are NULL on either side, keep
+    COALESCE("_P_Final", "_PA_Final") IS NULL
+    OR COALESCE("_ConP_Final", "_ConPA_Final") IS NULL
+    -- ANY-to-ANY match (4 combinations)
+    OR "_P_Final"  = "_ConP_Final"
+    OR "_P_Final"  = "_ConPA_Final"
+    OR "_PA_Final" = "_ConP_Final"
+    OR "_PA_Final" = "_ConPA_Final"
 )
 
--- Final SELECT: Return all columns needed for UPDATE
+-- Final SELECT: Return all columns needed for UPDATE + INSERT
 SELECT 
   "CONFLICTID", "SSN",
   "ProviderID", "AppProviderID", "ProviderName", "VisitID", "AppVisitID",
@@ -242,6 +306,7 @@ SELECT
   "PFName", "PLName", "ConPFName", "ConPLName",
   "PMedicaidNumber", "ConPMedicaidNumber",
   "PayerState", "ConPayerState",
+  "AgencyContact", "ConAgencyContact", "AgencyPhone", "ConAgencyPhone",
   "LastUpdatedBy", "ConLastUpdatedBy", "LastUpdatedDate", "ConLastUpdatedDate",
   "BilledRate", "TotalBilledAmount", "ConBilledRate", "ConTotalBilledAmount",
   "IsMissed", "MissedVisitReason", "EVVType",
@@ -261,4 +326,4 @@ SELECT
   "P_PStatus", "ConP_PStatus", "PA_PStatus", "ConPA_PStatus",
   "BillRateNonBilled", "ConBillRateNonBilled", "BillRateBoth", "ConBillRateBoth",
   "FederalTaxNumber", "ConFederalTaxNumber"
-FROM final_conflicts;
+FROM same_state_conflicts;

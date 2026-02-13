@@ -38,21 +38,22 @@ Scripts13 was copied from Scripts12 and repackaged as a **Docker container** dep
 - Change detection (_has_changes: 7 flags + 40 business columns)
 - Excluded SSNs loaded from PostgreSQL into Snowflake temp table
 - Column name mapping (ETATravleMinutes→ETATravelMinutes, SchVisitTimeSame→SchAndVisitTimeSameFlag)
-- 81 pytest tests covering all of the above
+- **Cross-state conflict filter**: Snowflake CTE excludes conflicts where no address state matches across sides (state normalization + provider fallback, matching SP_CLEANUP_CROSS_STATE_CONFLICTS)
+- 105 pytest tests covering all of the above
 - **Docker/ECS containerization complete**: Dockerfile, ECS task definition, ECR deployment
 - **Container entry point** (`scripts/main.py`): comma-separated ACTION env var, DEFAULT_ACTIONS pipeline, SIGTERM graceful shutdown
 - **Modular action architecture**: main.py is a lean orchestrator; each action in `scripts/actions/<key>.py` with `run_<key>()` naming convention
 - **JSON-safe env var substitution** in `settings.py` (handles RSA keys with newlines)
 - **Interactive deploy script** (`deploy/build-and-push-ecr.ps1`): SSO login, Docker build, ECR push, **task definition registration** (template + `.env` -> resolved JSON -> `aws ecs register-task-definition`), ECS run with action overrides
 - **Deploy .env pattern**: `deploy/.env.example` template, `deploy/.env` for secrets (gitignored), `deploy/.generated-taskdef.json` output (gitignored)
-- **Preflight/Postflight actions**: `task00_preflight` (validate config, verify connectivity, check tables, disable pg_cron, set InProgressFlag=1, capture row counts) and `task99_postflight` (VACUUM/ANALYZE, clear InProgressFlag, refresh materialized view, re-enable pg_cron, capture row counts, log pipeline summary, SES email)
+- **Preflight/Postflight actions**: `task00_preflight` (validate config, verify connectivity, check tables, disable pg_cron, set InProgressFlag=1, sync identity sequences, capture row counts) and `task99_postflight` (VACUUM/ANALYZE, clear InProgressFlag, refresh materialized view, re-enable pg_cron, capture row counts, log pipeline summary, SES email)
 - **task01_copy_to_staging**: Sync payer_provider_reminders from Snowflake dims (temp-table + UPDATE FROM JOIN, ~3s for 20K records) and truncate+populate conflictlog_staging from conflictvisitmaps+conflicts (~280s for 8M rows)
 - **Pipeline summary logging**: Plain-text summary always logged to CloudWatch (independent of email)
 - **Email notifications**: `lib/email_sender.py` sends HTML pipeline status reports via AWS SES (matching Snowflake email format)
-- Successfully deployed and tested on ECS Fargate (~14 min full pipeline with task01)
+- **INSERT of new conflicts** integrated into streaming pass (StatusFlag='N', 206-column mapping, `enable_insert` config flag, self-healing PK retry)
+- Successfully deployed and tested on ECS Fargate (~13 min full pipeline)
 
 ### What's NOT yet done (to be implemented in Scripts13):
-- INSERT logic for new conflicts (~102K detected but not inserted per run)
 - Conflicts table aggregation
-- UpdateFlag cleanup
+- UpdateFlag cleanup (DEFERRED)
 - AWS Secrets Manager integration (currently using plain environment variables)
