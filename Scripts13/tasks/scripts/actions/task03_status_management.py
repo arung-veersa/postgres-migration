@@ -160,19 +160,22 @@ def _build_steps(schema: str, lookback_years: int, lookforward_days: int) -> Lis
             'group': 'B',
             # UNION CTE splits the OR into two equi-joins so PostgreSQL can
             # use hash joins instead of a catastrophic nested-loop cross-join.
+            # Cast DEL."VisitID"::uuid (94K rows) rather than CVM columns::text
+            # (9M rows) -- this preserves index usage on CVM."VisitID" /
+            # CVM."ConVisitID" and avoids expression evaluation on every CVM row.
             'sql': f"""
                 WITH del_matches AS (
                     SELECT CVM."ID"
                     FROM {schema}.conflictvisitmaps AS CVM
                     INNER JOIN _tmp_deleted_visits AS DEL
-                        ON CVM."ConVisitID"::text = DEL."VisitID"
+                        ON CVM."ConVisitID" = DEL."VisitID"::uuid
                     WHERE CVM."StatusFlag" != 'D'
                       AND {dw_cvm_alias}
                     UNION
                     SELECT CVM."ID"
                     FROM {schema}.conflictvisitmaps AS CVM
                     INNER JOIN _tmp_deleted_visits AS DEL
-                        ON CVM."VisitID"::text = DEL."VisitID"
+                        ON CVM."VisitID" = DEL."VisitID"::uuid
                     WHERE CVM."StatusFlag" != 'D'
                       AND {dw_cvm_alias}
                 )
@@ -196,7 +199,7 @@ def _build_steps(schema: str, lookback_years: int, lookforward_days: int) -> Lis
                     "ResolvedBy" = COALESCE(CVM."AgencyContact", CVM."ProviderName")
                 FROM _tmp_deleted_visits AS DEL
                 INNER JOIN {schema}.conflictvisitmaps AS CVM
-                    ON CVM."VisitID"::text = DEL."VisitID"
+                    ON CVM."VisitID" = DEL."VisitID"::uuid
                 WHERE CF."StatusFlag" != 'D'
                   AND CF."CONFLICTID" = CVM."CONFLICTID"
                   AND {dw_cvm_alias}
@@ -586,6 +589,10 @@ def _load_deleted_ids_to_pg(
             )
             # Index speeds up hash/merge joins against CVM VisitID/ConVisitID
             cursor.execute('CREATE INDEX ON _tmp_deleted_visits ("VisitID")')
+            # ANALYZE is critical: without it, PostgreSQL has no stats for the
+            # temp table and may choose a catastrophic nested-loop plan
+            # (estimates ~200 rows instead of actual 94K).
+            cursor.execute('ANALYZE _tmp_deleted_visits')
 
         pg_conn.commit()
         return len(deleted_ids)
@@ -605,13 +612,24 @@ def _execute_step(
     step: Dict[str, Any],
     step_num: int,
     total_steps: int,
+    statement_timeout_s: int = 1800,
 ) -> Dict[str, Any]:
-    """Execute a single SQL step, commit, and return timing + rowcount."""
+    """Execute a single SQL step, commit, and return timing + rowcount.
+
+    Args:
+        statement_timeout_s: Per-step safety timeout (default 30 min).
+            Uses SET LOCAL so it only applies to this transaction.
+    """
     start = time.time()
     label = f"[{step_num}/{total_steps}]"
 
+    logger.info(f"  {label} {step['name']}: EXECUTING -- {step['description']}")
+
     cursor = pg_conn.cursor()
     try:
+        # Safety net: prevent any single step from running forever.
+        # SET LOCAL scopes the timeout to this transaction only.
+        cursor.execute(f"SET LOCAL statement_timeout = '{statement_timeout_s}s'")
         cursor.execute(step['sql'])
         rowcount = cursor.rowcount
         pg_conn.commit()

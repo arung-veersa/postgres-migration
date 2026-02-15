@@ -58,13 +58,16 @@ Conflict/postgres/
 │   ├── .env                             # Secrets (gitignored)
 │   └── .generated-taskdef.json          # Resolved output (gitignored)
 ├── tests/
-│   ├── test_comprehensive.py            # 204 pytest tests
+│   ├── test_comprehensive.py            # 210 pytest tests
 │   └── sql/                             # Standalone test queries for manual Snowflake testing
 ├── docs/
 │   ├── README.md
 │   ├── ECS_DEPLOYMENT_GUIDE.md
 │   ├── TESTING_GUIDE.md
-│   └── TROUBLESHOOTING.md
+│   ├── TROUBLESHOOTING.md
+│   ├── PIPELINE_ACTIONS.md
+│   ├── ARCHITECTURE_PRESENTATION.md
+│   └── SESSION_HANDOFF.md
 ├── Dockerfile
 ├── requirements.txt
 ├── .gitignore
@@ -154,7 +157,18 @@ Conflict/postgres/
 
 Note: Caregiver semi-join in Step 1 reduced rows by 28% vs initial run (230K → 166K) and cut task02_01 time from 21min to 14min.
 
-## Current State (as of 2026-02-13)
+### task03 Phase B (2026-02-15, deleted visit handling via delta + UNION CTE)
+| Metric | Value |
+|---|---|
+| Snowflake fetch (delta=36h) | 83,758 IDs in 2.6s |
+| Load to PG temp table + index + ANALYZE | 1.2s |
+| `deleted_visits_cvm` (mark CVM StatusFlag='D') | 3,320 rows in 93.1s |
+| `deleted_visits_cf` (cascade to CF) | 216 rows in 2.3s |
+| **Phase B total** | **99.6s** |
+
+Note: CVM step dominates runtime (~93s) due to UNION CTE scanning 9M-row CVM table twice (once per equi-join leg). Both legs use hash joins against the indexed 84K-row temp table. Previously hung with OR-join (nested-loop cross-join). ANALYZE on temp table is critical -- without it PG estimates ~200 rows and chooses catastrophic plans.
+
+## Current State (as of 2026-02-15)
 
 ### What's working:
 - v3 multi-step Snowflake query architecture (delta_keys -> base_visits -> self-join)
@@ -168,7 +182,7 @@ Note: Caregiver semi-join in Step 1 reduced rows by 28% vs initial run (230K →
 - Change detection (_has_changes: 7 flags + 40 business columns)
 - Excluded SSNs loaded from PostgreSQL into Snowflake temp table
 - Column name mapping (ETATravleMinutes->ETATravelMinutes, SchVisitTimeSame->SchAndVisitTimeSameFlag)
-- 204 pytest tests covering all of the above
+- 210 pytest tests covering all of the above
 - **ECS containerization COMPLETE**: Dockerfile, task definition, ECR deployment, interactive deploy script
 - Entry point: `scripts/main.py` with comma-separated ACTION env var and DEFAULT_ACTIONS pipeline
 - JSON-safe env var substitution in `settings.py` (handles RSA keys with newlines)
@@ -178,7 +192,7 @@ Note: Caregiver semi-join in Step 1 reduced rows by 28% vs initial run (230K →
 - **Pipeline summary logging**: Plain-text summary always logged to CloudWatch (independent of email)
 - **Cross-state conflict filter** in Step 3 SQL (CTEs 7-9: `state_map` + `cross_state_prep` + `same_state_conflicts`): excludes conflicts where no address state on V1 side matches any on V2 side. State normalization via `state_map` CTE with LEFT JOIN lookups (single definition, no repetition), provider address fallback when both patient addresses NULL, matching `SP_CLEANUP_CROSS_STATE_CONFLICTS` logic exactly. Prevents both INSERT and UPDATE of cross-state pairs; stale cleanup auto-resolves existing ones.
 - **Identity sequence sync** in preflight step 6: auto-advances identity sequences to MAX(ID) if behind, with self-healing retry in `_execute_inserts_with_commit`
-- Successfully deployed and tested on ECS Fargate (~14 min full pipeline with task01)
+- Successfully deployed and tested on ECS Fargate (~30 min full pipeline with all 6 actions including Phase B)
 
 ### What's NOT yet done:
 - AWS Secrets Manager integration (currently using plain environment variables)
@@ -202,8 +216,8 @@ Note: Caregiver semi-join in Step 1 reduced rows by 28% vs initial run (230K →
 - `task00_preflight`: 1) Validate config params, 2) Verify Snowflake+PG connectivity, 3) Check required tables, 4) Disable pg_cron job, 5) Set InProgressFlag=1, 6) Sync identity sequences (advance to MAX(ID) if behind), 7) VACUUM all tables, 8) ANALYZE all tables, 9) Capture pre-run row counts
 - `task01_copy_to_staging`: 1) Sync payer_provider_reminders from Snowflake dims (temp-table + UPDATE FROM JOIN), 2) Truncate+populate conflictlog_staging from conflictvisitmaps+conflicts (date-filtered)
 - `task02_00_conflict_update`: v3 conflict detection pipeline (streaming cursor, batch UPDATE + INSERT, stale cleanup)
-- `task02_01_inservice_conflict`: InService conflict detection -- visits vs InService events at different providers. Temporal overlap join, synthetic MD5 VisitIDs, 7 flags hardcoded 'N', UUID key normalisation (_norm_key), row-by-row insert fallback. ~230K rows, ~10K inserts, ~20min.
-- `task03_status_management`: Post-conflict-creation status management (15 steps: 14 SQL + 1 fetch, 3 phases, ~10 min steady state). Phase B (disabled by default, `enable_phase_b` config): delta query on `FACTVISITCALLPERFORMANCE_DELETED_CR` using `"Visit Updated Timestamp"` + `lookback_hours` (~97K rows vs 25.5M full scan), indexed PG temp table, UNION CTE marks CVM StatusFlag='D' when either VisitID or ConVisitID is deleted, cascade to CF. Phase A (9 steps): IsMissed cascade, UpdateFlag cleanup, conflicts aggregation, CTE-driven combined cascades, NoResponseFlag reset (forced seq scan) (~7 min). Phase C (3 steps): ShVTSTTime/CShVTSTTime COALESCE, BilledRateMinute (::real cast + epsilon comparison), ReverseUUID (~2 min). Each step commits independently. Supports `only_steps` config/env var for targeted step execution.
+- `task02_01_inservice_conflict`: InService conflict detection -- visits vs InService events at different providers. Temporal overlap join, synthetic MD5 VisitIDs, 7 flags hardcoded 'N', UUID key normalisation (_norm_key), row-by-row insert fallback, caregiver semi-join optimisation. ~166K rows, ~14 min.
+- `task03_status_management`: Post-conflict-creation status management (15 steps: 14 SQL + 1 fetch, 3 phases, ~11 min with Phase B). Phase B (enabled by default, `enable_phase_b` config): delta query on `FACTVISITCALLPERFORMANCE_DELETED_CR` using `"Visit Updated Timestamp"` + `lookback_hours` (~84K rows vs 25.5M full scan), indexed PG temp table with ANALYZE, UNION CTE marks CVM StatusFlag='D' when either VisitID or ConVisitID is deleted (hash-join-friendly), cascade to CF (~1.5 min). Phase A (9 steps): IsMissed cascade, UpdateFlag cleanup, conflicts aggregation, CTE-driven combined cascades, NoResponseFlag reset (forced seq scan) (~7 min). Phase C (3 steps): ShVTSTTime/CShVTSTTime COALESCE, BilledRateMinute (::real cast + epsilon comparison), ReverseUUID (~2 min). Each step commits independently. Supports `only_steps` config/env var for targeted step execution. **Phase B validated on ECS 2026-02-15**: 84K IDs fetched in 2.6s, 3.3K CVM + 216 CF rows updated in 99.6s total.
 - `task99_postflight`: 1) VACUUM all tables, 2) ANALYZE all tables, 3) Set InProgressFlag=0, 4) Refresh materialized view (CONCURRENTLY), 5) Re-enable pg_cron job, 6) Capture post-run row counts, 7) Log pipeline summary, 8) Send SES email (if enabled)
 
 ### Standalone Actions (not in default pipeline, available via ACTION env var)

@@ -10,10 +10,12 @@ Naming convention:
   - Import:   from scripts.actions.<key> import run_<key>
 
 Pipeline actions (in DEFAULT_ACTIONS order):
-  task00_preflight.py           -> run_task00_preflight()
-  task01_copy_to_staging.py     -> run_task01_copy_to_staging()
-  task02_00_conflict_update.py  -> run_task02_00_conflict_update()
-  task99_postflight.py          -> run_task99_postflight()
+  task00_preflight.py               -> run_task00_preflight()
+  task01_copy_to_staging.py         -> run_task01_copy_to_staging()
+  task02_00_conflict_update.py      -> run_task02_00_conflict_update()
+  task02_01_inservice_conflict.py   -> run_task02_01_inservice_conflict()
+  task03_status_management.py       -> run_task03_status_management()
+  task99_postflight.py              -> run_task99_postflight()
 
 Standalone actions (not in default pipeline):
   validate_config.py            -> run_validate_config()

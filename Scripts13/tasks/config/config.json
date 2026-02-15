@@ -29,7 +29,7 @@
     "enable_inservice": true
   },
   "task03_parameters": {
-    "enable_phase_b": false,
+    "enable_phase_b": true,
     "only_steps": ""
   },
   "pipeline": {

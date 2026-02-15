@@ -1,6 +1,8 @@
 """
-Comprehensive test suite for Task 02 Conflict Detection (v3).
-Tests actual code from lib/ -- no logic reimplementation.
+Comprehensive test suite for the Conflict Management Pipeline.
+Covers all pipeline actions, utilities, query builder, conflict processor,
+InService conflict detection, and status management (task03).
+Tests actual code from lib/ and scripts/actions/ -- no logic reimplementation.
 
 Run with: python -m pytest tests/ -v   (from Scripts13/tasks/)
 """
@@ -1467,10 +1469,11 @@ class TestTask03DeletedVisitsSql:
 
     def test_step_deleted_visits_cvm_checks_both_sides(self):
         """CVM should be marked D when either VisitID or ConVisitID is deleted.
-        Uses UNION CTE to allow hash joins (OR in JOIN prevents hash join)."""
+        Uses UNION CTE to allow hash joins (OR in JOIN prevents hash join).
+        Cast is on DEL side (::uuid) to preserve CVM index usage."""
         step = [s for s in self._get_steps() if s['name'] == 'deleted_visits_cvm'][0]
-        assert 'CVM."ConVisitID"::text = DEL."VisitID"' in step['sql']
-        assert 'CVM."VisitID"::text = DEL."VisitID"' in step['sql']
+        assert 'CVM."ConVisitID" = DEL."VisitID"::uuid' in step['sql']
+        assert 'CVM."VisitID" = DEL."VisitID"::uuid' in step['sql']
         assert 'UNION' in step['sql']
         assert 'del_matches' in step['sql']
 
@@ -1799,6 +1802,22 @@ class TestTask03ExecuteStep:
 
         mock_cursor.close.assert_called_once()
 
+    def test_sets_statement_timeout(self):
+        """Safety timeout should be set via SET LOCAL before executing SQL."""
+        from scripts.actions.task03_status_management import _execute_step
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_cursor.rowcount = 0
+        mock_conn.cursor.return_value = mock_cursor
+
+        step = {'name': 'test', 'group': 'A', 'description': 'Test', 'sql': 'SELECT 1'}
+        _execute_step(mock_conn, step, 1, 1, statement_timeout_s=600)
+
+        # First execute call should be the statement_timeout SET LOCAL
+        first_call = str(mock_cursor.execute.call_args_list[0])
+        assert 'statement_timeout' in first_call
+        assert '600s' in first_call
+
 
 class TestTask03LoadDeletedIdsToPg:
     """Tests for _load_deleted_ids_to_pg."""
@@ -1812,14 +1831,17 @@ class TestTask03LoadDeletedIdsToPg:
         result = _load_deleted_ids_to_pg(mock_conn, ['v1', 'v2', 'v3'])
 
         assert result == 3
-        # Should CREATE temp table, TRUNCATE, INSERT batch, CREATE INDEX, COMMIT
+        # Should CREATE temp table, TRUNCATE, INSERT batch, CREATE INDEX, ANALYZE, COMMIT
         calls = [str(c) for c in mock_cursor.execute.call_args_list]
         assert any('CREATE TEMP TABLE' in c for c in calls)
         assert any('TRUNCATE' in c for c in calls)
         assert any('CREATE INDEX' in c for c in calls)
+        # ANALYZE is critical: without it PG estimates ~200 rows for the temp table
+        # and chooses catastrophic nested-loop plans instead of hash joins
+        assert any('ANALYZE' in c for c in calls)
         mock_conn.commit.assert_called_once()
 
-    def test_empty_list_skips_insert_and_index(self):
+    def test_empty_list_skips_insert_index_and_analyze(self):
         from scripts.actions.task03_status_management import _load_deleted_ids_to_pg
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
@@ -1829,8 +1851,9 @@ class TestTask03LoadDeletedIdsToPg:
 
         assert result == 0
         calls = [str(c) for c in mock_cursor.execute.call_args_list]
-        # Should NOT create index for empty list
+        # Should NOT create index or ANALYZE for empty list
         assert not any('CREATE INDEX' in c for c in calls)
+        assert not any('ANALYZE' in c for c in calls)
         mock_conn.commit.assert_called_once()
 
     def test_rollback_on_error(self):
@@ -1891,6 +1914,48 @@ class TestTask03EpsilonComparison:
         """COALESCE(..., 1) ensures NULL columns are treated as needing update."""
         step = [s for s in self._get_steps() if s['name'] == 'computed_billed_rate'][0]
         assert 'COALESCE(ABS(' in step['sql']
+
+
+class TestTask03GetEnvInt:
+    """Tests for _get_env_int helper."""
+
+    def test_returns_env_value(self):
+        from scripts.actions.task03_status_management import _get_env_int
+        with patch.dict(os.environ, {'TEST_INT': '42'}):
+            assert _get_env_int('TEST_INT', 10) == 42
+
+    def test_returns_default_when_unset(self):
+        from scripts.actions.task03_status_management import _get_env_int
+        with patch.dict(os.environ, {}, clear=False):
+            # Use a key that definitely doesn't exist
+            assert _get_env_int('NONEXISTENT_KEY_XYZ_12345', 99) == 99
+
+    def test_returns_default_on_invalid_value(self):
+        from scripts.actions.task03_status_management import _get_env_int
+        with patch.dict(os.environ, {'TEST_BAD': 'not_a_number'}):
+            assert _get_env_int('TEST_BAD', 7) == 7
+
+
+class TestTask03DeletedVisitsCvmGuards:
+    """Tests that deleted_visits_cvm has proper guards."""
+
+    def _get_steps(self):
+        from scripts.actions.task03_status_management import _build_steps
+        return _build_steps(schema='conflict_dev', lookback_years=2, lookforward_days=45)
+
+    def test_both_union_legs_have_status_d_guard(self):
+        """Both UNION legs should filter StatusFlag != 'D' to avoid re-processing."""
+        step = [s for s in self._get_steps() if s['name'] == 'deleted_visits_cvm'][0]
+        # The UNION CTE has two legs; each should have the StatusFlag != 'D' guard
+        sql = step['sql']
+        # Count occurrences of the guard
+        count = sql.count("\"StatusFlag\" != 'D'")
+        assert count == 2, f"Expected 2 StatusFlag guards (one per UNION leg), found {count}"
+
+    def test_update_targets_by_primary_key(self):
+        """Final UPDATE should join on CVM.ID = dm.ID (primary key) for precision."""
+        step = [s for s in self._get_steps() if s['name'] == 'deleted_visits_cvm'][0]
+        assert 'CVM."ID" = dm."ID"' in step['sql']
 
 
 class TestTask03OnlyStepsFilter:
