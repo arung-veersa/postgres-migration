@@ -1331,3 +1331,596 @@ class TestNormKey:
         from scripts.actions.task02_01_inservice_conflict import _norm_key
         key = _norm_key('', '')
         assert key == ('', '')
+
+
+# ============================================================================
+# 20. Task 03 - Status Management
+# ============================================================================
+
+class TestTask03ActionRegistration:
+    """Tests that task03 is properly registered in the pipeline."""
+
+    def test_action_in_default_pipeline(self):
+        """task03_status_management should be in DEFAULT_ACTIONS."""
+        from scripts.main import DEFAULT_ACTIONS
+        assert 'task03_status_management' in DEFAULT_ACTIONS
+
+    def test_action_after_task02_01(self):
+        """task03 should come after task02_01 in the default pipeline."""
+        from scripts.main import DEFAULT_ACTIONS
+        idx_01 = DEFAULT_ACTIONS.index('task02_01_inservice_conflict')
+        idx_03 = DEFAULT_ACTIONS.index('task03_status_management')
+        assert idx_03 > idx_01
+
+    def test_action_before_postflight(self):
+        """task03 should come before task99_postflight."""
+        from scripts.main import DEFAULT_ACTIONS
+        idx_03 = DEFAULT_ACTIONS.index('task03_status_management')
+        idx_99 = DEFAULT_ACTIONS.index('task99_postflight')
+        assert idx_03 < idx_99
+
+    def test_action_in_registry(self):
+        """task03_status_management should be in ACTION_REGISTRY."""
+        from scripts.main import ACTION_REGISTRY
+        assert 'task03_status_management' in ACTION_REGISTRY
+
+
+class TestTask03StepDefinitions:
+    """Tests the step definitions for task03."""
+
+    def _get_steps(self):
+        from scripts.actions.task03_status_management import _build_steps
+        return _build_steps(
+            schema='conflict_dev',
+            lookback_years=2,
+            lookforward_days=45,
+        )
+
+    def test_total_step_count(self):
+        """Should have exactly 14 SQL steps (excluding fetch-deleted-IDs)."""
+        steps = self._get_steps()
+        assert len(steps) == 14
+
+    def test_group_b_count(self):
+        """Group B (deleted visits) should have 2 steps."""
+        steps = self._get_steps()
+        group_b = [s for s in steps if s['group'] == 'B']
+        assert len(group_b) == 2
+
+    def test_group_a_count(self):
+        """Group A (status cascade) should have 9 steps."""
+        steps = self._get_steps()
+        group_a = [s for s in steps if s['group'] == 'A']
+        assert len(group_a) == 9
+
+    def test_group_c_count(self):
+        """Group C (computed columns) should have 3 steps."""
+        steps = self._get_steps()
+        group_c = [s for s in steps if s['group'] == 'C']
+        assert len(group_c) == 3
+
+    def test_all_steps_have_required_keys(self):
+        """Every step must have name, description, group, sql."""
+        steps = self._get_steps()
+        for step in steps:
+            assert 'name' in step, f"Step missing 'name': {step}"
+            assert 'description' in step, f"Step missing 'description': {step}"
+            assert 'group' in step, f"Step missing 'group': {step}"
+            assert 'sql' in step, f"Step missing 'sql': {step}"
+
+    def test_all_steps_have_nonempty_sql(self):
+        """Every step's SQL must be non-empty."""
+        steps = self._get_steps()
+        for step in steps:
+            assert step['sql'].strip(), f"Step '{step['name']}' has empty SQL"
+
+    def test_all_step_names_unique(self):
+        """All step names must be unique."""
+        steps = self._get_steps()
+        names = [s['name'] for s in steps]
+        assert len(names) == len(set(names)), f"Duplicate step names: {names}"
+
+    def test_group_ordering_b_before_a_before_c(self):
+        """Steps should be ordered: B first, then A, then C."""
+        steps = self._get_steps()
+        groups = [s['group'] for s in steps]
+        first_a = groups.index('A')
+        first_c = groups.index('C')
+        last_b = len(groups) - 1 - groups[::-1].index('B')
+        assert last_b < first_a, "Group B steps should come before Group A"
+        last_a = len(groups) - 1 - groups[::-1].index('A')
+        assert last_a < first_c, "Group A steps should come before Group C"
+
+    def test_schema_substituted_in_sql(self):
+        """All steps should reference the schema in their SQL."""
+        steps = self._get_steps()
+        for step in steps:
+            # Most steps reference schema-qualified tables, except computed columns
+            # which use unqualified table names in WHERE
+            sql_lower = step['sql'].lower()
+            assert 'conflict' in sql_lower, f"Step '{step['name']}' SQL doesn't reference any conflict table"
+
+    def test_date_window_in_all_steps(self):
+        """Every step should include a date window filter."""
+        steps = self._get_steps()
+        for step in steps:
+            assert 'VisitDate' in step['sql'] or 'visitdate' in step['sql'].lower(), \
+                f"Step '{step['name']}' has no VisitDate date window"
+
+
+class TestTask03DeletedVisitsSql:
+    """Tests Group B (deleted visits) SQL specifics."""
+
+    def _get_steps(self):
+        from scripts.actions.task03_status_management import _build_steps
+        return _build_steps(
+            schema='conflict_dev',
+            lookback_years=2,
+            lookforward_days=45,
+        )
+
+    def test_step_deleted_visits_cvm_sets_status_d(self):
+        step = [s for s in self._get_steps() if s['name'] == 'deleted_visits_cvm'][0]
+        assert "'D'" in step['sql']
+        assert 'ConVisitID' in step['sql']
+        assert '_tmp_deleted_visits' in step['sql']
+
+    def test_step_deleted_visits_cvm_checks_both_sides(self):
+        """CVM should be marked D when either VisitID or ConVisitID is deleted.
+        Uses UNION CTE to allow hash joins (OR in JOIN prevents hash join)."""
+        step = [s for s in self._get_steps() if s['name'] == 'deleted_visits_cvm'][0]
+        assert 'CVM."ConVisitID"::text = DEL."VisitID"' in step['sql']
+        assert 'CVM."VisitID"::text = DEL."VisitID"' in step['sql']
+        assert 'UNION' in step['sql']
+        assert 'del_matches' in step['sql']
+
+    def test_step_deleted_visits_cf_sets_status_d(self):
+        step = [s for s in self._get_steps() if s['name'] == 'deleted_visits_cf'][0]
+        assert "'D'" in step['sql']
+        assert 'conflicts' in step['sql']
+        assert '_tmp_deleted_visits' in step['sql']
+
+    def test_deleted_visits_join_on_visitid(self):
+        """Deleted-visit steps should join on VisitID or ConVisitID."""
+        b_steps = [s for s in self._get_steps() if s['group'] == 'B']
+        assert any('ConVisitID' in s['sql'] for s in b_steps)
+        assert any('VisitID' in s['sql'] for s in b_steps)
+
+
+class TestTask03StatusCascadeSql:
+    """Tests Group A (status cascade) SQL specifics."""
+
+    def _get_steps(self):
+        from scripts.actions.task03_status_management import _build_steps
+        return _build_steps(
+            schema='conflict_dev',
+            lookback_years=2,
+            lookforward_days=45,
+        )
+
+    def test_ismissed_cascade_cf(self):
+        step = [s for s in self._get_steps() if s['name'] == 'ismissed_cascade_cf'][0]
+        assert 'IsMissed' in step['sql']
+        assert 'conflicts' in step['sql']
+
+    def test_ismissed_cascade_cvm(self):
+        step = [s for s in self._get_steps() if s['name'] == 'ismissed_cascade_cvm'][0]
+        assert 'IsMissed' in step['sql']
+        assert 'conflictvisitmaps' in step['sql']
+
+    def test_updateflag_orphan_cleanup(self):
+        step = [s for s in self._get_steps() if s['name'] == 'updateflag_orphan_cleanup'][0]
+        assert '"UpdateFlag" = 1' in step['sql']
+        assert 'conflictvisitmaps' in step['sql']
+
+    def test_aggregation_mark_updatedrflag(self):
+        step = [s for s in self._get_steps() if s['name'] == 'aggregation_mark_updatedrflag'][0]
+        assert 'UpdatedRFlag' in step['sql']
+
+    def test_aggregation_status_u_propagation(self):
+        step = [s for s in self._get_steps() if s['name'] == 'aggregation_status_u_propagation'][0]
+        assert "'U'" in step['sql']
+        assert 'NOT IN' in step['sql']
+
+    def test_cascade_resolve_cvm(self):
+        """Combined CVM cascade covers singleton + near-all-resolved."""
+        step = [s for s in self._get_steps() if s['name'] == 'cascade_resolve_cvm'][0]
+        assert 'HAVING' in step['sql']
+        assert '<= 1' in step['sql']
+        assert "IN ('R', 'D')" in step['sql']
+
+    def test_cascade_resolve_cf(self):
+        """Combined CF cascade covers singleton_cf + all_cvm_resolved_cf."""
+        step = [s for s in self._get_steps() if s['name'] == 'cascade_resolve_cf'][0]
+        assert "NOT IN ('R', 'D')" in step['sql']
+        assert 'HAVING' in step['sql']
+        assert 'COUNT' in step['sql']
+
+    def test_noresponse_flag_cf(self):
+        step = [s for s in self._get_steps() if s['name'] == 'noresponse_flag_cf'][0]
+        assert 'NoResponseFlag' in step['sql']
+        assert "'N'" in step['sql']
+
+    def test_noresponse_flag_cvm(self):
+        step = [s for s in self._get_steps() if s['name'] == 'noresponse_flag_cvm'][0]
+        assert 'ConNoResponseFlag' in step['sql']
+        assert "'N'" in step['sql']
+
+    def test_status_d_preserved_in_cascade_steps(self):
+        """All cascade steps should preserve StatusFlag='D' (never overwrite D)."""
+        cascade_step_names = [
+            'ismissed_cascade_cf', 'ismissed_cascade_cvm',
+            'updateflag_orphan_cleanup', 'cascade_resolve_cvm',
+            'cascade_resolve_cf',
+        ]
+        steps = self._get_steps()
+        for name in cascade_step_names:
+            step = [s for s in steps if s['name'] == name][0]
+            # Should have a CASE WHEN ... or NOT IN ('R', 'D') filter
+            assert "WHEN" in step['sql'] and "'D'" in step['sql'], \
+                f"Step '{name}' doesn't preserve StatusFlag='D'"
+
+
+class TestTask03ComputedColumnsSql:
+    """Tests Group C (computed columns) SQL specifics."""
+
+    def _get_steps(self):
+        from scripts.actions.task03_status_management import _build_steps
+        return _build_steps(
+            schema='conflict_dev',
+            lookback_years=2,
+            lookforward_days=45,
+        )
+
+    def test_computed_time_columns(self):
+        step = [s for s in self._get_steps() if s['name'] == 'computed_time_columns'][0]
+        assert 'ShVTSTTime' in step['sql']
+        assert 'CShVTSTTime' in step['sql']
+        assert 'ShVTENTime' in step['sql']
+        assert 'CShVTENTime' in step['sql']
+        assert 'COALESCE' in step['sql']
+
+    def test_computed_time_columns_inservice_fallback(self):
+        """ShVTSTTime should include InserviceStartDate in COALESCE."""
+        step = [s for s in self._get_steps() if s['name'] == 'computed_time_columns'][0]
+        assert 'InserviceStartDate' in step['sql']
+        assert 'InserviceEndDate' in step['sql']
+        assert 'ConInserviceStartDate' in step['sql']
+        assert 'ConInserviceEndDate' in step['sql']
+
+    def test_computed_billed_rate(self):
+        step = [s for s in self._get_steps() if s['name'] == 'computed_billed_rate'][0]
+        assert 'BilledRateMinute' in step['sql']
+        assert 'ConBilledRateMinute' in step['sql']
+        assert 'RateType' in step['sql']
+        assert 'Hourly' in step['sql']
+        assert 'Daily' in step['sql']
+        assert 'Visit' in step['sql']
+
+    def test_billed_rate_hourly_divides_by_60(self):
+        """Hourly rate type should divide by 60."""
+        step = [s for s in self._get_steps() if s['name'] == 'computed_billed_rate'][0]
+        assert '/ 60.0' in step['sql']
+
+    def test_billed_rate_uses_epoch_extract(self):
+        """Non-billed Daily/Visit rate should use EXTRACT(EPOCH ...) for hours."""
+        step = [s for s in self._get_steps() if s['name'] == 'computed_billed_rate'][0]
+        assert 'EXTRACT(EPOCH FROM' in step['sql']
+
+    def test_computed_reverse_uuid(self):
+        step = [s for s in self._get_steps() if s['name'] == 'computed_reverse_uuid'][0]
+        assert 'ReverseUUID' in step['sql']
+        assert 'LEAST' in step['sql']
+        assert 'GREATEST' in step['sql']
+        assert 'CONCAT' in step['sql']
+
+    def test_reverse_uuid_null_optimization(self):
+        """ReverseUUID step should only process rows WHERE IS NULL."""
+        step = [s for s in self._get_steps() if s['name'] == 'computed_reverse_uuid'][0]
+        assert '"ReverseUUID" IS NULL' in step['sql']
+
+    def test_reverse_uuid_null_guards(self):
+        """ReverseUUID should guard against NULL components."""
+        step = [s for s in self._get_steps() if s['name'] == 'computed_reverse_uuid'][0]
+        assert '"VisitID" IS NOT NULL' in step['sql']
+        assert '"AppVisitID" IS NOT NULL' in step['sql']
+        assert '"ConVisitID" IS NOT NULL' in step['sql']
+        assert '"ConAppVisitID" IS NOT NULL' in step['sql']
+
+
+class TestTask03SnowflakeDeletedQuery:
+    """Tests the Snowflake deleted visits query."""
+
+    def test_query_references_deleted_table(self):
+        from scripts.actions.task03_status_management import _SF_DELETED_VISITS_QUERY
+        assert 'FACTVISITCALLPERFORMANCE_DELETED_CR' in _SF_DELETED_VISITS_QUERY
+
+    def test_query_has_date_window(self):
+        from scripts.actions.task03_status_management import _SF_DELETED_VISITS_QUERY
+        assert 'DATEADD' in _SF_DELETED_VISITS_QUERY
+
+    def test_query_selects_visit_id(self):
+        from scripts.actions.task03_status_management import _SF_DELETED_VISITS_QUERY
+        assert '"Visit Id"' in _SF_DELETED_VISITS_QUERY
+
+    def test_query_uses_distinct(self):
+        from scripts.actions.task03_status_management import _SF_DELETED_VISITS_QUERY
+        assert 'DISTINCT' in _SF_DELETED_VISITS_QUERY
+
+    def test_query_format_substitution(self):
+        from scripts.actions.task03_status_management import _SF_DELETED_VISITS_QUERY
+        formatted = _SF_DELETED_VISITS_QUERY.format(
+            sf_database='ANALYTICS',
+            sf_schema='BI',
+            lookback_years=2,
+            lookforward_days=45,
+            lookback_hours=36,
+        )
+        assert 'ANALYTICS.BI' in formatted
+        assert 'DATEADD(year, -2' in formatted
+        assert 'DATEADD(day, 45' in formatted
+
+    def test_query_has_delta_filter(self):
+        from scripts.actions.task03_status_management import _SF_DELETED_VISITS_QUERY
+        assert 'Visit Updated Timestamp' in _SF_DELETED_VISITS_QUERY
+        formatted = _SF_DELETED_VISITS_QUERY.format(
+            sf_database='ANALYTICS',
+            sf_schema='BI',
+            lookback_years=2,
+            lookforward_days=45,
+            lookback_hours=36,
+        )
+        assert 'DATEADD(HOUR, -36' in formatted
+
+
+class TestTask03DateWindow:
+    """Tests for the date window helper."""
+
+    def test_dw_format(self):
+        from scripts.actions.task03_status_management import _dw
+        result = _dw(2, 45)
+        assert "2 years" in result
+        assert "45 days" in result
+        assert "VisitDate" in result
+
+    def test_dw_custom_values(self):
+        from scripts.actions.task03_status_management import _dw
+        result = _dw(3, 60)
+        assert "3 years" in result
+        assert "60 days" in result
+
+
+class TestTask03FetchDeletedVisitIds:
+    """Tests for _fetch_deleted_visit_ids."""
+
+    def test_returns_list_of_strings(self):
+        from scripts.actions.task03_status_management import _fetch_deleted_visit_ids
+        mock_sf = MagicMock()
+        mock_sf.execute_query.return_value = [
+            ('visit-001',), ('visit-002',), ('visit-003',),
+        ]
+        result = _fetch_deleted_visit_ids(
+            mock_sf,
+            {'sf_database': 'ANALYTICS', 'sf_schema': 'BI'},
+            lookback_years=2,
+            lookforward_days=45,
+            lookback_hours=36,
+        )
+        assert result == ['visit-001', 'visit-002', 'visit-003']
+
+    def test_filters_none_values(self):
+        from scripts.actions.task03_status_management import _fetch_deleted_visit_ids
+        mock_sf = MagicMock()
+        mock_sf.execute_query.return_value = [
+            ('visit-001',), (None,), ('visit-003',),
+        ]
+        result = _fetch_deleted_visit_ids(
+            mock_sf,
+            {'sf_database': 'ANALYTICS', 'sf_schema': 'BI'},
+            lookback_years=2,
+            lookforward_days=45,
+            lookback_hours=36,
+        )
+        assert result == ['visit-001', 'visit-003']
+
+    def test_empty_result(self):
+        from scripts.actions.task03_status_management import _fetch_deleted_visit_ids
+        mock_sf = MagicMock()
+        mock_sf.execute_query.return_value = []
+        result = _fetch_deleted_visit_ids(
+            mock_sf,
+            {'sf_database': 'ANALYTICS', 'sf_schema': 'BI'},
+            lookback_years=2,
+            lookforward_days=45,
+            lookback_hours=36,
+        )
+        assert result == []
+
+    def test_query_includes_delta_filter(self):
+        """Verify the executed query contains the lookback_hours delta filter."""
+        from scripts.actions.task03_status_management import _fetch_deleted_visit_ids
+        mock_sf = MagicMock()
+        mock_sf.execute_query.return_value = []
+        _fetch_deleted_visit_ids(
+            mock_sf,
+            {'sf_database': 'ANALYTICS', 'sf_schema': 'BI'},
+            lookback_years=2,
+            lookforward_days=45,
+            lookback_hours=48,
+        )
+        executed_sql = mock_sf.execute_query.call_args[0][0]
+        assert 'DATEADD(HOUR, -48' in executed_sql
+        assert 'Visit Updated Timestamp' in executed_sql
+
+
+class TestTask03ExecuteStep:
+    """Tests for _execute_step."""
+
+    def test_returns_ok_result(self):
+        from scripts.actions.task03_status_management import _execute_step
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_cursor.rowcount = 42
+        mock_conn.cursor.return_value = mock_cursor
+
+        step = {'name': 'test_step', 'group': 'A', 'description': 'Test', 'sql': 'UPDATE t SET x=1'}
+        result = _execute_step(mock_conn, step, 1, 10)
+
+        assert result['status'] == 'ok'
+        assert result['rows_affected'] == 42
+        assert result['name'] == 'test_step'
+        assert result['group'] == 'A'
+        mock_conn.commit.assert_called_once()
+
+    def test_returns_error_result_on_exception(self):
+        from scripts.actions.task03_status_management import _execute_step
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_cursor.execute.side_effect = Exception("test error")
+        mock_conn.cursor.return_value = mock_cursor
+
+        step = {'name': 'bad_step', 'group': 'A', 'description': 'Bad', 'sql': 'INVALID SQL'}
+        result = _execute_step(mock_conn, step, 1, 10)
+
+        assert result['status'] == 'error'
+        assert result['rows_affected'] == 0
+        assert 'test error' in result['error']
+        mock_conn.rollback.assert_called_once()
+
+    def test_cursor_always_closed(self):
+        from scripts.actions.task03_status_management import _execute_step
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_cursor.execute.side_effect = Exception("fail")
+        mock_conn.cursor.return_value = mock_cursor
+
+        step = {'name': 'bad', 'group': 'A', 'description': 'X', 'sql': 'BAD'}
+        _execute_step(mock_conn, step, 1, 1)
+
+        mock_cursor.close.assert_called_once()
+
+
+class TestTask03LoadDeletedIdsToPg:
+    """Tests for _load_deleted_ids_to_pg."""
+
+    def test_creates_temp_table_and_inserts(self):
+        from scripts.actions.task03_status_management import _load_deleted_ids_to_pg
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+
+        result = _load_deleted_ids_to_pg(mock_conn, ['v1', 'v2', 'v3'])
+
+        assert result == 3
+        # Should CREATE temp table, TRUNCATE, INSERT batch, CREATE INDEX, COMMIT
+        calls = [str(c) for c in mock_cursor.execute.call_args_list]
+        assert any('CREATE TEMP TABLE' in c for c in calls)
+        assert any('TRUNCATE' in c for c in calls)
+        assert any('CREATE INDEX' in c for c in calls)
+        mock_conn.commit.assert_called_once()
+
+    def test_empty_list_skips_insert_and_index(self):
+        from scripts.actions.task03_status_management import _load_deleted_ids_to_pg
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+
+        result = _load_deleted_ids_to_pg(mock_conn, [])
+
+        assert result == 0
+        calls = [str(c) for c in mock_cursor.execute.call_args_list]
+        # Should NOT create index for empty list
+        assert not any('CREATE INDEX' in c for c in calls)
+        mock_conn.commit.assert_called_once()
+
+    def test_rollback_on_error(self):
+        from scripts.actions.task03_status_management import _load_deleted_ids_to_pg
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_cursor.execute.side_effect = [None, Exception("db error")]
+        mock_conn.cursor.return_value = mock_cursor
+
+        try:
+            _load_deleted_ids_to_pg(mock_conn, ['v1'])
+        except Exception:
+            pass
+
+        mock_conn.rollback.assert_called_once()
+        mock_cursor.close.assert_called_once()
+
+
+class TestTask03ForcedSeqScan:
+    """Tests that specific steps force sequential scan to avoid partial-index traps."""
+
+    def _get_steps(self):
+        from scripts.actions.task03_status_management import _build_steps
+        return _build_steps(schema='conflict_dev', lookback_years=2, lookforward_days=45)
+
+    def test_noresponse_flag_cvm_forces_seq_scan(self):
+        step = [s for s in self._get_steps() if s['name'] == 'noresponse_flag_cvm'][0]
+        assert 'enable_indexscan = OFF' in step['sql']
+        assert 'enable_bitmapscan = OFF' in step['sql']
+
+    def test_computed_billed_rate_forces_seq_scan(self):
+        step = [s for s in self._get_steps() if s['name'] == 'computed_billed_rate'][0]
+        assert 'enable_indexscan = OFF' in step['sql']
+        assert 'enable_bitmapscan = OFF' in step['sql']
+
+
+class TestTask03EpsilonComparison:
+    """Tests that computed_billed_rate uses epsilon comparison, not IS DISTINCT FROM."""
+
+    def _get_steps(self):
+        from scripts.actions.task03_status_management import _build_steps
+        return _build_steps(schema='conflict_dev', lookback_years=2, lookforward_days=45)
+
+    def test_billed_rate_uses_epsilon_not_is_distinct(self):
+        """Epsilon avoids float precision false positives (float8 CASE vs real column)."""
+        step = [s for s in self._get_steps() if s['name'] == 'computed_billed_rate'][0]
+        assert 'ABS(' in step['sql']
+        assert '0.0001' in step['sql']
+        assert 'IS DISTINCT FROM' not in step['sql']
+
+    def test_billed_rate_uses_real_cast(self):
+        """SET values should cast to ::real to match column type."""
+        from scripts.actions.task03_status_management import _BRM_CASE, _CBRM_CASE
+        assert '::real' in _BRM_CASE
+        assert '::real' in _CBRM_CASE
+
+    def test_billed_rate_coalesce_null_handling(self):
+        """COALESCE(..., 1) ensures NULL columns are treated as needing update."""
+        step = [s for s in self._get_steps() if s['name'] == 'computed_billed_rate'][0]
+        assert 'COALESCE(ABS(' in step['sql']
+
+
+class TestTask03OnlyStepsFilter:
+    """Tests for ONLY_STEPS step filtering."""
+
+    def _get_steps(self):
+        from scripts.actions.task03_status_management import _build_steps
+        return _build_steps(schema='conflict_dev', lookback_years=2, lookforward_days=45)
+
+    def test_only_steps_filters_correctly(self):
+        """ONLY_STEPS should keep only named steps."""
+        steps = self._get_steps()
+        only = {'computed_billed_rate', 'computed_reverse_uuid'}
+        filtered = [s for s in steps if s['name'] in only]
+        assert len(filtered) == 2
+        assert {s['name'] for s in filtered} == only
+
+    def test_only_steps_preserves_order(self):
+        """Filtered steps should maintain original order."""
+        steps = self._get_steps()
+        only = {'computed_time_columns', 'computed_billed_rate', 'computed_reverse_uuid'}
+        filtered = [s for s in steps if s['name'] in only]
+        names = [s['name'] for s in filtered]
+        assert names == ['computed_time_columns', 'computed_billed_rate', 'computed_reverse_uuid']
+
+    def test_only_steps_can_select_across_groups(self):
+        """ONLY_STEPS should work across groups (e.g., one B step + one C step)."""
+        steps = self._get_steps()
+        only = {'deleted_visits_cvm', 'computed_reverse_uuid'}
+        filtered = [s for s in steps if s['name'] in only]
+        assert len(filtered) == 2
+        groups = {s['group'] for s in filtered}
+        assert groups == {'B', 'C'}

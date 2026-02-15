@@ -15,16 +15,22 @@
     "conflict_database": "conflict_management",
     "conflict_schema": "conflict_dev"
   },
-  "task02_parameters": {
-    "lookback_hours": 36,
+  "common_parameters": {
     "lookback_years": 2,
     "lookforward_days": 45,
-    "batch_size": 5000,
+    "lookback_hours": 36,
+    "batch_size": 5000
+  },
+  "task02_parameters": {
     "skip_unchanged_records": true,
     "enable_asymmetric_join": true,
     "enable_stale_cleanup": true,
     "enable_insert": true,
     "enable_inservice": true
+  },
+  "task03_parameters": {
+    "enable_phase_b": false,
+    "only_steps": ""
   },
   "pipeline": {
     "pg_cron_job_name": "refresh_mv_payer_conflicts_common",

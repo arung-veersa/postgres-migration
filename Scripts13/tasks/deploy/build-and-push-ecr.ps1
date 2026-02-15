@@ -553,16 +553,17 @@ Write-Host ""
 Write-Host "Run ECS task?" -ForegroundColor Cyan
 Write-Host "  Using: $($script:TaskDefinition)" -ForegroundColor Gray
 Write-Host "  0) Skip - don't run [default]"
-Write-Host "  1) Default pipeline (preflight -> staging -> task02_00 -> task02_01 -> postflight)"
+Write-Host "  1) Default pipeline (preflight -> staging -> task02_00 -> task02_01 -> task03 -> postflight)"
 Write-Host "  2) task00_preflight only"
 Write-Host "  3) task01_copy_to_staging only"
 Write-Host "  4) task02_00_conflict_update only"
 Write-Host "  5) task02_01_inservice_conflict only"
-Write-Host "  6) task99_postflight only"
-Write-Host "  7) validate_config only (standalone)"
-Write-Host "  8) test_connections only (standalone)"
-Write-Host "  9) Custom action(s) - you type the action name(s)"
-$runChoice = Read-Host "Choice [0-9]"
+Write-Host "  6) task03_status_management only"
+Write-Host "  7) task99_postflight only"
+Write-Host "  8) validate_config only (standalone)"
+Write-Host "  9) test_connections only (standalone)"
+Write-Host "  10) Custom action(s) - you type the action name(s)"
+$runChoice = Read-Host "Choice [0-10]"
 
 switch ($runChoice) {
     '1' { Do-RunTask -Action "" }
@@ -570,10 +571,11 @@ switch ($runChoice) {
     '3' { Do-RunTask -Action "task01_copy_to_staging" }
     '4' { Do-RunTask -Action "task02_00_conflict_update" }
     '5' { Do-RunTask -Action "task02_01_inservice_conflict" }
-    '6' { Do-RunTask -Action "task99_postflight" }
-    '7' { Do-RunTask -Action "validate_config" }
-    '8' { Do-RunTask -Action "test_connections" }
-    '9' {
+    '6' { Do-RunTask -Action "task03_status_management" }
+    '7' { Do-RunTask -Action "task99_postflight" }
+    '8' { Do-RunTask -Action "validate_config" }
+    '9' { Do-RunTask -Action "test_connections" }
+    '10' {
         $customAction = Read-Host "Enter action name(s) (comma-separated)"
         if ($customAction) {
             Do-RunTask -Action $customAction

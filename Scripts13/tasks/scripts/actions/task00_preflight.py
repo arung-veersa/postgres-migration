@@ -8,7 +8,9 @@ Pre-run validation and setup before the heavy pipeline tasks execute:
   4. Disable the pg_cron job that refreshes the materialized view
   5. Set InProgressFlag = 1 in the settings table
   6. Sync identity sequences (advance to MAX(ID) if behind -- prevents PK collisions)
-  7. Capture pre-run row counts for key tables (stored in result for postflight)
+  7. VACUUM all tables (reclaim dead-tuple space so subsequent tasks start clean)
+  8. ANALYZE all tables (refresh planner statistics for optimal query plans)
+  9. Capture pre-run row counts for key tables (stored in result for postflight)
 """
 
 import time
@@ -16,7 +18,7 @@ from typing import Dict, Any
 
 from config.settings import Settings
 from lib.connections import ConnectionFactory
-from lib.utils import get_logger
+from lib.utils import get_logger, format_duration
 
 logger = get_logger(__name__)
 
@@ -104,24 +106,26 @@ def _check_required_tables(
 
 def _validate_config_params(settings: Settings) -> Dict[str, Any]:
     """Validate that key config parameters are sane."""
-    task_params = settings.get_task02_parameters()
+    common_params = settings.get_common_parameters()
+    task02_params = settings.get_task02_parameters()
     issues = []
 
-    lookback_hours = task_params.get('lookback_hours', 0)
-    if lookback_hours <= 0:
-        issues.append(f"lookback_hours must be > 0 (got {lookback_hours})")
-
-    batch_size = task_params.get('batch_size', 0)
-    if batch_size <= 0:
-        issues.append(f"batch_size must be > 0 (got {batch_size})")
-
-    lookback_years = task_params.get('lookback_years', 0)
+    # Common parameters
+    lookback_years = common_params.get('lookback_years', 0)
     if lookback_years <= 0:
-        issues.append(f"lookback_years must be > 0 (got {lookback_years})")
+        issues.append(f"common_parameters.lookback_years must be > 0 (got {lookback_years})")
 
-    lookforward_days = task_params.get('lookforward_days', 0)
+    lookforward_days = common_params.get('lookforward_days', 0)
     if lookforward_days <= 0:
-        issues.append(f"lookforward_days must be > 0 (got {lookforward_days})")
+        issues.append(f"common_parameters.lookforward_days must be > 0 (got {lookforward_days})")
+
+    batch_size = common_params.get('batch_size', 0)
+    if batch_size <= 0:
+        issues.append(f"common_parameters.batch_size must be > 0 (got {batch_size})")
+
+    lookback_hours = common_params.get('lookback_hours', 0)
+    if lookback_hours <= 0:
+        issues.append(f"common_parameters.lookback_hours must be > 0 (got {lookback_hours})")
 
     if issues:
         for issue in issues:
@@ -132,7 +136,8 @@ def _validate_config_params(settings: Settings) -> Dict[str, Any]:
     return {
         'valid': len(issues) == 0,
         'issues': issues,
-        'parameters': task_params,
+        'common_parameters': common_params,
+        'task02_parameters': task02_params,
     }
 
 
@@ -310,6 +315,130 @@ def _sync_identity_sequences(
     return results
 
 
+def _vacuum_schema_tables(
+    conn_factory: ConnectionFactory,
+    db_name: str,
+    schema: str,
+) -> Dict[str, Any]:
+    """
+    Run VACUUM on all tables in the schema.
+
+    VACUUM cannot run inside a transaction, so we use autocommit mode.
+    """
+    pg_manager = conn_factory.get_postgres_manager()
+    result: Dict[str, Any] = {'tables_vacuumed': 0, 'errors': [], 'duration_seconds': 0}
+
+    try:
+        pg_conn = pg_manager.get_connection(db_name)
+        cursor = pg_conn.cursor()
+        cursor.execute(
+            """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = %s AND table_type = 'BASE TABLE'
+            ORDER BY table_name
+            """,
+            (schema,),
+        )
+        tables = [row[0] for row in cursor.fetchall()]
+        cursor.close()
+        pg_conn.close()
+
+        if not tables:
+            logger.info(f"  No tables found in {schema} -- skipping VACUUM")
+            return result
+
+        start = time.time()
+        pg_conn = pg_manager.get_connection(db_name, autocommit=True)
+        cursor = pg_conn.cursor()
+
+        for table in tables:
+            try:
+                cursor.execute(f'VACUUM {schema}."{table}"')
+                result['tables_vacuumed'] += 1
+            except Exception as e:
+                result['errors'].append(f"{table}: {e}")
+                logger.warning(f"    VACUUM {schema}.{table} failed: {e}")
+
+        cursor.close()
+        pg_conn.close()
+
+        duration = time.time() - start
+        result['duration_seconds'] = round(duration, 2)
+        logger.info(
+            f"  VACUUM completed: {result['tables_vacuumed']}/{len(tables)} tables "
+            f"in {format_duration(duration)}"
+        )
+
+    except Exception as e:
+        logger.error(f"  VACUUM failed: {e}")
+        result['errors'].append(str(e))
+
+    return result
+
+
+def _analyze_schema_tables(
+    conn_factory: ConnectionFactory,
+    db_name: str,
+    schema: str,
+) -> Dict[str, Any]:
+    """
+    Run ANALYZE on all tables in the schema to update query planner statistics.
+
+    ANALYZE can run inside a transaction but we use autocommit for consistency.
+    """
+    pg_manager = conn_factory.get_postgres_manager()
+    result: Dict[str, Any] = {'tables_analyzed': 0, 'errors': [], 'duration_seconds': 0}
+
+    try:
+        pg_conn = pg_manager.get_connection(db_name)
+        cursor = pg_conn.cursor()
+        cursor.execute(
+            """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = %s AND table_type = 'BASE TABLE'
+            ORDER BY table_name
+            """,
+            (schema,),
+        )
+        tables = [row[0] for row in cursor.fetchall()]
+        cursor.close()
+        pg_conn.close()
+
+        if not tables:
+            logger.info(f"  No tables found in {schema} -- skipping ANALYZE")
+            return result
+
+        start = time.time()
+        pg_conn = pg_manager.get_connection(db_name, autocommit=True)
+        cursor = pg_conn.cursor()
+
+        for table in tables:
+            try:
+                cursor.execute(f'ANALYZE {schema}."{table}"')
+                result['tables_analyzed'] += 1
+            except Exception as e:
+                result['errors'].append(f"{table}: {e}")
+                logger.warning(f"    ANALYZE {schema}.{table} failed: {e}")
+
+        cursor.close()
+        pg_conn.close()
+
+        duration = time.time() - start
+        result['duration_seconds'] = round(duration, 2)
+        logger.info(
+            f"  ANALYZE completed: {result['tables_analyzed']}/{len(tables)} tables "
+            f"in {format_duration(duration)}"
+        )
+
+    except Exception as e:
+        logger.error(f"  ANALYZE failed: {e}")
+        result['errors'].append(str(e))
+
+    return result
+
+
 def _capture_row_counts(
     conn_factory: ConnectionFactory,
     db_name: str,
@@ -424,7 +553,23 @@ def run_task00_preflight(settings: Settings) -> dict:
         conn_factory, db_names['pg_database'], db_names['pg_schema'], identity_tables
     )
 
-    # --- 7. Capture pre-run row counts ---
+    # --- 7. VACUUM ---
+    logger.info("Preflight: Running VACUUM on all tables...")
+    vacuum_result = _vacuum_schema_tables(
+        conn_factory, db_names['pg_database'], db_names['pg_schema']
+    )
+    if vacuum_result['errors']:
+        errors.extend(vacuum_result['errors'])
+
+    # --- 8. ANALYZE ---
+    logger.info("Preflight: Running ANALYZE on all tables...")
+    analyze_result = _analyze_schema_tables(
+        conn_factory, db_names['pg_database'], db_names['pg_schema']
+    )
+    if analyze_result['errors']:
+        errors.extend(analyze_result['errors'])
+
+    # --- 9. Capture pre-run row counts ---
     count_tables = ['conflicts', 'conflictvisitmaps', 'conflictlog_staging', 'settings']
     logger.info("Preflight: Capturing pre-run row counts...")
     pre_counts = _capture_row_counts(
@@ -459,6 +604,8 @@ def run_task00_preflight(settings: Settings) -> dict:
         'pg_cron': cron_result,
         'in_progress_flag_set': flag_set,
         'sequence_sync': seq_sync,
+        'vacuum': vacuum_result,
+        'analyze': analyze_result,
         'pre_run_counts': pre_counts,
         'preflight_data': preflight_data,
     }

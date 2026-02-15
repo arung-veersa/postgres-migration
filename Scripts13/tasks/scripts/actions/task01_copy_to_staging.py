@@ -361,10 +361,10 @@ def run_task01_copy_to_staging(settings: Settings) -> dict:
     sf_config = settings.get_snowflake_config()
     pg_config = settings.get_postgres_config()
     db_names = settings.get_database_names()
-    task_params = settings.get_task02_parameters()
+    common_params = settings.get_common_parameters()
 
-    lookback_years = task_params.get('lookback_years', 2)
-    lookforward_days = task_params.get('lookforward_days', 45)
+    lookback_years = common_params.get('lookback_years', 2)
+    lookforward_days = common_params.get('lookforward_days', 45)
 
     conn_factory = ConnectionFactory(sf_config, pg_config)
     query_builder = QueryBuilder()

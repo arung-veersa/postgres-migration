@@ -26,6 +26,7 @@ Conflict/postgres/
 │       ├── task01_copy_to_staging.py     # PPR sync from Snowflake dims, staging populate
 │       ├── task02_00_conflict_update.py  # v3 conflict detection UPDATE + INSERT pipeline
 │       ├── task02_01_inservice_conflict.py # InService conflict detection (update + insert)
+│       ├── task03_status_management.py    # Status cascade, deleted visits, computed columns
 │       ├── task99_postflight.py          # VACUUM/ANALYZE, pg_cron re-enable, email, summary
 │       ├── validate_config.py           # Standalone config validation
 │       └── test_connections.py          # Standalone connectivity test
@@ -57,7 +58,7 @@ Conflict/postgres/
 │   ├── .env                             # Secrets (gitignored)
 │   └── .generated-taskdef.json          # Resolved output (gitignored)
 ├── tests/
-│   ├── test_comprehensive.py            # 141 pytest tests
+│   ├── test_comprehensive.py            # 204 pytest tests
 │   └── sql/                             # Standalone test queries for manual Snowflake testing
 ├── docs/
 │   ├── README.md
@@ -167,7 +168,7 @@ Note: Caregiver semi-join in Step 1 reduced rows by 28% vs initial run (230K →
 - Change detection (_has_changes: 7 flags + 40 business columns)
 - Excluded SSNs loaded from PostgreSQL into Snowflake temp table
 - Column name mapping (ETATravleMinutes->ETATravelMinutes, SchVisitTimeSame->SchAndVisitTimeSameFlag)
-- 141 pytest tests covering all of the above
+- 204 pytest tests covering all of the above
 - **ECS containerization COMPLETE**: Dockerfile, task definition, ECR deployment, interactive deploy script
 - Entry point: `scripts/main.py` with comma-separated ACTION env var and DEFAULT_ACTIONS pipeline
 - JSON-safe env var substitution in `settings.py` (handles RSA keys with newlines)
@@ -180,14 +181,12 @@ Note: Caregiver semi-join in Step 1 reduced rows by 28% vs initial run (230K →
 - Successfully deployed and tested on ECS Fargate (~14 min full pipeline with task01)
 
 ### What's NOT yet done:
-- Conflicts table aggregation
-- UpdateFlag cleanup (DEFERRED)
 - AWS Secrets Manager integration (currently using plain environment variables)
 
 ## ECS Architecture Notes
 
 ### Container Entry Point (`scripts/main.py`)
-- `ACTION=""` (default): runs full pipeline `task00_preflight -> task01_copy_to_staging -> task02_00_conflict_update -> task02_01_inservice_conflict -> task99_postflight`
+- `ACTION=""` (default): runs full pipeline `task00_preflight -> task01_copy_to_staging -> task02_00_conflict_update -> task02_01_inservice_conflict -> task03_status_management -> task99_postflight`
 - `ACTION="test_connections"`: runs single action
 - `ACTION="validate_config,test_connections"`: comma-separated sequential execution
 - SIGTERM handler for graceful ECS shutdown (30s stop timeout)
@@ -200,10 +199,11 @@ Note: Caregiver semi-join in Step 1 reduced rows by 28% vs initial run (230K →
 - Import: `from scripts.actions.<key> import run_<key>`
 
 ### Pipeline Actions (DEFAULT_ACTIONS)
-- `task00_preflight`: 1) Validate config params, 2) Verify Snowflake+PG connectivity, 3) Check required tables, 4) Disable pg_cron job, 5) Set InProgressFlag=1, 6) Sync identity sequences (advance to MAX(ID) if behind), 7) Capture pre-run row counts
+- `task00_preflight`: 1) Validate config params, 2) Verify Snowflake+PG connectivity, 3) Check required tables, 4) Disable pg_cron job, 5) Set InProgressFlag=1, 6) Sync identity sequences (advance to MAX(ID) if behind), 7) VACUUM all tables, 8) ANALYZE all tables, 9) Capture pre-run row counts
 - `task01_copy_to_staging`: 1) Sync payer_provider_reminders from Snowflake dims (temp-table + UPDATE FROM JOIN), 2) Truncate+populate conflictlog_staging from conflictvisitmaps+conflicts (date-filtered)
 - `task02_00_conflict_update`: v3 conflict detection pipeline (streaming cursor, batch UPDATE + INSERT, stale cleanup)
 - `task02_01_inservice_conflict`: InService conflict detection -- visits vs InService events at different providers. Temporal overlap join, synthetic MD5 VisitIDs, 7 flags hardcoded 'N', UUID key normalisation (_norm_key), row-by-row insert fallback. ~230K rows, ~10K inserts, ~20min.
+- `task03_status_management`: Post-conflict-creation status management (15 steps: 14 SQL + 1 fetch, 3 phases, ~10 min steady state). Phase B (disabled by default, `enable_phase_b` config): delta query on `FACTVISITCALLPERFORMANCE_DELETED_CR` using `"Visit Updated Timestamp"` + `lookback_hours` (~97K rows vs 25.5M full scan), indexed PG temp table, UNION CTE marks CVM StatusFlag='D' when either VisitID or ConVisitID is deleted, cascade to CF. Phase A (9 steps): IsMissed cascade, UpdateFlag cleanup, conflicts aggregation, CTE-driven combined cascades, NoResponseFlag reset (forced seq scan) (~7 min). Phase C (3 steps): ShVTSTTime/CShVTSTTime COALESCE, BilledRateMinute (::real cast + epsilon comparison), ReverseUUID (~2 min). Each step commits independently. Supports `only_steps` config/env var for targeted step execution.
 - `task99_postflight`: 1) VACUUM all tables, 2) ANALYZE all tables, 3) Set InProgressFlag=0, 4) Refresh materialized view (CONCURRENTLY), 5) Re-enable pg_cron job, 6) Capture post-run row counts, 7) Log pipeline summary, 8) Send SES email (if enabled)
 
 ### Standalone Actions (not in default pipeline, available via ACTION env var)

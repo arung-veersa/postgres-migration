@@ -38,6 +38,7 @@ from scripts.actions.task00_preflight import run_task00_preflight
 from scripts.actions.task01_copy_to_staging import run_task01_copy_to_staging
 from scripts.actions.task02_00_conflict_update import run_task02_00_conflict_update
 from scripts.actions.task02_01_inservice_conflict import run_task02_01_inservice_conflict
+from scripts.actions.task03_status_management import run_task03_status_management
 from scripts.actions.task99_postflight import run_task99_postflight
 from scripts.actions.validate_config import run_validate_config
 from scripts.actions.test_connections import run_test_connections
@@ -85,6 +86,11 @@ def _run_task02_01_inservice_conflict_wrapper(settings: Settings) -> dict:
     return run_task02_01_inservice_conflict(settings, shutdown_check=lambda: _shutdown_requested)
 
 
+def _run_task03_status_management_wrapper(settings: Settings) -> dict:
+    """Wrapper that passes shutdown check to status management."""
+    return run_task03_status_management(settings, shutdown_check=lambda: _shutdown_requested)
+
+
 # Default pipeline: runs all tasks sequentially when ACTION is not set.
 # Add new tasks to this list as they are developed.
 # Note: validate_config and test_connections are included in preflight,
@@ -95,6 +101,7 @@ DEFAULT_ACTIONS = [
     'task01_copy_to_staging',
     'task02_00_conflict_update',
     'task02_01_inservice_conflict',
+    'task03_status_management',
     'task99_postflight',
 ]
 
@@ -106,11 +113,10 @@ ACTION_REGISTRY: Dict[str, Callable[[Settings], dict]] = {
     'task01_copy_to_staging': run_task01_copy_to_staging,
     'task02_00_conflict_update': _run_task02_00_conflict_update_wrapper,
     'task02_01_inservice_conflict': _run_task02_01_inservice_conflict_wrapper,
+    'task03_status_management': _run_task03_status_management_wrapper,
     'task99_postflight': _run_task99_postflight_wrapper,
     'validate_config': run_validate_config,
     'test_connections': run_test_connections,
-    # Future actions:
-    # 'task02_02_status_management': run_task02_02_status_management,
 }
 
 

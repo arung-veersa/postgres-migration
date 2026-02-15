@@ -1,5 +1,5 @@
 """
-Configuration management for Task 02 Conflict Updater
+Configuration management for Conflict Management Pipeline
 Loads settings from config.json with environment variable substitution
 """
 
@@ -74,9 +74,21 @@ class Settings:
         """Get PostgreSQL connection configuration"""
         return self.config.get('postgres', {})
     
+    def get_common_parameters(self) -> Dict[str, Any]:
+        """Get common parameters shared across all tasks (lookback_years, lookforward_days, lookback_hours, batch_size)"""
+        return self.config.get('common_parameters', {})
+
     def get_task02_parameters(self) -> Dict[str, Any]:
-        """Get Task 02 specific parameters"""
-        return self.config.get('task02_parameters', {})
+        """Get Task 02 specific parameters (merged with common_parameters)"""
+        common = dict(self.get_common_parameters())
+        common.update(self.config.get('task02_parameters', {}))
+        return common
+
+    def get_task03_parameters(self) -> Dict[str, Any]:
+        """Get Task 03 (status management) specific parameters (merged with common_parameters)"""
+        common = dict(self.get_common_parameters())
+        common.update(self.config.get('task03_parameters', {}))
+        return common
     
     def get_pipeline_config(self) -> Dict[str, Any]:
         """Get pipeline configuration (pg_cron job name, materialized view, required tables)"""
